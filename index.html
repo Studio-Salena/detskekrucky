@@ -1538,6 +1538,90 @@
   @media (max-width: 480px) {
     .burger-btn { display: block; }
   }
+
+  /* REZERVACE – responzivita */
+  @media (max-width: 600px) {
+    .rez-form-grid { grid-template-columns: 1fr !important; }
+    #rezervace .container { padding: 0 16px !important; }
+    #rezervace { padding: 50px 0 !important; }
+    #rez-form-wrap { padding: 18px !important; }
+    #rez-cal-grid { gap: 3px !important; }
+    #rez-cal-grid > div { padding: 7px 2px !important; font-size: 0.82rem !important; }
+    #rez-slots-grid button { padding: 8px 12px !important; font-size: 0.82rem !important; }
+    #rez-selected-summary { font-size: 0.82rem !important; gap: 10px !important; }
+  }
+
+  /* ═══════════════════════════════
+     iOS / Android universal opravy
+  ═══════════════════════════════ */
+
+  /* 1. Zabránit Safari auto-zoomu při kliknutí do inputu (font-size musí být >= 16px) */
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+
+  /* 2. Odstranit iOS výchozí vzhled inputů a tlačítek */
+  input, textarea, select, button {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    border-radius: 10px;
+  }
+
+  /* 3. Lepší tap highlight (Android) */
+  a, button {
+    -webkit-tap-highlight-color: rgba(107, 76, 53, 0.15);
+  }
+
+  /* 4. Plynulé scrollování (iOS Safari) */
+  html {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+
+  /* 5. Navigace – safe area pro iPhone s notchem */
+  header {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+
+  /* 6. Footer – safe area dole (home indikátor iPhone) */
+  footer {
+    padding-bottom: max(32px, calc(16px + env(safe-area-inset-bottom)));
+  }
+
+  /* 7. Fixní navigační menu na mobilu - safe area */
+  @media (max-width: 900px) {
+    #main-nav.open {
+      padding-bottom: max(16px, env(safe-area-inset-bottom));
+    }
+  }
+
+  /* 8. Rezervační sekce - inputy musí mít 16px kvůli iOS */
+  #rez-jmeno, #rez-telefon, #rez-email, #rez-vek, #rez-poznamka {
+    font-size: 16px !important;
+    -webkit-appearance: none;
+  }
+
+  /* 9. Tlačítka - větší dotykový cíl pro mobil */
+  @media (max-width: 768px) {
+    .btn-primary, .btn-outline, button {
+      min-height: 44px; /* Apple doporučuje min 44px */
+      cursor: pointer;
+    }
+    /* Rezervační chipsy - větší na dotek */
+    #rez-slots-grid button {
+      min-height: 44px !important;
+      padding: 10px 16px !important;
+    }
+    /* Kalendář - větší buňky */
+    #rez-cal-grid > div {
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  }
 </style>
 </head>
 <body>
@@ -1765,7 +1849,7 @@ fetch('https://detskekrucky1.onrender.com/api/nastaveni/banner')
 <section id="rezervace" style="background:linear-gradient(160deg,#fff8f0 0%,#f0fbf4 100%);padding:80px 0;position:relative;overflow:hidden;">
   <div style="position:absolute;top:30px;left:4%;font-size:2rem;opacity:0.5;animation:float 4s ease-in-out infinite;">🦔</div>
   <div style="position:absolute;bottom:40px;right:5%;font-size:1.8rem;opacity:0.5;animation:float 4s 1s ease-in-out infinite;">👣</div>
-  <div class="container" style="max-width:760px;margin:0 auto;padding:0 32px;position:relative;z-index:2;">
+  <div class="container" style="max-width:760px;margin:0 auto;padding:0 16px;position:relative;z-index:2;">
     <div style="text-align:center;margin-bottom:40px;">
       <p class="section-label">Nemůžete se rozhodnout přes web?</p>
       <h2 class="section-title">Zamluvte si termín na vyzkoušení</h2>
@@ -1805,7 +1889,7 @@ fetch('https://detskekrucky1.onrender.com/api/nastaveni/banner')
     <div id="rez-form-wrap" style="display:none;background:#fff;border-radius:20px;box-shadow:0 6px 28px rgba(107,76,53,0.1);padding:28px;margin-bottom:24px;">
       <h3 style="font-family:'Playfair Display',serif;color:var(--brown);font-size:1.15rem;margin-bottom:18px;">Vaše údaje 📝</h3>
       <div id="rez-selected-summary" style="background:var(--sage-light);border-radius:12px;padding:12px 16px;font-weight:700;font-size:0.9rem;margin-bottom:20px;display:flex;gap:16px;flex-wrap:wrap;color:var(--text);"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+      <div class="rez-form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
         <div>
           <label style="display:block;font-size:0.8rem;font-weight:700;color:var(--text-light);margin-bottom:5px;">Jméno a příjmení *</label>
           <input type="text" id="rez-jmeno" placeholder="Jana Nováková" style="width:100%;padding:10px 14px;border:2px solid var(--tan-light);border-radius:10px;font-family:'Lato',sans-serif;font-size:0.95rem;outline:none;">
@@ -1815,7 +1899,7 @@ fetch('https://detskekrucky1.onrender.com/api/nastaveni/banner')
           <input type="tel" id="rez-telefon" placeholder="+420 123 456 789" style="width:100%;padding:10px 14px;border:2px solid var(--tan-light);border-radius:10px;font-family:'Lato',sans-serif;font-size:0.95rem;outline:none;">
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+      <div class="rez-form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
         <div>
           <label style="display:block;font-size:0.8rem;font-weight:700;color:var(--text-light);margin-bottom:5px;">E-mail *</label>
           <input type="email" id="rez-email" placeholder="jana@email.cz" style="width:100%;padding:10px 14px;border:2px solid var(--tan-light);border-radius:10px;font-family:'Lato',sans-serif;font-size:0.95rem;outline:none;">

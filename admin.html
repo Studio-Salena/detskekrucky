@@ -177,19 +177,41 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
   .sidebar{transform:translateX(-100%)}
   .sidebar.open{transform:translateX(0)}
   .topbar{left:0}
-  .main{margin-left:0;padding:70px 14px 14px}
+  .main{margin-left:0;padding:70px 12px 14px}
   .menu-toggle{display:block}
   .stats-grid{grid-template-columns:repeat(2,1fr)}
-  .global-search{width:180px}
+  .global-search{width:160px}
   .form-grid-2,.form-grid-3{grid-template-columns:1fr}
-  .table-header{flex-direction:column;align-items:flex-start}
-  .page-header{flex-direction:column;align-items:flex-start}
-  table{font-size:0.78rem}
+  .table-header{flex-direction:column;align-items:flex-start;gap:8px}
+  .page-header{flex-direction:column;align-items:flex-start;gap:8px}
+  .table-actions{flex-wrap:wrap;gap:6px}
+  /* Tabulky scrollovatelné */
+  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{font-size:0.78rem;min-width:480px}
   th,td{padding:8px 10px}
+  /* Inline gridy na 1 sloupec */
+  div[style*="grid-template-columns:1fr 1fr"]{grid-template-columns:1fr!important}
+  /* Modaly přes celou šířku */
+  .modal{padding:18px!important;border-radius:14px!important}
+  .modal-overlay .modal{margin:8px}
+  /* Buttony větší pro dotyk */
+  .btn{min-height:40px}
+  .btn-sm{min-height:34px;padding:6px 10px}
+  /* Kamera video */
+  #kameraWrap video{max-height:200px}
+  /* Rezervace admin gridy */
+  #page-rezervace div[style*="grid-template-columns:1fr 1fr"]{grid-template-columns:1fr!important}
 }
 @media(max-width:480px){
   .stats-grid{grid-template-columns:1fr 1fr}
-  .stat-value{font-size:1.4rem}
+  .stat-value{font-size:1.3rem}
+  .page-title{font-size:1.2rem}
+  /* Polozky prodeje na 1 sloupec */
+  .polozka-grid{grid-template-columns:1fr!important}
+  .polozka-grid button{width:100%}
+  /* Sidebar šířka přes celou obrazovku */
+  .sidebar{width:100%!important}
+  table{min-width:380px}
 }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
