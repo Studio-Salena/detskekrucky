@@ -1723,6 +1723,8 @@ async function smazatKategorii(id, nazev) {
   try {
     await fetch(API+'/kategorie/'+id, {method:'DELETE'});
     loadKategorie();
+  } catch(e) { alert('Chyba'); }
+}
 
 async function loadNewsletter() {
   document.getElementById('newsletterTable').innerHTML = '<div class="loading">Načítám...</div>';
@@ -1746,7 +1748,6 @@ async function smazatNewsletter(id, email) {
     await fetch(API+'/newsletter/'+id, {method:'DELETE'});
     loadNewsletter();
   } catch(e) { alert('Chyba při mazání'); }
-  } catch(e) { alert('Chyba'); }
 }
 
 // ═══════════════════════════════════════════
