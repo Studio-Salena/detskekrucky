@@ -192,6 +192,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
   .stat-value{font-size:1.4rem}
 }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
 </head>
 <body>
 
@@ -586,8 +587,17 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <input type="text" id="eanInput" placeholder="Zadejte EAN kód a stiskněte Enter…" onkeydown="if(event.key==='Enter')hledatEan()">
       </div>
       <button class="btn btn-outline" style="margin-bottom:0" onclick="hledatEan()">Přidat</button>
+      <button class="btn btn-outline" style="margin-bottom:0" onclick="otevritKameru()" title="Skenovat kamerou">📷</button>
     </div>
     <div id="eanMsg" style="margin-bottom:8px"></div>
+
+    <!-- Kamera modal -->
+    <div id="kameraWrap" style="display:none;margin-bottom:14px;background:#000;border-radius:12px;overflow:hidden;position:relative;">
+      <video id="kameraVideo" style="width:100%;max-height:260px;object-fit:cover;" autoplay muted playsinline></video>
+      <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:220px;height:100px;border:3px solid #7dcbb5;border-radius:8px;pointer-events:none;"></div>
+      <button onclick="zavritKameru()" style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.6);border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:0.85rem;">✕ Zavřít</button>
+      <div style="position:absolute;bottom:10px;left:0;right:0;text-align:center;color:#fff;font-size:0.8rem;opacity:0.8;">Namiřte na čárový kód</div>
+    </div>
     <div id="prodejnaPolozky">
       <div class="polozka-row polozka-grid">
         <div class="form-group" style="margin:0"><label>Produkt</label><select class="prod-select" onchange="nacistVelikostiProdejna(this)"><option value="">Vyberte...</option></select></div>
@@ -1443,6 +1453,63 @@ function hledatEan() {
   document.getElementById('eanInput').value = '';
   msg.innerHTML = `<div class="success-msg">✅ Přidán: <strong>${produkt.nazev}</strong></div>`;
   setTimeout(() => msg.innerHTML = '', 2500);
+}
+
+// ═══════════════════════════════
+// KAMERA – skenování EAN
+// ═══════════════════════════════
+let kameraReader = null;
+let kameraStream = null;
+
+async function otevritKameru() {
+  const wrap = document.getElementById('kameraWrap');
+  const video = document.getElementById('kameraVideo');
+  wrap.style.display = 'block';
+
+  try {
+    // Inicializuj ZXing čtečku
+    const hints = new Map();
+    const formats = [
+      ZXing.BarcodeFormat.EAN_13,
+      ZXing.BarcodeFormat.EAN_8,
+      ZXing.BarcodeFormat.CODE_128,
+      ZXing.BarcodeFormat.CODE_39,
+      ZXing.BarcodeFormat.QR_CODE
+    ];
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+    kameraReader = new ZXing.BrowserMultiFormatReader(hints);
+
+    // Získej seznam kamer — preferuj zadní
+    const devices = await ZXing.BrowserMultiFormatReader.listVideoInputDevices();
+    const zadniKamera = devices.find(d =>
+      d.label.toLowerCase().includes('back') ||
+      d.label.toLowerCase().includes('rear') ||
+      d.label.toLowerCase().includes('zadní') ||
+      d.label.toLowerCase().includes('environment')
+    );
+    const deviceId = zadniKamera ? zadniKamera.deviceId : (devices[devices.length - 1]?.deviceId);
+
+    await kameraReader.decodeFromVideoDevice(deviceId, video, (result, err) => {
+      if (result) {
+        const ean = result.getText();
+        zavritKameru();
+        document.getElementById('eanInput').value = ean;
+        hledatEan();
+      }
+    });
+  } catch(e) {
+    document.getElementById('eanMsg').innerHTML = `<div class="error-msg">Kamera není dostupná: ${e.message}</div>`;
+    wrap.style.display = 'none';
+  }
+}
+
+function zavritKameru() {
+  const wrap = document.getElementById('kameraWrap');
+  wrap.style.display = 'none';
+  if (kameraReader) {
+    kameraReader.reset();
+    kameraReader = null;
+  }
 }
 
 function prepocitatCelkem() {
