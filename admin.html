@@ -177,41 +177,19 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
   .sidebar{transform:translateX(-100%)}
   .sidebar.open{transform:translateX(0)}
   .topbar{left:0}
-  .main{margin-left:0;padding:70px 12px 14px}
+  .main{margin-left:0;padding:70px 14px 14px}
   .menu-toggle{display:block}
   .stats-grid{grid-template-columns:repeat(2,1fr)}
-  .global-search{width:160px}
+  .global-search{width:180px}
   .form-grid-2,.form-grid-3{grid-template-columns:1fr}
-  .table-header{flex-direction:column;align-items:flex-start;gap:8px}
-  .page-header{flex-direction:column;align-items:flex-start;gap:8px}
-  .table-actions{flex-wrap:wrap;gap:6px}
-  /* Tabulky scrollovatelné */
-  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-  table{font-size:0.78rem;min-width:480px}
+  .table-header{flex-direction:column;align-items:flex-start}
+  .page-header{flex-direction:column;align-items:flex-start}
+  table{font-size:0.78rem}
   th,td{padding:8px 10px}
-  /* Inline gridy na 1 sloupec */
-  div[style*="grid-template-columns:1fr 1fr"]{grid-template-columns:1fr!important}
-  /* Modaly přes celou šířku */
-  .modal{padding:18px!important;border-radius:14px!important}
-  .modal-overlay .modal{margin:8px}
-  /* Buttony větší pro dotyk */
-  .btn{min-height:40px}
-  .btn-sm{min-height:34px;padding:6px 10px}
-  /* Kamera video */
-  #kameraWrap video{max-height:200px}
-  /* Rezervace admin gridy */
-  #page-rezervace div[style*="grid-template-columns:1fr 1fr"]{grid-template-columns:1fr!important}
 }
 @media(max-width:480px){
   .stats-grid{grid-template-columns:1fr 1fr}
-  .stat-value{font-size:1.3rem}
-  .page-title{font-size:1.2rem}
-  /* Polozky prodeje na 1 sloupec */
-  .polozka-grid{grid-template-columns:1fr!important}
-  .polozka-grid button{width:100%}
-  /* Sidebar šířka přes celou obrazovku */
-  .sidebar{width:100%!important}
-  table{min-width:380px}
+  .stat-value{font-size:1.4rem}
 }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
@@ -1481,7 +1459,6 @@ function hledatEan() {
 // KAMERA – skenování EAN
 // ═══════════════════════════════
 let kameraReader = null;
-let kameraStream = null;
 
 async function otevritKameru() {
   const wrap = document.getElementById('kameraWrap');
@@ -1489,36 +1466,39 @@ async function otevritKameru() {
   wrap.style.display = 'block';
 
   try {
-    // Inicializuj ZXing čtečku
-    const hints = new Map();
-    const formats = [
-      ZXing.BarcodeFormat.EAN_13,
-      ZXing.BarcodeFormat.EAN_8,
-      ZXing.BarcodeFormat.CODE_128,
-      ZXing.BarcodeFormat.CODE_39,
-      ZXing.BarcodeFormat.QR_CODE
-    ];
-    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
-    kameraReader = new ZXing.BrowserMultiFormatReader(hints);
+    kameraReader = new ZXing.BrowserMultiFormatReader();
 
-    // Získej seznam kamer — preferuj zadní
-    const devices = await ZXing.BrowserMultiFormatReader.listVideoInputDevices();
-    const zadniKamera = devices.find(d =>
-      d.label.toLowerCase().includes('back') ||
-      d.label.toLowerCase().includes('rear') ||
-      d.label.toLowerCase().includes('zadní') ||
-      d.label.toLowerCase().includes('environment')
-    );
-    const deviceId = zadniKamera ? zadniKamera.deviceId : (devices[devices.length - 1]?.deviceId);
-
-    await kameraReader.decodeFromVideoDevice(deviceId, video, (result, err) => {
-      if (result) {
-        const ean = result.getText();
-        zavritKameru();
-        document.getElementById('eanInput').value = ean;
-        hledatEan();
+    // Získej stream přímo s preferencí zadní kamery
+    const constraints = {
+      video: {
+        facingMode: { ideal: 'environment' }, // zadní kamera na telefonu
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
       }
-    });
+    };
+
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    video.srcObject = stream;
+    await video.play();
+
+    // Spusť dekódování z video elementu
+    const decode = async () => {
+      if (!kameraReader) return; // kamera byla zavřena
+      try {
+        const result = await kameraReader.decodeFromVideoElement(video);
+        if (result) {
+          zavritKameru();
+          document.getElementById('eanInput').value = result.getText();
+          hledatEan();
+          return;
+        }
+      } catch(e) {
+        // NotFoundException je normální když kód ještě není vidět – opakuj
+      }
+      requestAnimationFrame(decode);
+    };
+    requestAnimationFrame(decode);
+
   } catch(e) {
     document.getElementById('eanMsg').innerHTML = `<div class="error-msg">Kamera není dostupná: ${e.message}</div>`;
     wrap.style.display = 'none';
@@ -1528,10 +1508,13 @@ async function otevritKameru() {
 function zavritKameru() {
   const wrap = document.getElementById('kameraWrap');
   wrap.style.display = 'none';
-  if (kameraReader) {
-    kameraReader.reset();
-    kameraReader = null;
+  // Zastav video stream
+  const video = document.getElementById('kameraVideo');
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(t => t.stop());
+    video.srcObject = null;
   }
+  kameraReader = null;
 }
 
 function prepocitatCelkem() {
