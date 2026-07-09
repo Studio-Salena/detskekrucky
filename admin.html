@@ -676,6 +676,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       </select>
     </div>
     <div class="form-group"><label>Popis</label><textarea id="pPopis" rows="3" placeholder="Popis produktu..."></textarea></div>
+    <div class="form-group"><label>EAN kód</label><input type="text" id="pEan" placeholder="např. 1234567890123"></div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modalNovyProdukt')">Zrušit</button>
       <button class="btn btn-primary" onclick="ulozitProdukt()">💾 Uložit</button>
@@ -711,6 +712,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     </div>
     <div class="form-group"><label>URL fotky</label><input type="text" id="upEmoji" placeholder="https://i.imgur.com/...jpg"></div>
     <div class="form-group"><label>Popis</label><textarea id="upPopis" rows="3" style="width:100%;padding:8px;border:1px solid var(--tan-light);border-radius:8px;font-family:inherit;resize:vertical"></textarea></div>
+    <div class="form-group"><label>EAN kód</label><input type="text" id="upEan" placeholder="např. 1234567890123"></div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modalUpravitProdukt')">Zrušit</button>
       <button class="btn btn-primary" onclick="ulozitUpravuProduktu()">💾 Uložit</button>
@@ -1120,12 +1122,13 @@ async function loadProdukty() {
     const list = Object.values(map);
     if (!list.length) { document.getElementById('produktyTable').innerHTML='<div class="empty">Žádné produkty</div>'; return; }
     document.getElementById('produktyTable').innerHTML=`
-      <table><thead><tr><th>ID</th><th>Název</th><th>Značka</th><th>Kategorie</th><th>Cena</th><th>Celkem ks</th><th>Akce</th></tr></thead>
+      <table><thead><tr><th>ID</th><th>Název</th><th>Značka</th><th>Kategorie</th><th>Cena</th><th>EAN</th><th>Celkem ks</th><th>Akce</th></tr></thead>
       <tbody>${list.map(p=>`<tr>
         <td>${p.id}</td><td>${p.emoji && p.emoji.startsWith("http") ? `<img src="${p.emoji}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;margin-right:8px">` : p.emoji || ""}  <strong>${p.nazev}</strong></td><td>${p.znacka}</td>
         <td>${p.kategorie}</td><td><strong>${p.cena.toLocaleString('cs-CZ')} Kč</strong></td>
+        <td style="font-size:0.82rem;color:var(--text-light)">${p.ean||'—'}</td>
         <td><strong>${p.celkem} ks</strong></td>
-        <td><button class="btn btn-orange btn-sm" onclick="upravitProdukt(${p.id},'${p.nazev.replace(/'/g,"\\'")}','${p.znacka}',${p.cena},${p.cena_puvodni||0},'${p.emoji||''}','${(p.popis||'').replace(/'/g,"\\'")}')">✏️ Upravit</button></td>
+        <td><button class="btn btn-orange btn-sm" onclick="upravitProdukt(${p.id},'${p.nazev.replace(/'/g,"\\'")}','${p.znacka}',${p.cena},${p.cena_puvodni||0},'${p.emoji||''}','${(p.popis||'').replace(/'/g,"\\'")}','${p.ean||''}')">✏️ Upravit</button></td>
       </tr>`).join('')}</tbody></table>`;
   } catch(e) { document.getElementById('produktyTable').innerHTML='<div class="error-msg">Chyba</div>'; }
 }
@@ -1139,13 +1142,14 @@ async function ulozitProdukt() {
       cena_puvodni:document.getElementById('pCenaPuvodni').value||null,
       kategorie:document.getElementById('pKategorie').value,
       emoji:document.getElementById('pEmoji').value,
-      popis:document.getElementById('pPopis').value})});
+      popis:document.getElementById('pPopis').value,
+      ean:document.getElementById('pEan').value||null})});
     if (res.ok) { document.getElementById('produktMsg').innerHTML='<div class="success-msg">✅ Uloženo!</div>'; setTimeout(()=>{closeModal('modalNovyProdukt');loadProdukty();},1500); }
     else { document.getElementById('produktMsg').innerHTML='<div class="error-msg">Chyba serveru</div>'; }
   } catch(e) { document.getElementById('produktMsg').innerHTML='<div class="error-msg">Chyba</div>'; }
 }
 
-function upravitProdukt(id,nazev,znacka,cena,cenaPuvodni,emoji,popis) {
+function upravitProdukt(id,nazev,znacka,cena,cenaPuvodni,emoji,popis,ean) {
   document.getElementById('upId').value=id;
   document.getElementById('upNazev').value=nazev;
   document.getElementById('upZnacka').value=znacka;
@@ -1153,6 +1157,7 @@ function upravitProdukt(id,nazev,znacka,cena,cenaPuvodni,emoji,popis) {
   document.getElementById('upCenaPuvodni').value=cenaPuvodni||'';
   document.getElementById('upEmoji').value=emoji||'';
   document.getElementById('upPopis').value=popis||'';
+  document.getElementById('upEan').value=ean||'';
   openModal('modalUpravitProdukt');
 }
 
@@ -1161,7 +1166,7 @@ async function ulozitUpravuProduktu() {
   try {
     const res = await fetch(API+'/produkty/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({nazev:document.getElementById('upNazev').value,znacka:document.getElementById('upZnacka').value,
-      cena:parseInt(document.getElementById('upCena').value),cena_puvodni:document.getElementById('upCenaPuvodni').value||null,emoji:document.getElementById('upEmoji').value||'',popis:document.getElementById('upPopis').value||''})});
+      cena:parseInt(document.getElementById('upCena').value),cena_puvodni:document.getElementById('upCenaPuvodni').value||null,emoji:document.getElementById('upEmoji').value||'',popis:document.getElementById('upPopis').value||'',ean:document.getElementById('upEan').value||null})});
     if (res.ok) { document.getElementById('upravitMsg').innerHTML='<div class="success-msg">✅ Uloženo!</div>'; setTimeout(()=>{closeModal('modalUpravitProdukt');loadProdukty();},1500); }
     else { document.getElementById('upravitMsg').innerHTML='<div class="error-msg">Chyba serveru</div>'; }
   } catch(e) { document.getElementById('upravitMsg').innerHTML='<div class="error-msg">Chyba</div>'; }
