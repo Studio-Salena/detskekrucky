@@ -1969,16 +1969,51 @@ fetch('https://detskekrucky1.onrender.com/api/nastaveni/banner')
       Přihlas se a budeme ti posílat novinky, tipy a akce přímo do e-mailu.<br>
       <span style="background:rgba(255,255,255,0.6);border-radius:20px;padding:4px 14px;display:inline-block;margin-top:6px;">🌿 Žádný spam – jen to, co má smysl!</span>
     </p>
-    <div style="text-align:center;margin-bottom:16px;">
-      <a href="mailto:monikaskarpichova@gmail.com?subject=Přihlášení k novinkám&body=Ahoj! Chci se přihlásit k odběru novinek z Dětských krůčků." 
-         style="display:inline-block;padding:15px 30px;border-radius:30px;background:linear-gradient(135deg,#ff7eb3,#A58B71);color:#fff;text-decoration:none;font-size:1rem;font-weight:800;cursor:pointer;letter-spacing:0.06em;box-shadow:0 6px 20px rgba(255,126,179,0.4);transition:transform 0.2s;"
-         onmouseover="this.style.transform='scale(1.07)'" onmouseout="this.style.transform='scale(1)'">
-        ✉️ Přihlásit se k novinkám!
-      </a>
-    </div>
+    <form id="newsletter-form" onsubmit="return newsletterOdeslat(event)" style="text-align:center;margin-bottom:16px;">
+      <div style="display:flex;gap:10px;max-width:420px;margin:0 auto;flex-wrap:wrap;justify-content:center;">
+        <input type="email" id="newsletter-email" required placeholder="tvuj@email.cz"
+               style="flex:1;min-width:220px;padding:14px 18px;border-radius:30px;border:2px solid rgba(165,139,113,0.4);font-size:1rem;font-family:inherit;outline:none;background:rgba(255,255,255,0.9);">
+        <button type="submit"
+                style="padding:14px 26px;border-radius:30px;background:linear-gradient(135deg,#ff7eb3,#A58B71);color:#fff;border:none;font-size:1rem;font-weight:800;cursor:pointer;letter-spacing:0.06em;box-shadow:0 6px 20px rgba(255,126,179,0.4);transition:transform 0.2s;"
+                onmouseover="this.style.transform='scale(1.07)'" onmouseout="this.style.transform='scale(1)'">
+          ✉️ Přihlásit se
+        </button>
+      </div>
+      <div id="newsletter-msg" style="margin-top:14px;font-size:0.9rem;"></div>
+    </form>
     <p style="font-size:0.72rem;color:rgba(122,90,66,0.7);margin-top:12px;">Odesláním souhlasíš se zpracováním e-mailu. Odhlásit se můžeš kdykoliv.</p>
   </div>
 </section>
+
+<script>
+async function newsletterOdeslat(e) {
+  e.preventDefault();
+  const emailInput = document.getElementById('newsletter-email');
+  const msg = document.getElementById('newsletter-msg');
+  const email = emailInput.value.trim();
+
+  if (!email) return false;
+
+  msg.innerHTML = '';
+  try {
+    const res = await fetch('https://detskekrucky1.onrender.com/api/newsletter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    if (res.ok) {
+      msg.innerHTML = '<div style="background:rgba(200,240,216,0.8);color:#2d6a4f;padding:10px 16px;border-radius:10px;display:inline-block;">🌿 Díky! Jsi přihlášen/a k odběru novinek.</div>';
+      emailInput.value = '';
+    } else {
+      const err = await res.json().catch(() => ({}));
+      msg.innerHTML = `<div style="background:#fde8e8;color:#c0392b;padding:10px 16px;border-radius:10px;display:inline-block;">${err.chyba || 'Tento e-mail je již přihlášený, nebo nastala chyba.'}</div>`;
+    }
+  } catch (err) {
+    msg.innerHTML = '<div style="background:#fde8e8;color:#c0392b;padding:10px 16px;border-radius:10px;display:inline-block;">Chyba spojení, zkuste to prosím znovu.</div>';
+  }
+  return false;
+}
+</script>
 
 <footer id="kontakt">
   <div class="container">
