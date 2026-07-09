@@ -5,7 +5,7 @@ const pool = require('../db/pool');
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT p.id, p.nazev, p.znacka, p.emoji, p.kategorie, p.cena,
+      SELECT p.id, p.nazev, p.znacka, p.emoji, p.kategorie, p.cena, p.ean,
              s.velikost, s.pocet_kusu, s.min_pocet,
              CASE WHEN s.pocet_kusu <= s.min_pocet THEN true ELSE false END as nizky_stav
       FROM produkty p
@@ -94,11 +94,11 @@ router.get('/nizky-stav', async (req, res) => {
 
 // Přidat nový produkt
 router.post('/produkty', async (req, res) => {
-  const { nazev, znacka, emoji, popis, kategorie, cena, cena_puvodni } = req.body;
+  const { nazev, znacka, emoji, popis, kategorie, cena, cena_puvodni, ean } = req.body;
   try {
     const result = await pool.query(
-      'INSERT INTO produkty (nazev, znacka, emoji, popis, kategorie, cena, cena_puvodni) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
-      [nazev, znacka, emoji||'', popis||'', kategorie, cena, cena_puvodni||null]
+      'INSERT INTO produkty (nazev, znacka, emoji, popis, kategorie, cena, cena_puvodni, ean) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
+      [nazev, znacka, emoji||'', popis||'', kategorie, cena, cena_puvodni||null, ean||null]
     );
     res.json(result.rows[0]);
   } catch (err) {
@@ -108,11 +108,11 @@ router.post('/produkty', async (req, res) => {
 
 // Upravit produkt
 router.patch('/produkty/:id', async (req, res) => {
-  const { nazev, znacka, cena, cena_puvodni, popis } = req.body;
+  const { nazev, znacka, cena, cena_puvodni, popis, ean } = req.body;
   try {
     const result = await pool.query(
-      'UPDATE produkty SET nazev=$1, znacka=$2, cena=$3, cena_puvodni=$4, popis=$5 WHERE id=$6 RETURNING *',
-      [nazev, znacka, cena, cena_puvodni||null, popis||'', req.params.id]
+      'UPDATE produkty SET nazev=$1, znacka=$2, cena=$3, cena_puvodni=$4, popis=$5, ean=$6 WHERE id=$7 RETURNING *',
+      [nazev, znacka, cena, cena_puvodni||null, popis||'', ean||null, req.params.id]
     );
     res.json(result.rows[0]);
   } catch (err) {
