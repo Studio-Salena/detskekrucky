@@ -52,4 +52,14 @@ router.get('/', async (req, res) => {
   }
 });
 
+// DELETE /api/newsletter/:id – smazat přihlášeného (admin)
+router.delete('/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM newsletter WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ chyba: err.message });
+  }
+});
+
 module.exports = router;

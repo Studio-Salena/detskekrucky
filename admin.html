@@ -240,6 +240,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <div class="nav-label">Nastavení</div>
       <div class="nav-item" onclick="showPage('nastaveni',this)"><span class="icon">⚙️</span> Nastavení</div>
       <div class="nav-item" onclick="showPage('texty',this)"><span class="icon">📝</span> Texty webu</div>
+      <div class="nav-item" onclick="showPage('newsletter',this)"><span class="icon">✉️</span> Newsletter</div>
     </div>
     <div class="sidebar-footer">
       <button class="logout-btn" onclick="logout()">🚪 Odhlásit se</button>
@@ -471,6 +472,24 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           <button class="btn btn-primary" style="margin-top:16px" onclick="ulozitOteviracku()">💾 Uložit otevírací dobu</button>
           <div id="nastaveni-msg" style="margin-top:12px;color:green;font-weight:600"></div>
         </div>
+      </div>
+    </div>
+
+    <!-- NEWSLETTER -->
+    <div class="page" id="page-newsletter">
+      <div class="page-header">
+        <div class="page-title">✉️ Newsletter</div>
+        <div class="table-actions">
+          <button class="btn btn-csv no-print" onclick="exportCSV('newsletter')">⬇ CSV</button>
+          <button class="refresh-btn no-print" onclick="loadNewsletter()">↻ Obnovit</button>
+        </div>
+      </div>
+      <div class="stats-grid" style="grid-template-columns:repeat(1,1fr);max-width:260px">
+        <div class="stat-card"><div class="stat-label">Přihlášených e-mailů</div><div class="stat-value" id="newsletterPocet">...</div></div>
+      </div>
+      <div class="table-wrap">
+        <div class="table-header"><h3>📋 Seznam přihlášených</h3></div>
+        <div id="newsletterTable"><div class="loading">Načítám...</div></div>
       </div>
     </div>
 
@@ -785,6 +804,7 @@ function showPage(name, el) {
   if (name==='nastaveni') loadNastaveni();
   if (name==='texty') loadTexty();
   if (name==='rezervace') loadRezervace();
+  if (name==='newsletter') loadNewsletter();
   // Close mobile sidebar
   document.getElementById('sidebar').classList.remove('open');
 }
@@ -1316,6 +1336,11 @@ async function exportCSV(typ) {
       rows=[['ID','Datum','Zákazník','Email','Celkem Kč','Platba','Doprava','Stav']];
       d.filter(o=>o.stav!=='zruseno').forEach(o=>rows.push([o.id,new Date(o.vytvoreno).toLocaleDateString('cs-CZ'),o.jmeno||'',o.email||'',o.celkem,o.platba||'',o.doprava||'',o.stav||'']));
       nazev='trzby';
+    } else if (typ==='newsletter') {
+      const d=await fetch(API+'/newsletter').then(r=>r.json());
+      rows=[['ID','Email','Přihlášen']];
+      d.forEach(n=>rows.push([n.id,n.email,new Date(n.created_at).toLocaleDateString('cs-CZ')]));
+      nazev='newsletter';
     }
     const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
     const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
@@ -1698,6 +1723,29 @@ async function smazatKategorii(id, nazev) {
   try {
     await fetch(API+'/kategorie/'+id, {method:'DELETE'});
     loadKategorie();
+
+async function loadNewsletter() {
+  document.getElementById('newsletterTable').innerHTML = '<div class="loading">Načítám...</div>';
+  try {
+    const data = await fetch(API+'/newsletter').then(r=>r.json());
+    document.getElementById('newsletterPocet').textContent = data.length;
+    if (!data.length) { document.getElementById('newsletterTable').innerHTML = '<div class="empty">Zatím žádní přihlášení</div>'; return; }
+    document.getElementById('newsletterTable').innerHTML = `
+      <table><thead><tr><th>Email</th><th>Přihlášen</th><th>Akce</th></tr></thead>
+      <tbody>${data.map(n=>`<tr>
+        <td><strong>${n.email}</strong></td>
+        <td>${new Date(n.created_at).toLocaleDateString('cs-CZ')}</td>
+        <td><button class="btn btn-red btn-sm" onclick="smazatNewsletter(${n.id},'${n.email}')">🗑️ Smazat</button></td>
+      </tr>`).join('')}</tbody></table>`;
+  } catch(e) { document.getElementById('newsletterTable').innerHTML = '<div class="error-msg">Chyba načítání</div>'; }
+}
+
+async function smazatNewsletter(id, email) {
+  if (!confirm(`Opravdu smazat e-mail "${email}" z newsletteru?`)) return;
+  try {
+    await fetch(API+'/newsletter/'+id, {method:'DELETE'});
+    loadNewsletter();
+  } catch(e) { alert('Chyba při mazání'); }
   } catch(e) { alert('Chyba'); }
 }
 
