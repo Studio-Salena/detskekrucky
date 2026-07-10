@@ -21,6 +21,7 @@ app.use(express.static(path.join(__dirname)));
 const kategorieRoutes = require('./routes/kategorie');
 const newsletterRoutes = require('./routes/newsletter');
 const mobilniSkenRoutes = require('./routes/mobilnisken');
+const prodejnaRoutes = require('./routes/prodejna');
 const vyzadovatAdmina = require('./middleware/adminAuth');
 
 // Přihlášení do admin panelu – heslo se ověřuje tady na serveru,
@@ -59,6 +60,7 @@ app.use('/api/produkty', skladRoutes);
 app.use('/api/kategorie', kategorieRoutes);
 app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/mobilni-sken', mobilniSkenRoutes);
+app.use('/api/prodejna', prodejnaRoutes);
 
 // Texty webu (výchozí hodnoty, přepíšou se z DB)
 let textyWebu = {
