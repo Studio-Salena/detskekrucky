@@ -342,6 +342,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <div class="page-title">🏪 Sklad</div>
         <div class="table-actions">
           <button class="btn btn-green" onclick="openModal('modalNaskladnit')">+ Naskladnit</button>
+          <button class="btn btn-red no-print" onclick="smazatVybraneSklad()">🗑️ Smazat vybrané</button>
           <button class="btn btn-csv no-print" onclick="exportCSV('sklad')">⬇ CSV</button>
           <button class="btn btn-print no-print" onclick="tiskSklad()">🖨️ Tisk</button>
           <button class="refresh-btn no-print" onclick="loadSklad()">↻</button>
@@ -365,7 +366,10 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     <div class="page" id="page-produkty">
       <div class="page-header">
         <div class="page-title">👟 Produkty</div>
-        <button class="btn btn-primary" onclick="openModal('modalNovyProdukt')">+ Nový produkt</button>
+        <div class="table-actions">
+          <button class="btn btn-primary" onclick="openModal('modalNovyProdukt')">+ Nový produkt</button>
+          <button class="btn btn-red no-print" onclick="smazatVybraneProdukty()">🗑️ Smazat vybrané</button>
+        </div>
       </div>
       <div class="table-wrap">
         <div id="produktyTable"><div class="loading">Načítám...</div></div>
@@ -1072,11 +1076,13 @@ async function loadSklad() {
   } catch(e) { document.getElementById('skladTable').innerHTML = '<div class="error-msg">Chyba</div>'; }
 }
 
+let vybraneSklad = new Set();
 function renderSklad(data) {
   if (!data.length) { document.getElementById('skladTable').innerHTML = '<div class="empty">Prázdný sklad</div>'; return; }
   document.getElementById('skladTable').innerHTML = `
-    <table><thead><tr><th>Produkt</th><th>Značka</th><th>Vel.</th><th>Kusů</th><th>Min.</th><th>Status</th><th>Akce</th></tr></thead>
+    <table><thead><tr><th><input type="checkbox" onchange="vybratVseSklad(this)"></th><th>Produkt</th><th>Značka</th><th>Vel.</th><th>Kusů</th><th>Min.</th><th>Status</th><th>Akce</th></tr></thead>
     <tbody>${data.map(s=>`<tr>
+      <td><input type="checkbox" data-klic="${s.id}_${s.velikost}" onchange="toggleVybranySklad(this)" ${vybraneSklad.has(s.id+'_'+s.velikost)?'checked':''}></td>
       <td><strong>${s.nazev}</strong></td><td>${s.znacka}</td><td><strong>${s.velikost}</strong></td>
       <td><strong style="color:${s.pocet_kusu===0?'var(--red)':s.nizky_stav?'var(--orange)':'var(--text)'}">${s.pocet_kusu} ks</strong></td>
       <td>${s.min_pocet} ks</td>
@@ -1084,8 +1090,39 @@ function renderSklad(data) {
       <td style="display:flex;gap:4px">
         <button class="btn btn-green btn-sm" onclick="rychleNaskladnit(${s.id},${s.velikost},'${s.nazev}')">+</button>
         <button class="btn btn-orange btn-sm" onclick="rychleOdecist(${s.id},${s.velikost},'${s.nazev}')">−</button>
+        <button class="btn btn-red btn-sm" onclick="smazatSkladPolozku(${s.id},${s.velikost},'${s.nazev}')">🗑️</button>
       </td>
     </tr>`).join('')}</tbody></table>`;
+}
+
+function toggleVybranySklad(cb) {
+  if (cb.checked) vybraneSklad.add(cb.dataset.klic); else vybraneSklad.delete(cb.dataset.klic);
+}
+function vybratVseSklad(headerCb) {
+  document.querySelectorAll('#skladTable tbody input[type=checkbox]').forEach(cb=>{
+    cb.checked = headerCb.checked;
+    toggleVybranySklad(cb);
+  });
+}
+async function smazatSkladPolozku(id, velikost, nazev) {
+  if (!confirm(`Smazat "${nazev}" vel. ${velikost} ze skladu?`)) return;
+  try {
+    await fetch(API+'/sklad/polozka/'+id+'/'+velikost, {method:'DELETE'});
+    vybraneSklad.delete(id+'_'+velikost);
+    loadSklad();
+  } catch(e) { alert('❌ Chyba při mazání'); }
+}
+async function smazatVybraneSklad() {
+  if (!vybraneSklad.size) { alert('Nic není vybráno.'); return; }
+  if (!confirm(`Opravdu smazat ${vybraneSklad.size} vybraných položek ze skladu?`)) return;
+  try {
+    await Promise.all([...vybraneSklad].map(k => {
+      const [id, velikost] = k.split('_');
+      return fetch(API+'/sklad/polozka/'+id+'/'+velikost, {method:'DELETE'});
+    }));
+    vybraneSklad.clear();
+    loadSklad();
+  } catch(e) { alert('❌ Chyba při hromadném mazání'); }
 }
 
 function filtrovatSklad(typ, btn) {
@@ -1151,6 +1188,7 @@ function tiskSklad() {
 }
 
 // PRODUKTY
+let vybraneProdukty = new Set();
 async function loadProdukty() {
   document.getElementById('produktyTable').innerHTML='<div class="loading">Načítám...</div>';
   try {
@@ -1160,15 +1198,46 @@ async function loadProdukty() {
     const list = Object.values(map);
     if (!list.length) { document.getElementById('produktyTable').innerHTML='<div class="empty">Žádné produkty</div>'; return; }
     document.getElementById('produktyTable').innerHTML=`
-      <table><thead><tr><th>ID</th><th>Název</th><th>Značka</th><th>Kategorie</th><th>Cena</th><th>EAN</th><th>Celkem ks</th><th>Akce</th></tr></thead>
+      <table><thead><tr><th><input type="checkbox" onchange="vybratVseProdukty(this)"></th><th>ID</th><th>Název</th><th>Značka</th><th>Kategorie</th><th>Cena</th><th>EAN</th><th>Celkem ks</th><th>Akce</th></tr></thead>
       <tbody>${list.map(p=>`<tr>
+        <td><input type="checkbox" data-id="${p.id}" onchange="toggleVybranyProdukt(this)" ${vybraneProdukty.has(String(p.id))?'checked':''}></td>
         <td>${p.id}</td><td>${p.emoji && p.emoji.startsWith("http") ? `<img src="${p.emoji}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;margin-right:8px">` : p.emoji || ""}  <strong>${p.nazev}</strong></td><td>${p.znacka}</td>
         <td>${p.kategorie}</td><td><strong>${p.cena.toLocaleString('cs-CZ')} Kč</strong></td>
         <td style="font-size:0.82rem;color:var(--text-light)">${p.ean||'—'}</td>
         <td><strong>${p.celkem} ks</strong></td>
-        <td><button class="btn btn-orange btn-sm" onclick="upravitProdukt(${p.id},'${p.nazev.replace(/'/g,"\\'")}','${p.znacka}',${p.cena},${p.cena_puvodni||0},'${p.emoji||''}','${(p.popis||'').replace(/'/g,"\\'")}','${p.ean||''}')">✏️ Upravit</button></td>
+        <td style="display:flex;gap:4px">
+          <button class="btn btn-orange btn-sm" onclick="upravitProdukt(${p.id},'${p.nazev.replace(/'/g,"\\'")}','${p.znacka}',${p.cena},${p.cena_puvodni||0},'${p.emoji||''}','${(p.popis||'').replace(/'/g,"\\'")}','${p.ean||''}')">✏️ Upravit</button>
+          <button class="btn btn-red btn-sm" onclick="smazatProdukt(${p.id},'${p.nazev.replace(/'/g,"\\'")}')">🗑️ Smazat</button>
+        </td>
       </tr>`).join('')}</tbody></table>`;
   } catch(e) { document.getElementById('produktyTable').innerHTML='<div class="error-msg">Chyba</div>'; }
+}
+
+function toggleVybranyProdukt(cb) {
+  if (cb.checked) vybraneProdukty.add(cb.dataset.id); else vybraneProdukty.delete(cb.dataset.id);
+}
+function vybratVseProdukty(headerCb) {
+  document.querySelectorAll('#produktyTable tbody input[type=checkbox]').forEach(cb=>{
+    cb.checked = headerCb.checked;
+    toggleVybranyProdukt(cb);
+  });
+}
+async function smazatProdukt(id, nazev) {
+  if (!confirm(`Opravdu smazat produkt "${nazev}"? Smažou se i všechny jeho velikosti na skladu a historie pohybů.`)) return;
+  try {
+    await fetch(API+'/sklad/produkty/'+id, {method:'DELETE'});
+    vybraneProdukty.delete(String(id));
+    loadProdukty();
+  } catch(e) { alert('❌ Chyba při mazání'); }
+}
+async function smazatVybraneProdukty() {
+  if (!vybraneProdukty.size) { alert('Nic není vybráno.'); return; }
+  if (!confirm(`Opravdu smazat ${vybraneProdukty.size} vybraných produktů? Smaže se i jejich sklad a historie.`)) return;
+  try {
+    await Promise.all([...vybraneProdukty].map(id => fetch(API+'/sklad/produkty/'+id, {method:'DELETE'})));
+    vybraneProdukty.clear();
+    loadProdukty();
+  } catch(e) { alert('❌ Chyba při hromadném mazání'); }
 }
 
 async function ulozitProdukt() {

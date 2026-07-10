@@ -153,6 +153,34 @@ router.delete('/kategorie/:id', async (req, res) => {
     res.status(500).json({ chyba: err.message });
   }
 });
+// Smazat jednu položku skladu (konkrétní velikost produktu)
+router.delete('/polozka/:produktId/:velikost', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM sklad WHERE produkt_id=$1 AND velikost=$2', [req.params.produktId, req.params.velikost]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ chyba: err.message });
+  }
+});
+
+// Smazat celý produkt (včetně jeho položek skladu a historie pohybů)
+router.delete('/produkty/:id', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM pohyby_skladu WHERE produkt_id=$1', [req.params.id]);
+    await client.query('DELETE FROM sklad WHERE produkt_id=$1', [req.params.id]);
+    await client.query('DELETE FROM produkty WHERE id=$1', [req.params.id]);
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ chyba: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 module.exports = router;
 
 
