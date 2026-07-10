@@ -327,6 +327,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <div class="page-title">👥 Zákazníci</div>
         <div class="table-actions">
           <input type="text" class="search-input" placeholder="🔍 Hledat..." oninput="hledatZakazniky(this.value)">
+          <button class="btn btn-primary" onclick="openModal('modalNovyZakaznik')">+ Přidat zákazníka</button>
           <button class="btn btn-csv no-print" onclick="exportCSV('zakaznici')">⬇ CSV</button>
           <button class="refresh-btn no-print" onclick="loadZakaznici()">↻</button>
         </div>
@@ -699,6 +700,33 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
 </div>
 
 <!-- MODAL NOVÝ PRODUKT -->
+<div class="modal-overlay" id="modalNovyZakaznik">
+  <div class="modal">
+    <h3>👥 Přidat zákazníka</h3>
+    <div id="zakaznikMsg"></div>
+    <div class="form-grid-2">
+      <div class="form-group"><label>Jméno a příjmení *</label><input type="text" id="zJmeno" placeholder="Jana Nová"></div>
+      <div class="form-group"><label>E-mail *</label><input type="email" id="zEmail" placeholder="jana@email.cz"></div>
+    </div>
+    <div class="form-grid-2">
+      <div class="form-group"><label>Telefon</label><input type="text" id="zTelefon" placeholder="+420 777 123 456"></div>
+      <div class="form-group"><label>Město</label><input type="text" id="zMesto" placeholder="Ostrava"></div>
+    </div>
+    <div class="form-grid-2">
+      <div class="form-group"><label>Ulice</label><input type="text" id="zUlice" placeholder="volitelné"></div>
+      <div class="form-group"><label>PSČ</label><input type="text" id="zPsc" placeholder="volitelné"></div>
+    </div>
+    <div class="form-group" style="display:flex;align-items:center;gap:8px;margin-top:6px">
+      <input type="checkbox" id="zNewsletter" style="width:auto">
+      <label for="zNewsletter" style="margin:0">Přihlásit i k newsletteru</label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modalNovyZakaznik')">Zrušit</button>
+      <button class="btn btn-primary" onclick="ulozitZakaznika()">💾 Uložit</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modalNovyProdukt">
   <div class="modal">
     <h3>👟 Nový produkt</h3>
@@ -1041,6 +1069,37 @@ async function tiskObjednavkyId(id) {
 }
 
 // ZÁKAZNÍCI
+async function ulozitZakaznika() {
+  const jmeno = document.getElementById('zJmeno').value.trim();
+  const email = document.getElementById('zEmail').value.trim();
+  const msg = document.getElementById('zakaznikMsg');
+  if (!jmeno || !email) { msg.innerHTML = '<div class="error-msg">Vyplňte prosím jméno a e-mail.</div>'; return; }
+  msg.innerHTML = '';
+  try {
+    const res = await fetch(API+'/auth/zakaznici', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        jmeno, email,
+        telefon: document.getElementById('zTelefon').value.trim(),
+        ulice: document.getElementById('zUlice').value.trim(),
+        mesto: document.getElementById('zMesto').value.trim(),
+        psc: document.getElementById('zPsc').value.trim(),
+        newsletter: document.getElementById('zNewsletter').checked
+      })
+    });
+    if (res.ok) {
+      msg.innerHTML = '<div class="success-msg">✅ Zákazník přidán!</div>';
+      ['zJmeno','zEmail','zTelefon','zUlice','zMesto','zPsc'].forEach(id=>document.getElementById(id).value='');
+      document.getElementById('zNewsletter').checked = false;
+      setTimeout(()=>{closeModal('modalNovyZakaznik');loadZakaznici();},1200);
+    } else {
+      const err = await res.json().catch(()=>({}));
+      msg.innerHTML = `<div class="error-msg">${err.chyba || 'Chyba při ukládání'}</div>`;
+    }
+  } catch(e) { msg.innerHTML = '<div class="error-msg">Chyba spojení</div>'; }
+}
+
 async function loadZakaznici() {
   document.getElementById('zakazniciTable').innerHTML = '<div class="loading">Načítám...</div>';
   try {

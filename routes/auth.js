@@ -93,5 +93,36 @@ router.get('/zakaznici', async (req, res) => {
   }
 });
 
+// Přidat zákazníka ručně (admin / prodejna)
+router.post('/zakaznici', async (req, res) => {
+  const { jmeno, email, telefon, ulice, mesto, psc, newsletter } = req.body;
+  if (!jmeno || !email) return res.status(400).json({ chyba: 'Vyplňte prosím jméno a e-mail.' });
+  try {
+    const existuje = await pool.query('SELECT id FROM zakaznici WHERE email = $1', [email]);
+    if (existuje.rows.length > 0) {
+      return res.status(400).json({ chyba: 'Zákazník s tímto e-mailem už existuje.' });
+    }
+
+    // Vygenerovat náhodné heslo (zákazník přidaný na prodejně se zatím nepřihlašuje online)
+    const nahodneHeslo = Math.random().toString(36).slice(-12);
+    const hash = await bcrypt.hash(nahodneHeslo, 10);
+
+    const result = await pool.query(
+      'INSERT INTO zakaznici (jmeno, email, heslo, telefon, ulice, mesto, psc) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, jmeno, email, telefon, ulice, mesto, psc, vytvoreno',
+      [jmeno, email, hash, telefon || null, ulice || null, mesto || null, psc || null]
+    );
+
+    if (newsletter) {
+      try {
+        await pool.query('INSERT INTO newsletter (email) VALUES ($1) ON CONFLICT (email) DO NOTHING', [email]);
+      } catch (e) { /* newsletter tabulka může chybět, ignorovat */ }
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ chyba: err.message });
+  }
+});
+
 module.exports = router;
 
