@@ -21,7 +21,21 @@ app.use(express.static(path.join(__dirname)));
 const kategorieRoutes = require('./routes/kategorie');
 const newsletterRoutes = require('./routes/newsletter');
 const mobilniSkenRoutes = require('./routes/mobilnisken');
-const skenRoutes = require('./routes/sken');
+const vyzadovatAdmina = require('./middleware/adminAuth');
+
+// Přihlášení do admin panelu – heslo se ověřuje tady na serveru,
+// nikdy není součástí kódu na frontendu.
+app.post('/api/admin-prihlaseni', (req, res) => {
+  const { heslo } = req.body;
+  if (!process.env.ADMIN_HESLO) {
+    console.error('ADMIN_HESLO není nastaveno v proměnných prostředí!');
+    return res.status(500).json({ chyba: 'Server není správně nakonfigurován.' });
+  }
+  if (heslo && heslo === process.env.ADMIN_HESLO) {
+    return res.json({ ok: true });
+  }
+  res.status(401).json({ chyba: 'Nesprávné heslo.' });
+});
 
 app.get('/', (req, res) => {
   res.json({ zprava: 'DÄ›tskĂ© krĹŻÄŤky API funguje!' });
@@ -80,7 +94,7 @@ app.get('/api/nastaveni/oteviraci-doba', (req, res) => {
   res.json(oteviracka);
 });
 
-app.post('/api/nastaveni/oteviraci-doba', async (req, res) => {
+app.post('/api/nastaveni/oteviraci-doba', vyzadovatAdmina, async (req, res) => {
   oteviracka = req.body;
   try {
     await pool.query(
@@ -110,7 +124,7 @@ app.get('/api/nastaveni/texty', (req, res) => {
   res.json(textyWebu);
 });
 
-app.post('/api/nastaveni/texty', async (req, res) => {
+app.post('/api/nastaveni/texty', vyzadovatAdmina, async (req, res) => {
   textyWebu = req.body;
   try {
     await pool.query(
@@ -167,7 +181,7 @@ app.get('/api/rezervace/sloty', async (req, res) => {
 });
 
 // POST /api/rezervace/sloty – přidat slot (admin)
-app.post('/api/rezervace/sloty', async (req, res) => {
+app.post('/api/rezervace/sloty', vyzadovatAdmina, async (req, res) => {
   const { datum, cas_od, cas_do } = req.body;
   if (!datum || !cas_od || !cas_do) return res.status(400).json({ chyba: 'Chybí datum nebo časy' });
   try {
@@ -180,15 +194,15 @@ app.post('/api/rezervace/sloty', async (req, res) => {
 });
 
 // DELETE /api/rezervace/sloty/:id – smazat slot (admin)
-app.delete('/api/rezervace/sloty/:id', async (req, res) => {
+app.delete('/api/rezervace/sloty/:id', vyzadovatAdmina, async (req, res) => {
   try {
     await pool.query('DELETE FROM rezervace_sloty WHERE id=$1 AND obsazeno=FALSE', [req.params.id]);
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ chyba: e.message }); }
 });
 
-// GET /api/rezervace – všechny rezervace (admin)
-app.get('/api/rezervace', async (req, res) => {
+// GET /api/rezervace – všechny rezervace (jen pro admin – obsahuje osobní údaje)
+app.get('/api/rezervace', vyzadovatAdmina, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM rezervace ORDER BY created_at DESC');
     res.json(result.rows);
@@ -220,7 +234,7 @@ app.post('/api/rezervace', async (req, res) => {
 });
 
 // PATCH /api/rezervace/:id/stav – změnit stav (admin)
-app.patch('/api/rezervace/:id/stav', async (req, res) => {
+app.patch('/api/rezervace/:id/stav', vyzadovatAdmina, async (req, res) => {
   const { stav } = req.body;
   if (!['cekajici','potvrzena','zrusena'].includes(stav)) return res.status(400).json({ chyba: 'Neplatný stav' });
   const client = await pool.connect();
@@ -243,7 +257,7 @@ let banner = {};
 app.get('/api/nastaveni/banner', (req, res) => {
   res.json(banner);
 });
-app.post('/api/nastaveni/banner', (req, res) => {
+app.post('/api/nastaveni/banner', vyzadovatAdmina, (req, res) => {
   banner = req.body;
   res.json({ ok: true });
 });
