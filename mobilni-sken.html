@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Skener EAN – Dětské krůčky</title>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
+<style>
+  :root {
+    --cream:#E5DFD6;
+    --brown:#AE6965;
+    --brown-dark:#8a4a46;
+    --tan:#A58B71;
+    --sage:#7A816C;
+    --text:#3d2b1f;
+    --text-light:#6b5548;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: var(--cream);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+  }
+  h1 {
+    font-size: 1.3rem;
+    color: var(--brown);
+    margin: 12px 0 4px;
+    text-align: center;
+  }
+  .podnadpis {
+    font-size: 0.85rem;
+    color: var(--text-light);
+    text-align: center;
+    margin-bottom: 16px;
+  }
+  #videoWrap {
+    width: 100%;
+    max-width: 420px;
+    background: #000;
+    border-radius: 16px;
+    overflow: hidden;
+    position: relative;
+    aspect-ratio: 4/3;
+  }
+  video { width: 100%; height: 100%; object-fit: cover; }
+  .ramecek {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80%; height: 100px;
+    border: 3px solid var(--sage);
+    border-radius: 10px;
+    pointer-events: none;
+  }
+  #status {
+    margin-top: 20px;
+    padding: 14px 20px;
+    border-radius: 12px;
+    font-weight: 600;
+    text-align: center;
+    max-width: 420px;
+    width: 100%;
+  }
+  .st-cekam { background: #fff; color: var(--text-light); border: 1px solid var(--tan); }
+  .st-ok { background: #e0f0d8; color: #3a6b2a; }
+  .st-chyba { background: #fde0e0; color: #a33; }
+  .pocitadlo {
+    margin-top: 10px;
+    font-size: 0.8rem;
+    color: var(--text-light);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+  <h1>🦔 Skener EAN kódů</h1>
+  <p class="podnadpis">Namiřte telefon na čárový kód – odešle se automaticky do prodejny na PC.</p>
+
+  <div id="videoWrap">
+    <video id="video" autoplay muted playsinline></video>
+    <div class="ramecek"></div>
+  </div>
+
+  <div id="status" class="st-cekam">📷 Připravuji kameru…</div>
+  <div class="pocitadlo" id="pocitadlo"></div>
+
+<script>
+const API = 'https://detskekrucky1.onrender.com/api/mobilni-sken';
+const params = new URLSearchParams(window.location.search);
+const sessionId = params.get('session');
+const statusEl = document.getElementById('status');
+const pocitadloEl = document.getElementById('pocitadlo');
+let pocetOdeslanych = 0;
+let reader = null;
+let zpracovavam = false;
+
+if (!sessionId) {
+  statusEl.className = 'st-chyba';
+  statusEl.textContent = '❌ Chybí relace. Naskenujte prosím QR kód znovu z PC.';
+} else {
+  spustitKameru();
+}
+
+async function spustitKameru() {
+  const video = document.getElementById('video');
+  try {
+    reader = new ZXing.BrowserMultiFormatReader();
+    const constraints = {
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }
+    };
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    video.srcObject = stream;
+    await video.play();
+    statusEl.className = 'st-cekam';
+    statusEl.textContent = '📷 Čekám na naskenování…';
+    dekodovat(video);
+  } catch (e) {
+    statusEl.className = 'st-chyba';
+    statusEl.textContent = '❌ Kamera není dostupná: ' + e.message;
+  }
+}
+
+function dekodovat(video) {
+  const smycka = async () => {
+    if (!reader) return;
+    if (!zpracovavam) {
+      try {
+        const result = await reader.decodeFromVideoElement(video);
+        if (result) {
+          odeslatKod(result.getText());
+        }
+      } catch (e) {
+        // NotFoundException = kód zatím není vidět, pokračujeme
+      }
+    }
+    requestAnimationFrame(smycka);
+  };
+  requestAnimationFrame(smycka);
+}
+
+async function odeslatKod(ean) {
+  zpracovavam = true;
+  statusEl.className = 'st-cekam';
+  statusEl.textContent = '⏳ Odesílám kód ' + ean + '…';
+  try {
+    const res = await fetch(API + '/' + encodeURIComponent(sessionId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ean })
+    });
+    if (res.ok) {
+      pocetOdeslanych++;
+      statusEl.className = 'st-ok';
+      statusEl.textContent = '✅ Odesláno: ' + ean;
+      pocitadloEl.textContent = 'Naskenováno celkem: ' + pocetOdeslanych;
+      if (navigator.vibrate) navigator.vibrate(100);
+    } else {
+      statusEl.className = 'st-chyba';
+      statusEl.textContent = '❌ Chyba při odesílání, zkuste znovu.';
+    }
+  } catch (e) {
+    statusEl.className = 'st-chyba';
+    statusEl.textContent = '❌ Chyba spojení, zkuste znovu.';
+  }
+  setTimeout(() => {
+    statusEl.className = 'st-cekam';
+    statusEl.textContent = '📷 Čekám na další kód…';
+    zpracovavam = false;
+  }, 1500);
+}
+</script>
+</body>
+</html>

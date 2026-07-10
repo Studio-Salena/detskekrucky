@@ -615,7 +615,8 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <input type="text" id="eanInput" placeholder="Zadejte EAN kód a stiskněte Enter…" onkeydown="if(event.key==='Enter')hledatEan()">
       </div>
       <button class="btn btn-outline" style="margin-bottom:0" onclick="hledatEan()">Přidat</button>
-      <button class="btn btn-outline" style="margin-bottom:0" onclick="otevritKameru()" title="Skenovat kamerou">📷</button>
+      <button class="btn btn-outline" style="margin-bottom:0" onclick="otevritKameru()" title="Skenovat kamerou na tomto zařízení">📷</button>
+      <button class="btn btn-outline" style="margin-bottom:0" onclick="otevritMobilniSken()" title="Skenovat mobilem">📱</button>
     </div>
     <div id="eanMsg" style="margin-bottom:8px"></div>
 
@@ -656,6 +657,18 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <button class="btn btn-outline" onclick="closeModal('modalProdejnaProdat')">Zrušit</button>
       <button class="btn btn-primary" onclick="ulozitProdejnaProdat()">💾 Uložit a vytisknout účtenku</button>
     </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalMobilniSken">
+  <div class="modal" style="max-width:360px;text-align:center">
+    <h3>📱 Skenování mobilem</h3>
+    <p style="color:var(--text-light);font-size:0.85rem;margin:8px 0 16px">Naskenuj tímto QR kódem mobilem, pak namiř telefon na čárové kódy – přidají se sem automaticky.</p>
+    <div id="mobilniSkenQR" style="margin:0 auto 16px;width:220px;height:220px;background:var(--cream);border-radius:12px;display:flex;align-items:center;justify-content:center">
+      <span style="color:var(--text-light)">Načítám QR kód...</span>
+    </div>
+    <div id="mobilniSkenStatus" style="padding:10px;border-radius:8px;background:var(--cream);font-size:0.9rem;margin-bottom:16px">⏳ Čekám na naskenování z mobilu…</div>
+    <button class="btn btn-outline" onclick="zavritMobilniSken()">Zavřít</button>
   </div>
 </div>
 
@@ -1737,6 +1750,52 @@ function zavritKameru() {
     video.srcObject = null;
   }
   kameraReader = null;
+}
+
+// ═══════════════════════════════
+// MOBILNÍ SKEN – přijímání kódů z telefonu
+// ═══════════════════════════════
+let mobilniSkenId = null;
+let mobilniSkenInterval = null;
+
+function otevritMobilniSken() {
+  mobilniSkenId = 'r' + Date.now() + Math.random().toString(36).slice(2, 8);
+  const url = window.location.origin + window.location.pathname.replace('admin.html', 'mobilni-sken.html') + '?session=' + mobilniSkenId;
+
+  document.getElementById('mobilniSkenQR').innerHTML =
+    `<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}" style="width:200px;height:200px;border-radius:8px" alt="QR kód">`;
+  document.getElementById('mobilniSkenStatus').innerHTML = '⏳ Čekám na naskenování z mobilu…';
+  document.getElementById('mobilniSkenStatus').style.background = 'var(--cream)';
+
+  openModal('modalMobilniSken');
+
+  if (mobilniSkenInterval) clearInterval(mobilniSkenInterval);
+  mobilniSkenInterval = setInterval(kontrolovatMobilniSken, 1500);
+}
+
+async function kontrolovatMobilniSken() {
+  if (!mobilniSkenId) return;
+  try {
+    const res = await fetch(API + '/mobilni-sken/' + mobilniSkenId);
+    const data = await res.json();
+    if (data.ean) {
+      document.getElementById('eanInput').value = data.ean;
+      hledatEan();
+      const status = document.getElementById('mobilniSkenStatus');
+      status.innerHTML = `✅ Přidán kód: <strong>${data.ean}</strong>`;
+      status.style.background = '#e0f0d8';
+      setTimeout(() => {
+        status.innerHTML = '⏳ Čekám na další kód z mobilu…';
+        status.style.background = 'var(--cream)';
+      }, 2000);
+    }
+  } catch(e) { /* tichá chyba, zkusíme to znovu za chvíli */ }
+}
+
+function zavritMobilniSken() {
+  closeModal('modalMobilniSken');
+  if (mobilniSkenInterval) { clearInterval(mobilniSkenInterval); mobilniSkenInterval = null; }
+  mobilniSkenId = null;
 }
 
 function prepocitatCelkem() {

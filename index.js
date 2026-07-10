@@ -20,6 +20,8 @@ const path = require('path');
 app.use(express.static(path.join(__dirname)));
 const kategorieRoutes = require('./routes/kategorie');
 const newsletterRoutes = require('./routes/newsletter');
+const mobilniSkenRoutes = require('./routes/mobilnisken');
+const skenRoutes = require('./routes/sken');
 
 app.get('/', (req, res) => {
   res.json({ zprava: 'DÄ›tskĂ© krĹŻÄŤky API funguje!' });
@@ -42,6 +44,7 @@ app.use('/api/platby', platbyRoutes);
 app.use('/api/produkty', skladRoutes);
 app.use('/api/kategorie', kategorieRoutes);
 app.use('/api/newsletter', newsletterRoutes);
+app.use('/api/mobilni-sken', mobilniSkenRoutes);
 
 // Texty webu (výchozí hodnoty, přepíšou se z DB)
 let textyWebu = {
