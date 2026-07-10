@@ -181,6 +181,16 @@ router.delete('/produkty/:id', async (req, res) => {
   }
 });
 
+// Smazat záznam pohybu skladu (historie)
+router.delete('/pohyby/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM pohyby_skladu WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ chyba: err.message });
+  }
+});
+
 module.exports = router;
 
 
