@@ -409,13 +409,8 @@ footer {
 <div class="filters-wrap">
   <div>
     <span class="filters-title">Procházet kolekci</span>
-    <div class="filters">
+    <div class="filters" id="filtersContainer">
       <button class="filter-btn active" onclick="filterBy('vse',this)">Vše</button>
-      <button class="filter-btn" onclick="filterBy('toddler',this)">Batolata</button>
-      <button class="filter-btn" onclick="filterBy('boys',this)">Kluci</button>
-      <button class="filter-btn" onclick="filterBy('girls',this)">Holky</button>
-      <button class="filter-btn" onclick="filterBy('sport',this)">Sport</button>
-      <button class="filter-btn" onclick="filterBy('winter',this)">Zima</button>
     </div>
   </div>
   <div class="search-wrap">
@@ -570,6 +565,35 @@ const kategorieBg = {
   winter: 'product-img-winter'
 };
 
+// Záložní barevné přechody pro nové kategorie, které ještě nemají vlastní CSS třídu
+const fallbackGradienty = [
+  'linear-gradient(135deg,#fdf2e0,#f9e0c0)',
+  'linear-gradient(135deg,#e0f2f0,#c8e8e0)',
+  'linear-gradient(135deg,#f2e0f5,#e0c8e8)',
+  'linear-gradient(135deg,#e8f0e0,#d0e0c0)',
+  'linear-gradient(135deg,#f5e8e0,#e8d0c0)'
+];
+let vsechnyKategorie = [];
+
+function ziskatPozadiKategorie(slug) {
+  if (kategorieBg[slug]) return { trida: kategorieBg[slug], styl: '' };
+  const idx = vsechnyKategorie.findIndex(k => k.slug === slug);
+  const gradient = fallbackGradienty[idx >= 0 ? idx % fallbackGradienty.length : 0];
+  return { trida: 'product-img-default', styl: `background:${gradient}` };
+}
+
+async function nacistKategorieFiltru() {
+  try {
+    const data = await fetch(API + '/kategorie').then(r => r.json());
+    vsechnyKategorie = Array.isArray(data) ? data : [];
+    const container = document.getElementById('filtersContainer');
+    const tlacitkaHtml = vsechnyKategorie.map(k =>
+      `<button class="filter-btn" onclick="filterBy('${k.slug}',this)">${k.nazev}</button>`
+    ).join('');
+    container.insertAdjacentHTML('beforeend', tlacitkaHtml);
+  } catch(e) { /* pokud se nepodaří načíst, zůstane jen tlačítko "Vše" */ }
+}
+
 async function nacistProdukty() {
   try {
     const data = await fetch(API + '/sklad').then(r => r.json());
@@ -600,9 +624,9 @@ function zobrazitProdukty(produkty) {
   document.getElementById('productsGrid').innerHTML = produkty.map(p => {
     const minVel = Math.min(...p.velikosti.map(v => v.velikost));
     const maxVel = Math.max(...p.velikosti.map(v => v.velikost));
-    const bgClass = kategorieBg[p.kategorie] || 'product-img-default';
+    const bg = ziskatPozadiKategorie(p.kategorie);
     return `<div class="product-card" onclick="openDetail(${p.id})">
-      <div class="product-img ${bgClass}">
+      <div class="product-img ${bg.trida}" style="${bg.styl}">
         <span>${p.emoji}</span>
         ${p.cena_puvodni ? '<span class="product-badge sale">SLEVA</span>' : ''}
       </div>
@@ -808,6 +832,7 @@ function showToast(msg) {
 }
 
 ulozitKosik();
+nacistKategorieFiltru();
 nacistProdukty();
 
 // COOKIE LIŠTA

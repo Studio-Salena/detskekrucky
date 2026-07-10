@@ -108,11 +108,11 @@ router.post('/produkty', async (req, res) => {
 
 // Upravit produkt
 router.patch('/produkty/:id', async (req, res) => {
-  const { nazev, znacka, cena, cena_puvodni, popis, ean } = req.body;
+  const { nazev, znacka, cena, cena_puvodni, popis, ean, kategorie } = req.body;
   try {
     const result = await pool.query(
-      'UPDATE produkty SET nazev=$1, znacka=$2, cena=$3, cena_puvodni=$4, popis=$5, ean=$6 WHERE id=$7 RETURNING *',
-      [nazev, znacka, cena, cena_puvodni||null, popis||'', ean||null, req.params.id]
+      'UPDATE produkty SET nazev=$1, znacka=$2, cena=$3, cena_puvodni=$4, popis=$5, ean=$6, kategorie=$7 WHERE id=$8 RETURNING *',
+      [nazev, znacka, cena, cena_puvodni||null, popis||'', ean||null, kategorie, req.params.id]
     );
     res.json(result.rows[0]);
   } catch (err) {
