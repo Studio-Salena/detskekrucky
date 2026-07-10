@@ -2,10 +2,10 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  console.error('CHYBA: STRIPE_SECRET_KEY není nastaven v proměnných prostředí! Platby nebudou fungovat.');
+if (!process.env.STRIPE_KEY) {
+  console.error('CHYBA: STRIPE_KEY není nastaven v proměnných prostředí! Platby nebudou fungovat.');
 }
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const stripe = require('stripe')(process.env.STRIPE_KEY);
 
 router.post('/vytvorit', async (req, res) => {
   const { objednavka_id } = req.body;
