@@ -1,6 +1,7 @@
 ﻿const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
+const vyzadovatAdmina = require('../middleware/adminAuth');
 
 router.get('/', async (req, res) => {
   try {
@@ -10,6 +11,9 @@ router.get('/', async (req, res) => {
     res.status(500).json({ chyba: err.message });
   }
 });
+
+// Vše pod touto řádkou (přidání/úprava/smazání kategorie) vyžaduje administraci
+router.use(vyzadovatAdmina);
 
 router.post('/', async (req, res) => {
   const { nazev, slug, poradi, popis, znacky } = req.body;

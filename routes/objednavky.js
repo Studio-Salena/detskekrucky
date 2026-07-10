@@ -2,6 +2,7 @@ const { odeslat_potvrzeni } = require('./emaily');
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
+const vyzadovatAdmina = require('../middleware/adminAuth');
 
 // Vytvorit novou objednavku
 router.post('/', async (req, res) => {
@@ -91,8 +92,8 @@ res.json({ zprava: 'Objednavka uspesne vytvorena', objednavka_id, celkem });
   }
 });
 
-// Ziskat vsechny objednavky
-router.get('/', async (req, res) => {
+// Ziskat vsechny objednavky (jen pro admin – obsahuje osobní údaje zákazníků)
+router.get('/', vyzadovatAdmina, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT o.id, o.stav, o.doprava, o.platba, o.celkem, o.vytvoreno,
@@ -107,8 +108,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Detail objednavky
-router.get('/:id', async (req, res) => {
+// Detail objednavky (jen pro admin)
+router.get('/:id', vyzadovatAdmina, async (req, res) => {
   try {
     const objednavka = await pool.query(`
       SELECT o.*, z.jmeno, z.email, z.telefon, z.ulice, z.mesto, z.psc
@@ -130,8 +131,8 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Zmenit stav objednavky
-router.patch('/:id/stav', async (req, res) => {
+// Zmenit stav objednavky (jen pro admin)
+router.patch('/:id/stav', vyzadovatAdmina, async (req, res) => {
   const { stav } = req.body;
   const stavy = ['nova', 'zaplacena', 'odeslana', 'dorucena', 'zrusena'];
   if (!stavy.includes(stav)) {

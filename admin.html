@@ -825,23 +825,43 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
 
 <script>
 const API = 'https://detskekrucky1.onrender.com/api';
-const HESLO = 'detskekrucky';
 let vsechnyObjednavky = [], vsechnyZakaznici = [], veskerySklad = [];
 
-// LOGIN
-function login() {
-  if (document.getElementById('passwordInput').value === HESLO) {
-    document.getElementById('loginOverlay').style.display = 'none';
-    document.getElementById('adminWrap').style.display = 'flex';
-    sessionStorage.setItem('adminOK','1');
-    loadPrehled();
-    setInterval(checkNoveObjednavky, 60000);
-  } else {
+// Obálka nad fetch, která ke všem voláním na náš backend automaticky
+// přidá heslo administrace (uložené jen v paměti prohlížeče po přihlášení,
+// nikdy není součástí zdrojového kódu).
+function adminFetch(url, options = {}) {
+  const heslo = sessionStorage.getItem('adminHeslo') || '';
+  const headers = Object.assign({}, options.headers || {}, { 'x-admin-heslo': heslo });
+  return fetch(url, Object.assign({}, options, { headers }));
+}
+
+// LOGIN – heslo se ověřuje na serveru, nikdy není napsané v tomhle souboru
+async function login() {
+  const zadaneHeslo = document.getElementById('passwordInput').value;
+  document.getElementById('loginError').style.display = 'none';
+  try {
+    const res = await adminFetch(API + '/admin-prihlaseni', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ heslo: zadaneHeslo })
+    });
+    if (res.ok) {
+      sessionStorage.setItem('adminHeslo', zadaneHeslo);
+      document.getElementById('loginOverlay').style.display = 'none';
+      document.getElementById('adminWrap').style.display = 'flex';
+      loadPrehled();
+      setInterval(checkNoveObjednavky, 60000);
+    } else {
+      document.getElementById('loginError').style.display = 'block';
+    }
+  } catch (e) {
+    document.getElementById('loginError').textContent = 'Chyba spojení, zkuste to prosím znovu.';
     document.getElementById('loginError').style.display = 'block';
   }
 }
-function logout() { sessionStorage.removeItem('adminOK'); location.reload(); }
-if (sessionStorage.getItem('adminOK')) {
+function logout() { sessionStorage.removeItem('adminHeslo'); location.reload(); }
+if (sessionStorage.getItem('adminHeslo')) {
   document.getElementById('loginOverlay').style.display = 'none';
   document.getElementById('adminWrap').style.display = 'flex';
   loadPrehled();
@@ -881,7 +901,7 @@ function stavBadge(stav) {
 // NOTIFIKACE
 async function checkNoveObjednavky() {
   try {
-    const data = await fetch(API+'/objednavky').then(r=>r.json());
+    const data = await adminFetch(API+'/objednavky').then(r=>r.json());
     const nove = Array.isArray(data) ? data.filter(o=>o.stav==='nova').length : 0;
     const badge = document.getElementById('navBadge');
     const dot = document.getElementById('notifDot');
@@ -900,7 +920,7 @@ async function globalSearch(q) {
   const res = document.getElementById('searchResults');
   if (!q || q.length < 2) { res.style.display = 'none'; return; }
   try {
-    const data = await fetch(API+'/objednavky').then(r=>r.json());
+    const data = await adminFetch(API+'/objednavky').then(r=>r.json());
     const filtered = Array.isArray(data) ? data.filter(o =>
       (o.jmeno||'').toLowerCase().includes(q.toLowerCase()) ||
       (o.email||'').toLowerCase().includes(q.toLowerCase()) ||
@@ -923,8 +943,8 @@ document.addEventListener('click', e => {
 async function loadPrehled() {
   try {
     const [obj, sklad] = await Promise.all([
-      fetch(API+'/objednavky').then(r=>r.json()).catch(()=>[]),
-      fetch(API+'/sklad/nizky-stav').then(r=>r.json()).catch(()=>[])
+      adminFetch(API+'/objednavky').then(r=>r.json()).catch(()=>[]),
+      adminFetch(API+'/sklad/nizky-stav').then(r=>r.json()).catch(()=>[])
     ]);
     const platne = Array.isArray(obj) ? obj.filter(o=>o.stav!=='zruseno') : [];
     const trzby = platne.reduce((s,o)=>s+o.celkem,0);
@@ -980,7 +1000,7 @@ async function loadPrehled() {
 async function loadObjednavky() {
   document.getElementById('objednavkyTable').innerHTML = '<div class="loading">Načítám...</div>';
   try {
-    const data = await fetch(API+'/objednavky').then(r=>r.json());
+    const data = await adminFetch(API+'/objednavky').then(r=>r.json());
     vsechnyObjednavky = Array.isArray(data) ? data : [];
     renderObjednavky(vsechnyObjednavky);
   } catch(e) { document.getElementById('objednavkyTable').innerHTML = '<div class="error-msg">Chyba načítání</div>'; }
@@ -1027,7 +1047,7 @@ function filtrovatObjednavky(stav, btn) {
 
 async function zmenitStav(id, stav) {
   try {
-    await fetch(API+'/objednavky/'+id+'/stav', {
+    await adminFetch(API+'/objednavky/'+id+'/stav', {
       method:'PATCH', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({stav})
     });
@@ -1046,7 +1066,7 @@ async function oznacitVseOdeslano() {
 
 async function detailObjednavky(id) {
   try {
-    const data = await fetch(API+'/objednavky/'+id).then(r=>r.json());
+    const data = await adminFetch(API+'/objednavky/'+id).then(r=>r.json());
     document.getElementById('detailObjTitle').textContent = '📦 Objednávka #'+id;
     const polozky = data.polozky || [];
     document.getElementById('detailObjContent').innerHTML = `
@@ -1074,7 +1094,7 @@ function tiskObjednavky() {
 
 async function tiskObjednavkyId(id) {
   try {
-    const data = await fetch(API+'/objednavky/'+id).then(r=>r.json());
+    const data = await adminFetch(API+'/objednavky/'+id).then(r=>r.json());
     const polozky = data.polozky || [];
     const printWin = window.open('','_blank');
     printWin.document.write(`<html><head><title>Objednávka #${id}</title>
@@ -1102,7 +1122,7 @@ async function ulozitZakaznika() {
   if (!jmeno || !email) { msg.innerHTML = '<div class="error-msg">Vyplňte prosím jméno a e-mail.</div>'; return; }
   msg.innerHTML = '';
   try {
-    const res = await fetch(API+'/auth/zakaznici', {
+    const res = await adminFetch(API+'/auth/zakaznici', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
@@ -1129,7 +1149,7 @@ async function ulozitZakaznika() {
 async function loadZakaznici() {
   document.getElementById('zakazniciTable').innerHTML = '<div class="loading">Načítám...</div>';
   try {
-    const data = await fetch(API+'/auth/zakaznici').then(r=>r.json());
+    const data = await adminFetch(API+'/auth/zakaznici').then(r=>r.json());
     vsechnyZakaznici = Array.isArray(data) ? data : [];
     renderZakaznici(vsechnyZakaznici);
   } catch(e) { document.getElementById('zakazniciTable').innerHTML = '<div class="error-msg">Chyba</div>'; }
@@ -1157,7 +1177,7 @@ function hledatZakazniky(q) {
 async function loadSklad() {
   document.getElementById('skladTable').innerHTML = '<div class="loading">Načítám...</div>';
   try {
-    const data = await fetch(API+'/sklad').then(r=>r.json());
+    const data = await adminFetch(API+'/sklad').then(r=>r.json());
     veskerySklad = Array.isArray(data) ? data : [];
     const produkty = {};
     veskerySklad.forEach(s => { if (!produkty[s.id]) produkty[s.id] = s.nazev; });
@@ -1197,7 +1217,7 @@ function vybratVseSklad(headerCb) {
 async function smazatSkladPolozku(id, velikost, nazev) {
   if (!confirm(`Smazat "${nazev}" vel. ${velikost} ze skladu?`)) return;
   try {
-    await fetch(API+'/sklad/polozka/'+id+'/'+velikost, {method:'DELETE'});
+    await adminFetch(API+'/sklad/polozka/'+id+'/'+velikost, {method:'DELETE'});
     vybraneSklad.delete(id+'_'+velikost);
     loadSklad();
   } catch(e) { alert('❌ Chyba při mazání'); }
@@ -1208,7 +1228,7 @@ async function smazatVybraneSklad() {
   try {
     await Promise.all([...vybraneSklad].map(k => {
       const [id, velikost] = k.split('_');
-      return fetch(API+'/sklad/polozka/'+id+'/'+velikost, {method:'DELETE'});
+      return adminFetch(API+'/sklad/polozka/'+id+'/'+velikost, {method:'DELETE'});
     }));
     vybraneSklad.clear();
     loadSklad();
@@ -1227,7 +1247,7 @@ let vybranePohyby = new Set();
 async function loadPohyby() {
   document.getElementById('pohybySkladTable').innerHTML = '<div class="loading">Načítám...</div>';
   try {
-    const data = await fetch(API+'/sklad/historie').then(r=>r.json());
+    const data = await adminFetch(API+'/sklad/historie').then(r=>r.json());
     if (!Array.isArray(data)||!data.length) { document.getElementById('pohybySkladTable').innerHTML = '<div class="empty">Žádné pohyby</div>'; return; }
     document.getElementById('pohybySkladTable').innerHTML = `
       <table><thead><tr><th><input type="checkbox" onchange="vybratVsePohyby(this)"></th><th>Datum</th><th>Produkt ID</th><th>Vel.</th><th>Typ</th><th>Kusů</th><th>Poznámka</th><th>Akce</th></tr></thead>
@@ -1254,7 +1274,7 @@ function vybratVsePohyby(headerCb) {
 async function smazatPohyb(id) {
   if (!confirm('Smazat tento záznam z historie pohybů? (Nezmění se tím stav skladu, jen se smaže záznam.)')) return;
   try {
-    await fetch(API+'/sklad/pohyby/'+id, {method:'DELETE'});
+    await adminFetch(API+'/sklad/pohyby/'+id, {method:'DELETE'});
     vybranePohyby.delete(String(id));
     loadPohyby();
   } catch(e) { alert('❌ Chyba při mazání'); }
@@ -1263,7 +1283,7 @@ async function smazatVybranePohyby() {
   if (!vybranePohyby.size) { alert('Nic není vybráno.'); return; }
   if (!confirm(`Opravdu smazat ${vybranePohyby.size} vybraných záznamů z historie? (Stav skladu se nezmění.)`)) return;
   try {
-    await Promise.all([...vybranePohyby].map(id => fetch(API+'/sklad/pohyby/'+id, {method:'DELETE'})));
+    await Promise.all([...vybranePohyby].map(id => adminFetch(API+'/sklad/pohyby/'+id, {method:'DELETE'})));
     vybranePohyby.clear();
     loadPohyby();
   } catch(e) { alert('❌ Chyba při hromadném mazání'); }
@@ -1272,13 +1292,13 @@ async function smazatVybranePohyby() {
 function rychleNaskladnit(id, vel, nazev) {
   const pocet = prompt(`➕ Naskladnit\n${nazev} vel. ${vel}\n\nKolik kusů?`);
   if (!pocet||isNaN(pocet)||pocet<=0) return;
-  fetch(API+'/sklad/naskladnit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({produkt_id:id,velikost:vel,pocet:parseInt(pocet),poznamka:'Naskladnění z adminu'})})
+  adminFetch(API+'/sklad/naskladnit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({produkt_id:id,velikost:vel,pocet:parseInt(pocet),poznamka:'Naskladnění z adminu'})})
     .then(()=>{loadSklad();loadPrehled();alert('✅ Naskladněno!');}).catch(()=>alert('❌ Chyba'));
 }
 function rychleOdecist(id, vel, nazev) {
   const pocet = prompt(`➖ Odečíst\n${nazev} vel. ${vel}\n\nKolik kusů?`);
   if (!pocet||isNaN(pocet)||pocet<=0) return;
-  fetch(API+'/sklad/odecist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({produkt_id:id,velikost:vel,pocet:parseInt(pocet),poznamka:'Odečtení z adminu'})})
+  adminFetch(API+'/sklad/odecist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({produkt_id:id,velikost:vel,pocet:parseInt(pocet),poznamka:'Odečtení z adminu'})})
     .then(()=>{loadSklad();alert('✅ Odečteno!');}).catch(()=>alert('❌ Chyba'));
 }
 
@@ -1289,7 +1309,7 @@ async function ulozitNaskladneni() {
   if (!vel||!pocet) { document.getElementById('naskladnitMsg').innerHTML='<div class="error-msg">Vyplňte velikost a počet.</div>'; return; }
   const ep = typ==='naskladneni'?'/sklad/naskladnit':'/sklad/odecist';
   try {
-    await fetch(API+ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({produkt_id:parseInt(id),velikost:parseInt(vel),pocet:parseInt(pocet),poznamka:poz})});
+    await adminFetch(API+ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({produkt_id:parseInt(id),velikost:parseInt(vel),pocet:parseInt(pocet),poznamka:poz})});
     document.getElementById('naskladnitMsg').innerHTML='<div class="success-msg">✅ Uloženo!</div>';
     setTimeout(()=>{closeModal('modalNaskladnit');loadSklad();loadPrehled();},1500);
   } catch(e) { document.getElementById('naskladnitMsg').innerHTML='<div class="error-msg">Chyba</div>'; }
@@ -1312,7 +1332,7 @@ let vybraneProdukty = new Set();
 async function loadProdukty() {
   document.getElementById('produktyTable').innerHTML='<div class="loading">Načítám...</div>';
   try {
-    const data = await fetch(API+'/sklad').then(r=>r.json());
+    const data = await adminFetch(API+'/sklad').then(r=>r.json());
     const map = {};
     if (Array.isArray(data)) data.forEach(s=>{if(!map[s.id])map[s.id]={...s,celkem:0};map[s.id].celkem+=s.pocet_kusu;});
     const list = Object.values(map);
@@ -1345,7 +1365,7 @@ function vybratVseProdukty(headerCb) {
 async function smazatProdukt(id, nazev) {
   if (!confirm(`Opravdu smazat produkt "${nazev}"? Smažou se i všechny jeho velikosti na skladu a historie pohybů.`)) return;
   try {
-    await fetch(API+'/sklad/produkty/'+id, {method:'DELETE'});
+    await adminFetch(API+'/sklad/produkty/'+id, {method:'DELETE'});
     vybraneProdukty.delete(String(id));
     loadProdukty();
   } catch(e) { alert('❌ Chyba při mazání'); }
@@ -1354,7 +1374,7 @@ async function smazatVybraneProdukty() {
   if (!vybraneProdukty.size) { alert('Nic není vybráno.'); return; }
   if (!confirm(`Opravdu smazat ${vybraneProdukty.size} vybraných produktů? Smaže se i jejich sklad a historie.`)) return;
   try {
-    await Promise.all([...vybraneProdukty].map(id => fetch(API+'/sklad/produkty/'+id, {method:'DELETE'})));
+    await Promise.all([...vybraneProdukty].map(id => adminFetch(API+'/sklad/produkty/'+id, {method:'DELETE'})));
     vybraneProdukty.clear();
     loadProdukty();
   } catch(e) { alert('❌ Chyba při hromadném mazání'); }
@@ -1364,7 +1384,7 @@ async function ulozitProdukt() {
   const nazev=document.getElementById('pNazev').value, cena=document.getElementById('pCena').value;
   if (!nazev||!cena) { document.getElementById('produktMsg').innerHTML='<div class="error-msg">Vyplňte název a cenu.</div>'; return; }
   try {
-    const res = await fetch(API+'/produkty',{method:'POST',headers:{'Content-Type':'application/json'},
+    const res = await adminFetch(API+'/produkty',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({nazev,znacka:document.getElementById('pZnacka').value,cena:parseInt(cena),
       cena_puvodni:document.getElementById('pCenaPuvodni').value||null,
       kategorie:document.getElementById('pKategorie').value,
@@ -1380,7 +1400,7 @@ async function naplnitVyberKategorii(selectId, vybrana) {
   const sel = document.getElementById(selectId);
   sel.innerHTML = '<option>Načítám...</option>';
   try {
-    const data = await fetch(API+'/kategorie').then(r=>r.json());
+    const data = await adminFetch(API+'/kategorie').then(r=>r.json());
     if (!Array.isArray(data) || !data.length) {
       sel.innerHTML = '<option value="">— nejprve přidejte kategorii v sekci Kategorie —</option>';
       return;
@@ -1412,7 +1432,7 @@ function upravitProdukt(id,nazev,znacka,cena,cenaPuvodni,emoji,popis,ean,kategor
 async function ulozitUpravuProduktu() {
   const id=document.getElementById('upId').value;
   try {
-    const res = await fetch(API+'/produkty/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},
+    const res = await adminFetch(API+'/produkty/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({nazev:document.getElementById('upNazev').value,znacka:document.getElementById('upZnacka').value,
       cena:parseInt(document.getElementById('upCena').value),cena_puvodni:document.getElementById('upCenaPuvodni').value||null,emoji:document.getElementById('upEmoji').value||'',popis:document.getElementById('upPopis').value||'',ean:document.getElementById('upEan').value||null,kategorie:document.getElementById('upKategorie').value})});
     if (res.ok) { document.getElementById('upravitMsg').innerHTML='<div class="success-msg">✅ Uloženo!</div>'; setTimeout(()=>{closeModal('modalUpravitProdukt');loadProdukty();},1500); }
@@ -1424,7 +1444,7 @@ async function ulozitUpravuProduktu() {
 // NASTAVENÍ - Otevírací doba
 async function loadNastaveni() {
   try {
-    const r = await fetch(API + '/nastaveni/oteviraci-doba');
+    const r = await adminFetch(API + '/nastaveni/oteviraci-doba');
     if (r.ok) {
       const data = await r.json();
       document.getElementById('hod-po').value = data.pondeli || '';
@@ -1437,7 +1457,7 @@ async function loadNastaveni() {
     }
   } catch(e) { console.log('Nastavení nenačteno'); }
   try {
-    const r2 = await fetch(API + '/nastaveni/banner');
+    const r2 = await adminFetch(API + '/nastaveni/banner');
     if (r2.ok) {
       const b = await r2.json();
       document.getElementById('banner-text').value = b.text || '';
@@ -1458,9 +1478,9 @@ async function ulozitOteviracku() {
     nedele: document.getElementById('hod-ne').value
   };
   try {
-    const r = await fetch(API + '/nastaveni/oteviraci-doba', {
+    const r = await adminFetch(API + '/nastaveni/oteviraci-doba', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-admin-password': HESLO },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
     if (r.ok) {
@@ -1477,9 +1497,9 @@ async function ulozitOteviracku() {
     aktivni: document.getElementById('banner-aktivni').value
   };
   try {
-    const r = await fetch(API + '/nastaveni/banner', {
+    const r = await adminFetch(API + '/nastaveni/banner', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-admin-password': adminHeslo },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
     if (r.ok) {
@@ -1492,7 +1512,7 @@ async function ulozitOteviracku() {
 }
 async function loadUcetnictvi() {
   try {
-    const data = await fetch(API+'/objednavky').then(r=>r.json());
+    const data = await adminFetch(API+'/objednavky').then(r=>r.json());
     const obj = Array.isArray(data) ? data.filter(o=>o.stav!=='zruseno') : [];
     const trzby = obj.reduce((s,o)=>s+o.celkem,0);
     const prodejnaTrzbyUcet = prodejnaData.reduce((s,p)=>s+p.celkem,0);
@@ -1529,25 +1549,25 @@ async function exportCSV(typ) {
   let rows=[], nazev=typ;
   try {
     if (typ==='objednavky') {
-      const d=await fetch(API+'/objednavky').then(r=>r.json());
+      const d=await adminFetch(API+'/objednavky').then(r=>r.json());
       rows=[['ID','Datum','Zákazník','Email','Telefon','Ulice','Město','PSČ','Doprava','Platba','Celkem Kč','Stav']];
       d.forEach(o=>rows.push([o.id,new Date(o.vytvoreno).toLocaleDateString('cs-CZ'),o.jmeno||'',o.email||'',o.telefon||'',o.ulice||'',o.mesto||'',o.psc||'',o.doprava||'',o.platba||'',o.celkem,o.stav||'']));
     } else if (typ==='zakaznici') {
-      const d=await fetch(API+'/auth/zakaznici').then(r=>r.json());
+      const d=await adminFetch(API+'/auth/zakaznici').then(r=>r.json());
       rows=[['ID','Jméno','Email','Telefon','Ulice','Město','PSČ','Registrace']];
       d.forEach(z=>rows.push([z.id,z.jmeno,z.email,z.telefon||'',z.ulice||'',z.mesto||'',z.psc||'',new Date(z.vytvoreno).toLocaleDateString('cs-CZ')]));
     } else if (typ==='sklad') {
-      const d=await fetch(API+'/sklad').then(r=>r.json());
+      const d=await adminFetch(API+'/sklad').then(r=>r.json());
       rows=[['Produkt','Značka','Kategorie','Cena Kč','Velikost','Kusů','Min. stav','Status']];
       d.forEach(s=>rows.push([s.nazev,s.znacka,s.kategorie,s.cena,s.velikost,s.pocet_kusu,s.min_pocet,s.pocet_kusu===0?'Vyprodáno':s.nizky_stav?'Nízký stav':'OK']));
       nazev='sklad';
     } else if (typ==='ucetnictvi') {
-      const d=await fetch(API+'/objednavky').then(r=>r.json());
+      const d=await adminFetch(API+'/objednavky').then(r=>r.json());
       rows=[['ID','Datum','Zákazník','Email','Celkem Kč','Platba','Doprava','Stav']];
       d.filter(o=>o.stav!=='zruseno').forEach(o=>rows.push([o.id,new Date(o.vytvoreno).toLocaleDateString('cs-CZ'),o.jmeno||'',o.email||'',o.celkem,o.platba||'',o.doprava||'',o.stav||'']));
       nazev='trzby';
     } else if (typ==='newsletter') {
-      const d=await fetch(API+'/newsletter').then(r=>r.json());
+      const d=await adminFetch(API+'/newsletter').then(r=>r.json());
       rows=[['ID','Email','Přihlášen']];
       d.forEach(n=>rows.push([n.id,n.email,new Date(n.created_at).toLocaleDateString('cs-CZ')]));
       nazev='newsletter';
@@ -1598,7 +1618,7 @@ async function loadProdejna() {
 
 async function nacistSkladProProdejna() {
   try {
-    const data = await fetch(API+'/sklad').then(r=>r.json());
+    const data = await adminFetch(API+'/sklad').then(r=>r.json());
     prodejnaSkladData = Array.isArray(data) ? data : [];
     // Naplnit selecty produktů
     const produkty = {};
@@ -1786,7 +1806,7 @@ function otevritMobilniSken() {
 async function kontrolovatMobilniSken() {
   if (!mobilniSkenId) return;
   try {
-    const res = await fetch(API + '/mobilni-sken/' + mobilniSkenId);
+    const res = await adminFetch(API + '/mobilni-sken/' + mobilniSkenId);
     const data = await res.json();
     if (data.ean) {
       document.getElementById('eanInput').value = data.ean;
@@ -1850,7 +1870,7 @@ async function ulozitProdejnaProdat() {
   // Odečíst ze skladu
   try {
     for (const p of polozky) {
-      await fetch(API+'/sklad/odecist', {
+      await adminFetch(API+'/sklad/odecist', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({produkt_id:p.produkt_id, velikost:p.velikost, pocet:p.pocet, poznamka:'Prodej v prodejně'})
       });
@@ -1950,7 +1970,7 @@ function smazatProdej(idx) {
 async function loadKategorie() {
   document.getElementById('kategorieTable').innerHTML = '<div class="loading">Načítám...</div>';
   try {
-    const data = await fetch(API+'/kategorie').then(r=>r.json());
+    const data = await adminFetch(API+'/kategorie').then(r=>r.json());
     vsechnyKategorieData = data;
     if (!data.length) { document.getElementById('kategorieTable').innerHTML = '<div class="empty">Žádné kategorie</div>'; return; }
     document.getElementById('kategorieTable').innerHTML = `
@@ -1986,7 +2006,7 @@ async function ulozitKategorii() {
   const znacky = document.getElementById('kZnacky').value.trim();
   if (!nazev) { document.getElementById('kategorieMsg').innerHTML = '<div class="error-msg">Vyplňte název kategorie.</div>'; return; }
   try {
-    const res = await fetch(API+'/kategorie', {
+    const res = await adminFetch(API+'/kategorie', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({nazev, slug, poradi: parseInt(poradi), popis, znacky})
     });
@@ -2021,7 +2041,7 @@ async function ulozitUpravuKategorie() {
   const znacky = document.getElementById('ukZnacky').value.trim();
   if (!nazev) { document.getElementById('upravitKategorieMsg').innerHTML = '<div class="error-msg">Vyplňte název.</div>'; return; }
   try {
-    const res = await fetch(API+'/kategorie/'+id, {
+    const res = await adminFetch(API+'/kategorie/'+id, {
       method:'PATCH', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({nazev, slug, poradi: parseInt(poradi), popis, znacky})
     });
@@ -2037,7 +2057,7 @@ async function ulozitUpravuKategorie() {
 async function smazatKategorii(id, nazev) {
   if (!confirm(`Opravdu smazat kategorii "${nazev}"?`)) return;
   try {
-    await fetch(API+'/kategorie/'+id, {method:'DELETE'});
+    await adminFetch(API+'/kategorie/'+id, {method:'DELETE'});
     loadKategorie();
   } catch(e) { alert('Chyba'); }
 }
@@ -2045,7 +2065,7 @@ async function smazatKategorii(id, nazev) {
 async function loadNewsletter() {
   document.getElementById('newsletterTable').innerHTML = '<div class="loading">Načítám...</div>';
   try {
-    const data = await fetch(API+'/newsletter').then(r=>r.json());
+    const data = await adminFetch(API+'/newsletter').then(r=>r.json());
     document.getElementById('newsletterPocet').textContent = data.length;
     if (!data.length) { document.getElementById('newsletterTable').innerHTML = '<div class="empty">Zatím žádní přihlášení</div>'; return; }
     document.getElementById('newsletterTable').innerHTML = `
@@ -2061,7 +2081,7 @@ async function loadNewsletter() {
 async function smazatNewsletter(id, email) {
   if (!confirm(`Opravdu smazat e-mail "${email}" z newsletteru?`)) return;
   try {
-    await fetch(API+'/newsletter/'+id, {method:'DELETE'});
+    await adminFetch(API+'/newsletter/'+id, {method:'DELETE'});
     loadNewsletter();
   } catch(e) { alert('Chyba při mazání'); }
 }
@@ -2074,8 +2094,8 @@ let vsechnySloty = [], vsechnyRezervace = [];
 async function loadRezervace() {
   try {
     const [sloty, rez] = await Promise.all([
-      fetch(API+'/rezervace/sloty').then(r=>r.json()),
-      fetch(API+'/rezervace').then(r=>r.json())
+      adminFetch(API+'/rezervace/sloty').then(r=>r.json()),
+      adminFetch(API+'/rezervace').then(r=>r.json())
     ]);
     vsechnySloty = Array.isArray(sloty) ? sloty : [];
     vsechnySloty.forEach(s => { s.datum = String(s.datum).slice(0, 10); });
@@ -2163,7 +2183,7 @@ function renderRezervace(data) {
 
 async function setStavRez(id, stav) {
   try {
-    await fetch(API+'/rezervace/'+id+'/stav', {
+    await adminFetch(API+'/rezervace/'+id+'/stav', {
       method:'PATCH', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({stav})
     });
@@ -2178,7 +2198,7 @@ async function ulozitSlot() {
   if (!datum||!od||!doo) { document.getElementById('novySlotMsg').innerHTML='<div class="error-msg">Vyplňte všechna pole.</div>'; return; }
   if (od>=doo) { document.getElementById('novySlotMsg').innerHTML='<div class="error-msg">Čas „do" musí být po čase „od".</div>'; return; }
   try {
-    const res = await fetch(API+'/rezervace/sloty', {
+    const res = await adminFetch(API+'/rezervace/sloty', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({datum, cas_od:od, cas_do:doo})
     });
@@ -2196,7 +2216,7 @@ async function quickAddSlot(od, doo) {
   const datum = document.getElementById('qDatum').value;
   if (!datum) { document.getElementById('quickSlotsMsg').innerHTML='<div class="error-msg">Nejprve vyberte datum.</div>'; return; }
   try {
-    const res = await fetch(API+'/rezervace/sloty', {
+    const res = await adminFetch(API+'/rezervace/sloty', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({datum, cas_od:od, cas_do:doo})
     });
@@ -2211,7 +2231,7 @@ async function quickAddSlot(od, doo) {
 async function smazatSlot(id) {
   if (!confirm('Smazat tento termín?')) return;
   try {
-    await fetch(API+'/rezervace/sloty/'+id, {method:'DELETE'});
+    await adminFetch(API+'/rezervace/sloty/'+id, {method:'DELETE'});
     loadRezervace();
   } catch(e) { alert('Chyba'); }
 }
@@ -2229,7 +2249,7 @@ function closeModal(id) { document.getElementById(id).classList.remove('open'); 
 // TEXTY WEBU
 async function loadTexty() {
   try {
-    const data = await fetch(API+'/nastaveni/texty').then(r=>r.json());
+    const data = await adminFetch(API+'/nastaveni/texty').then(r=>r.json());
 
     // Proč barefoot karty
     const kontBarefoot = document.getElementById('txProcBarefoot');
@@ -2274,7 +2294,7 @@ async function ulozitTexty() {
   const payload = { procBarefoot };
 
   try {
-    const res = await fetch(API+'/nastaveni/texty', {
+    const res = await adminFetch(API+'/nastaveni/texty', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify(payload)

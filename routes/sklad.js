@@ -1,6 +1,7 @@
 ﻿const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
+const vyzadovatAdmina = require('../middleware/adminAuth');
 
 router.get('/', async (req, res) => {
   try {
@@ -17,6 +18,10 @@ router.get('/', async (req, res) => {
     res.status(500).json({ chyba: err.message });
   }
 });
+
+// Vše pod touto řádkou vyžaduje přihlášení do administrace
+// (veřejný e-shop potřebuje jen GET / výše, aby mohl zobrazit produkty)
+router.use(vyzadovatAdmina);
 
 router.post('/naskladnit', async (req, res) => {
   const { produkt_id, velikost, pocet, poznamka } = req.body;
@@ -121,38 +126,9 @@ router.patch('/produkty/:id', async (req, res) => {
 });
 
 // Získat všechny kategorie
-router.get('/kategorie', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM kategorie ORDER BY poradi');
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ chyba: err.message });
-  }
-});
+// (POZNÁMKA: skutečně používané kategorie endpointy jsou v routes/kategorie.js,
+// tyhle duplicitní byly nepoužívané a byly odstraněny kvůli přehlednosti a bezpečnosti)
 
-// Přidat kategorii
-router.post('/kategorie', async (req, res) => {
-  const { nazev, slug, poradi } = req.body;
-  try {
-    const result = await pool.query(
-      'INSERT INTO kategorie (nazev, slug, poradi) VALUES ($1,$2,$3) RETURNING *',
-      [nazev, slug, poradi||0]
-    );
-    res.json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({ chyba: err.message });
-  }
-});
-
-// Smazat kategorii
-router.delete('/kategorie/:id', async (req, res) => {
-  try {
-    await pool.query('DELETE FROM kategorie WHERE id=$1', [req.params.id]);
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ chyba: err.message });
-  }
-});
 // Smazat jednu položku skladu (konkrétní velikost produktu)
 router.delete('/polozka/:produktId/:velikost', async (req, res) => {
   try {

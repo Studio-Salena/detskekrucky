@@ -3,8 +3,12 @@ const router = express.Router();
 const pool = require('../db/pool');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const vyzadovatAdmina = require('../middleware/adminAuth');
 
-const JWT_SECRET = 'detskekrucky_tajny_klic_2026';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('CHYBA: JWT_SECRET není nastaven v proměnných prostředí! Přihlašování zákazníků nebude fungovat bezpečně.');
+}
 
 // Registrace
 router.post('/registrace', async (req, res) => {
@@ -83,8 +87,8 @@ router.get('/moje-objednavky', async (req, res) => {
   }
 });
 
-// Všichni zákazníci (admin)
-router.get('/zakaznici', async (req, res) => {
+// Všichni zákazníci (jen pro admin – obsahuje osobní údaje)
+router.get('/zakaznici', vyzadovatAdmina, async (req, res) => {
   try {
     const result = await pool.query('SELECT id, jmeno, email, telefon, ulice, mesto, psc, vytvoreno FROM zakaznici ORDER BY vytvoreno DESC');
     res.json(result.rows);
@@ -93,8 +97,8 @@ router.get('/zakaznici', async (req, res) => {
   }
 });
 
-// Přidat zákazníka ručně (admin / prodejna)
-router.post('/zakaznici', async (req, res) => {
+// Přidat zákazníka ručně (jen pro admin / prodejna)
+router.post('/zakaznici', vyzadovatAdmina, async (req, res) => {
   const { jmeno, email, telefon, ulice, mesto, psc, newsletter } = req.body;
   if (!jmeno || !email) return res.status(400).json({ chyba: 'Vyplňte prosím jméno a e-mail.' });
   try {

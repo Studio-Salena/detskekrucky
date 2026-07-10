@@ -1,10 +1,14 @@
 const nodemailer = require('nodemailer');
 
+if (!process.env.GMAIL_APP_HESLO) {
+  console.error('CHYBA: GMAIL_APP_HESLO neni nastaven v promennych prostredi! Odesilani emailu nebude fungovat.');
+}
+
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
     user: 'masaze.hasalova@gmail.com',
-    pass: 'dkdd rrqp tzsd ccfc'
+    pass: process.env.GMAIL_APP_HESLO
   }
 });
 

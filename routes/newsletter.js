@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
+const vyzadovatAdmina = require('../middleware/adminAuth');
 
 // Vytvoření tabulky při startu serveru (stejný vzor jako rezervace)
 async function initNewsletterTabulka() {
@@ -42,8 +43,8 @@ router.post('/', async (req, res) => {
   }
 });
 
-// GET /api/newsletter – seznam přihlášených e-mailů (pro admin)
-router.get('/', async (req, res) => {
+// GET /api/newsletter – seznam přihlášených e-mailů (jen pro admin – jsou to osobní údaje)
+router.get('/', vyzadovatAdmina, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM newsletter ORDER BY created_at DESC');
     res.json(result.rows);
@@ -52,8 +53,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// DELETE /api/newsletter/:id – smazat přihlášeného (admin)
-router.delete('/:id', async (req, res) => {
+// DELETE /api/newsletter/:id – smazat přihlášeného (jen pro admin)
+router.delete('/:id', vyzadovatAdmina, async (req, res) => {
   try {
     await pool.query('DELETE FROM newsletter WHERE id=$1', [req.params.id]);
     res.json({ ok: true });

@@ -1,7 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
-const stripe = require('stripe')('sk_test_51Tgse2Bk9LVsGSFRPhWMLeoYimjyQax3D4G8778Z0Oq7cyR77rGvhx27o7XVVrEMkRY7qO6IsAMWKDGEzffzmKjO00pnn44Hno');
+
+if (!process.env.STRIPE_SECRET_KEY) {
+  console.error('CHYBA: STRIPE_SECRET_KEY není nastaven v proměnných prostředí! Platby nebudou fungovat.');
+}
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 router.post('/vytvorit', async (req, res) => {
   const { objednavka_id } = req.body;
@@ -55,7 +59,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   const sig = req.headers['stripe-signature'];
   let event;
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, 'whsec_TVUJ_WEBHOOK_SECRET');
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
     return res.status(400).json({ chyba: err.message });
   }
