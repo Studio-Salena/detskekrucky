@@ -74,6 +74,23 @@
     color: var(--text-light);
     text-align: center;
   }
+  #skenovatBtn {
+    margin-top: 16px;
+    padding: 18px 40px;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #fff;
+    background: linear-gradient(135deg, var(--brown), var(--brown-dark));
+    border: none;
+    border-radius: 40px;
+    cursor: pointer;
+    box-shadow: 0 6px 20px rgba(139,69,19,0.3);
+    width: 100%;
+    max-width: 420px;
+    transition: transform 0.15s;
+  }
+  #skenovatBtn:active { transform: scale(0.96); }
+  #skenovatBtn:disabled { opacity: 0.6; }
 </style>
 </head>
 <body>
@@ -86,6 +103,9 @@
   </div>
 
   <div id="status" class="st-cekam">📷 Připravuji kameru…</div>
+
+  <button id="skenovatBtn" onclick="skenovatTed()">📸 Skenovat teď</button>
+
   <div class="pocitadlo" id="pocitadlo"></div>
 
 <script>
@@ -144,6 +164,40 @@ function dekodovat(video) {
     requestAnimationFrame(smycka);
   };
   requestAnimationFrame(smycka);
+}
+
+async function skenovatTed() {
+  const video = document.getElementById('video');
+  const btn = document.getElementById('skenovatBtn');
+  if (!reader || zpracovavam) return;
+
+  btn.disabled = true;
+  zpracovavam = true; // pozastaví automatický sken na pozadí, ať si nekonkurují
+  statusEl.className = 'st-cekam';
+  statusEl.textContent = '🔍 Zkouším přečíst…';
+
+  // Rychlá série pokusů (kamera potřebuje chvíli na doostření)
+  let nalezeno = false;
+  for (let i = 0; i < 8 && !nalezeno; i++) {
+    try {
+      const result = await reader.decodeFromVideoElement(video);
+      if (result) {
+        nalezeno = true;
+        zpracovavam = false;
+        odeslatKod(result.getText());
+      }
+    } catch (e) {
+      // kód zatím nenalezen, zkusíme znovu
+    }
+    if (!nalezeno) await new Promise(r => setTimeout(r, 150));
+  }
+
+  if (!nalezeno) {
+    zpracovavam = false;
+    statusEl.className = 'st-chyba';
+    statusEl.textContent = '❌ Kód se nepodařilo přečíst, zkuste to znovu blíž.';
+  }
+  btn.disabled = false;
 }
 
 async function odeslatKod(ean) {

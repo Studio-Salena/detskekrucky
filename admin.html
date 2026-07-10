@@ -389,7 +389,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <div class="page-header">
         <div class="page-title">🏪 Prodejna</div>
         <div class="table-actions">
-          <button class="btn btn-primary" onclick="openModal('modalProdejnaProdat')">+ Nový prodej</button>
+          <button class="btn btn-primary" onclick="otevritNovyProdejProdejna()">+ Nový prodej</button>
           <button class="btn btn-csv no-print" onclick="exportCSV('prodejna')">⬇ CSV</button>
           <button class="refresh-btn" onclick="loadProdejna()">↻ Obnovit</button>
         </div>
@@ -1640,6 +1640,15 @@ function pridatPolozku() {
   document.getElementById('prodejnaPolozky').appendChild(div);
 }
 
+function otevritNovyProdejProdejna() {
+  openModal('modalProdejnaProdat');
+  // Kurzor rovnou do EAN pole, aby šlo skenovat fyzickou čtečkou hned bez klikání
+  setTimeout(() => {
+    const ean = document.getElementById('eanInput');
+    if (ean) ean.focus();
+  }, 150);
+}
+
 function hledatEan() {
   const ean = document.getElementById('eanInput').value.trim();
   const msg = document.getElementById('eanMsg');
@@ -1686,6 +1695,7 @@ function hledatEan() {
 
   // Vyčisti EAN pole a zprávu
   document.getElementById('eanInput').value = '';
+  document.getElementById('eanInput').focus();
   msg.innerHTML = `<div class="success-msg">✅ Přidán: <strong>${produkt.nazev}</strong></div>`;
   setTimeout(() => msg.innerHTML = '', 2500);
 }
