@@ -456,8 +456,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
   </div>
 
   <div class="card" style="margin-bottom:20px">
-    <h3 style="margin-bottom:16px">Sekce „Vyberte si" (4 karty)</h3>
-    <div id="txVyberteSi" style="display:flex;flex-direction:column;gap:16px"></div>
+    <p style="color:var(--text-light);font-size:0.85rem">ℹ️ Sekce „Vyberte si" na webu se teď generuje automaticky podle kategorií – uprav ji v sekci <strong>🏷️ Kategorie</strong> (Popis a Značky u každé kategorie).</p>
   </div>
 
   <button class="btn btn-primary" onclick="ulozitTexty()">💾 Uložit texty</button>
@@ -666,10 +665,28 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     <h3>🏷️ Nová kategorie</h3>
     <div id="kategorieMsg"></div>
     <div class="form-group"><label>Název (česky) *</label><input type="text" id="kNazev" placeholder="Například: Dívky"></div>
+    <div class="form-group"><label>Popis (zobrazí se na webu v sekci „Vyberte si")</label><textarea id="kPopis" rows="3" placeholder="Krátký popis kategorie..."></textarea></div>
+    <div class="form-group"><label>Značky</label><input type="text" id="kZnacky" placeholder="Např. Froddo, Superfit, Beda"></div>
     <div class="form-group"><label>Pořadí</label><input type="number" id="kPoradi" placeholder="6" value="6"></div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modalNovaKategorie')">Zrušit</button>
       <button class="btn btn-primary" onclick="ulozitKategorii()">💾 Uložit</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalUpravitKategorii">
+  <div class="modal" style="max-width:420px">
+    <h3>✏️ Upravit kategorii</h3>
+    <div id="upravitKategorieMsg"></div>
+    <input type="hidden" id="ukId">
+    <div class="form-group"><label>Název (česky) *</label><input type="text" id="ukNazev"></div>
+    <div class="form-group"><label>Popis (zobrazí se na webu v sekci „Vyberte si")</label><textarea id="ukPopis" rows="3"></textarea></div>
+    <div class="form-group"><label>Značky</label><input type="text" id="ukZnacky"></div>
+    <div class="form-group"><label>Pořadí</label><input type="number" id="ukPoradi"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modalUpravitKategorii')">Zrušit</button>
+      <button class="btn btn-primary" onclick="ulozitUpravuKategorie()">💾 Uložit</button>
     </div>
   </div>
 </div>
@@ -1865,18 +1882,25 @@ async function loadKategorie() {
   document.getElementById('kategorieTable').innerHTML = '<div class="loading">Načítám...</div>';
   try {
     const data = await fetch(API+'/kategorie').then(r=>r.json());
+    vsechnyKategorieData = data;
     if (!data.length) { document.getElementById('kategorieTable').innerHTML = '<div class="empty">Žádné kategorie</div>'; return; }
     document.getElementById('kategorieTable').innerHTML = `
-      <table><thead><tr><th>ID</th><th>Název</th><th>Slug</th><th>Pořadí</th><th>Akce</th></tr></thead>
+      <table><thead><tr><th>ID</th><th>Název</th><th>Popis</th><th>Značky</th><th>Pořadí</th><th>Akce</th></tr></thead>
       <tbody>${data.map(k=>`<tr>
         <td>${k.id}</td>
         <td><strong>${k.nazev}</strong></td>
-        <td><code style="background:var(--cream);padding:2px 6px;border-radius:4px">${k.slug}</code></td>
+        <td style="max-width:220px;font-size:0.85rem;color:var(--text-light)">${k.popis||'—'}</td>
+        <td style="font-size:0.85rem">${k.znacky||'—'}</td>
         <td>${k.poradi}</td>
-        <td><button class="btn btn-red btn-sm" onclick="smazatKategorii(${k.id},'${k.nazev}')">🗑️ Smazat</button></td>
+        <td style="display:flex;gap:4px">
+          <button class="btn btn-orange btn-sm" onclick="upravitKategorii(${k.id})">✏️ Upravit</button>
+          <button class="btn btn-red btn-sm" onclick="smazatKategorii(${k.id},'${k.nazev.replace(/'/g,"\\'")}')">🗑️ Smazat</button>
+        </td>
       </tr>`).join('')}</tbody></table>`;
   } catch(e) { document.getElementById('kategorieTable').innerHTML = '<div class="error-msg">Chyba načítání</div>'; }
 }
+
+let vsechnyKategorieData = [];
 
 function vygenerovatSlug(text) {
   const mapa = {á:'a',č:'c',ď:'d',é:'e',ě:'e',í:'i',ň:'n',ó:'o',ř:'r',š:'s',ť:'t',ú:'u',ů:'u',ý:'y',ž:'z'};
@@ -1889,20 +1913,56 @@ async function ulozitKategorii() {
   const nazev = document.getElementById('kNazev').value.trim();
   const slug = vygenerovatSlug(nazev);
   const poradi = document.getElementById('kPoradi').value || 0;
+  const popis = document.getElementById('kPopis').value.trim();
+  const znacky = document.getElementById('kZnacky').value.trim();
   if (!nazev) { document.getElementById('kategorieMsg').innerHTML = '<div class="error-msg">Vyplňte název kategorie.</div>'; return; }
   try {
     const res = await fetch(API+'/kategorie', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({nazev, slug, poradi: parseInt(poradi)})
+      body: JSON.stringify({nazev, slug, poradi: parseInt(poradi), popis, znacky})
     });
     if (res.ok) {
       document.getElementById('kategorieMsg').innerHTML = '<div class="success-msg">✅ Kategorie uložena!</div>';
+      ['kNazev','kPopis','kZnacky'].forEach(id=>document.getElementById(id).value='');
       setTimeout(() => { closeModal('modalNovaKategorie'); loadKategorie(); }, 1500);
     } else {
       const err = await res.json();
       document.getElementById('kategorieMsg').innerHTML = `<div class="error-msg">${err.chyba||'Chyba'}</div>`;
     }
   } catch(e) { document.getElementById('kategorieMsg').innerHTML = '<div class="error-msg">Chyba spojení</div>'; }
+}
+
+function upravitKategorii(id) {
+  const k = vsechnyKategorieData.find(x => x.id === id);
+  if (!k) return;
+  document.getElementById('ukId').value = k.id;
+  document.getElementById('ukNazev').value = k.nazev;
+  document.getElementById('ukPopis').value = k.popis || '';
+  document.getElementById('ukZnacky').value = k.znacky || '';
+  document.getElementById('ukPoradi').value = k.poradi;
+  openModal('modalUpravitKategorii');
+}
+
+async function ulozitUpravuKategorie() {
+  const id = document.getElementById('ukId').value;
+  const nazev = document.getElementById('ukNazev').value.trim();
+  const slug = vygenerovatSlug(nazev);
+  const poradi = document.getElementById('ukPoradi').value || 0;
+  const popis = document.getElementById('ukPopis').value.trim();
+  const znacky = document.getElementById('ukZnacky').value.trim();
+  if (!nazev) { document.getElementById('upravitKategorieMsg').innerHTML = '<div class="error-msg">Vyplňte název.</div>'; return; }
+  try {
+    const res = await fetch(API+'/kategorie/'+id, {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({nazev, slug, poradi: parseInt(poradi), popis, znacky})
+    });
+    if (res.ok) {
+      document.getElementById('upravitKategorieMsg').innerHTML = '<div class="success-msg">✅ Uloženo!</div>';
+      setTimeout(() => { closeModal('modalUpravitKategorii'); loadKategorie(); }, 1200);
+    } else {
+      document.getElementById('upravitKategorieMsg').innerHTML = '<div class="error-msg">Chyba serveru</div>';
+    }
+  } catch(e) { document.getElementById('upravitKategorieMsg').innerHTML = '<div class="error-msg">Chyba spojení</div>'; }
 }
 
 async function smazatKategorii(id, nazev) {
@@ -2121,22 +2181,6 @@ async function loadTexty() {
         </div>`;
     });
 
-    // Vyberte si karty
-    const kontVyberte = document.getElementById('txVyberteSi');
-    kontVyberte.innerHTML = '';
-    (data.vyberteSi || []).forEach((karta, i) => {
-      kontVyberte.innerHTML += `
-        <div style="border:1px solid var(--tan-light);border-radius:10px;padding:12px">
-          <b>Karta ${i+1}: ${karta.nadpis||''}</b>
-          <div class="form-group" style="margin-top:8px"><label>Nadpis</label>
-            <input type="text" id="vs_nadpis_${i}" value="${karta.nadpis||''}" style="width:100%;padding:6px;border:1px solid var(--tan-light);border-radius:6px;font-family:inherit">
-          </div>
-          <div class="form-group" style="margin-top:8px"><label>Text</label>
-            <textarea id="vs_text_${i}" rows="3" style="width:100%;padding:6px;border:1px solid var(--tan-light);border-radius:6px;font-family:inherit;resize:vertical">${karta.text||''}</textarea>
-          </div>
-        </div>`;
-    });
-
   } catch(e) {
     document.getElementById('textyMsg').innerHTML='<div class="error-msg">Chyba načítání</div>';
   }
@@ -2158,12 +2202,7 @@ async function ulozitTexty() {
     text: document.getElementById(`bf_text_${i}`)?.value || ''
   }));
 
-  const vyberteSi = [0,1,2,3].map(i => ({
-    nadpis: document.getElementById(`vs_nadpis_${i}`)?.value || '',
-    text: document.getElementById(`vs_text_${i}`)?.value || ''
-  }));
-
-  const payload = { procBarefoot, vyberteSi };
+  const payload = { procBarefoot };
 
   try {
     const res = await fetch(API+'/nastaveni/texty', {

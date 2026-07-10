@@ -12,11 +12,24 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { nazev, slug, poradi } = req.body;
+  const { nazev, slug, poradi, popis, znacky } = req.body;
   try {
     const result = await pool.query(
-      'INSERT INTO kategorie (nazev, slug, poradi) VALUES ($1,$2,$3) RETURNING *',
-      [nazev, slug, poradi||0]
+      'INSERT INTO kategorie (nazev, slug, poradi, popis, znacky) VALUES ($1,$2,$3,$4,$5) RETURNING *',
+      [nazev, slug, poradi||0, popis||'', znacky||'']
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ chyba: err.message });
+  }
+});
+
+router.patch('/:id', async (req, res) => {
+  const { nazev, slug, poradi, popis, znacky } = req.body;
+  try {
+    const result = await pool.query(
+      'UPDATE kategorie SET nazev=$1, slug=$2, poradi=$3, popis=$4, znacky=$5 WHERE id=$6 RETURNING *',
+      [nazev, slug, poradi||0, popis||'', znacky||'', req.params.id]
     );
     res.json(result.rows[0]);
   } catch (err) {
