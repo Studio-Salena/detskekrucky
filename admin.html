@@ -222,6 +222,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     <div class="nav-section">
       <div class="nav-label">🛒 E-shop</div>
       <div class="nav-item" onclick="showPage('objednavky',this)" id="navObjednavky"><span class="icon">📦</span> Objednávky <span class="nav-badge" id="navBadge" style="display:none">0</span></div>
+      <div class="nav-item" onclick="showPage('vratkyzadosti',this)" id="navVratkyZadosti"><span class="icon">↩️</span> Žádosti o vrácení <span class="nav-badge" id="navBadgeVratky" style="display:none">0</span></div>
       <div class="nav-item" onclick="showPage('texty',this)"><span class="icon">📝</span> Texty webu</div>
       <div class="nav-item" onclick="showPage('newsletter',this)"><span class="icon">✉️</span> Newsletter</div>
     </div>
@@ -318,6 +319,19 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       </div>
       <div class="table-wrap">
         <div id="objednavkyTable"><div class="loading">Načítám...</div></div>
+      </div>
+    </div>
+
+    <!-- ŽÁDOSTI O VRÁCENÍ -->
+    <div class="page" id="page-vratkyzadosti">
+      <div class="page-header">
+        <div class="page-title">↩️ Žádosti o vrácení</div>
+        <div class="table-actions">
+          <button class="refresh-btn no-print" onclick="loadVratkyZadosti()">↻</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <div id="vratkyZadostiTable"><div class="loading">Načítám...</div></div>
       </div>
     </div>
 
@@ -698,6 +712,12 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <div style="display:flex;gap:8px">
         <input type="text" id="vratkaEan" placeholder="Naskenuj nebo napiš EAN kód" onkeydown="if(event.key==='Enter'){event.preventDefault();hledatEanVratka();}">
         <button class="btn btn-outline" style="margin-bottom:0" onclick="hledatEanVratka()">Najít</button>
+        <button class="btn btn-outline" style="margin-bottom:0" onclick="otevritKameruVratka()" title="Skenovat kamerou na tomto zařízení">📷</button>
+        <button class="btn btn-outline" style="margin-bottom:0" onclick="otevritMobilniSken('vratkaEan','hledatEanVratka')" title="Skenovat mobilem">📱</button>
+      </div>
+      <div id="kameraWrapVratka" style="display:none;margin-top:10px;background:#000;border-radius:12px;overflow:hidden;position:relative;">
+        <video id="kameraVideoVratka" style="width:100%;max-height:220px;object-fit:cover;" autoplay muted playsinline></video>
+        <button class="btn btn-outline btn-sm" style="position:absolute;top:8px;right:8px;background:#fff" onclick="zavritKameruVratka()">✕ Zavřít kameru</button>
       </div>
       <div id="vratkaEanMsg" style="margin-top:6px"></div>
     </div>
@@ -710,7 +730,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <label for="vratkaNaSklad" style="margin:0">Vrátit zboží zpět na sklad</label>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-outline" onclick="closeModal('modalNovaVratka')">Zrušit</button>
+      <button class="btn btn-outline" onclick="zavritKameruVratka();closeModal('modalNovaVratka')">Zrušit</button>
       <button class="btn btn-primary" onclick="ulozitVratku()">💾 Uložit vratku</button>
     </div>
   </div>
@@ -932,6 +952,7 @@ function showPage(name, el) {
   if (name==='texty') loadTexty();
   if (name==='rezervace') loadRezervace();
   if (name==='newsletter') loadNewsletter();
+  if (name==='vratkyzadosti') loadVratkyZadosti();
   // Close mobile sidebar
   document.getElementById('sidebar').classList.remove('open');
 }
@@ -1856,8 +1877,10 @@ function zavritKameru() {
 // ═══════════════════════════════
 let mobilniSkenId = null;
 let mobilniSkenInterval = null;
+let mobilniSkenCil = { input: 'eanInput', callback: 'hledatEan' };
 
-function otevritMobilniSken() {
+function otevritMobilniSken(inputId = 'eanInput', callbackFn = 'hledatEan') {
+  mobilniSkenCil = { input: inputId, callback: callbackFn };
   mobilniSkenId = 'r' + Date.now() + Math.random().toString(36).slice(2, 8);
   const url = window.location.origin + window.location.pathname.replace('admin.html', 'mobilni-sken.html') + '?session=' + mobilniSkenId;
 
@@ -1878,8 +1901,8 @@ async function kontrolovatMobilniSken() {
     const res = await adminFetch(API + '/mobilni-sken/' + mobilniSkenId);
     const data = await res.json();
     if (data.ean) {
-      document.getElementById('eanInput').value = data.ean;
-      hledatEan();
+      document.getElementById(mobilniSkenCil.input).value = data.ean;
+      window[mobilniSkenCil.callback]();
       const status = document.getElementById('mobilniSkenStatus');
       status.innerHTML = `✅ Přidán kód: <strong>${data.ean}</strong>`;
       status.style.background = '#e0f0d8';
@@ -2103,6 +2126,146 @@ function hledatEanVratka() {
   setTimeout(() => msg.innerHTML = '', 3000);
 }
 
+let kameraReaderVratka = null;
+
+async function otevritKameruVratka() {
+  const wrap = document.getElementById('kameraWrapVratka');
+  const video = document.getElementById('kameraVideoVratka');
+  wrap.style.display = 'block';
+
+  try {
+    kameraReaderVratka = new ZXing.BrowserMultiFormatReader();
+    const constraints = {
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }
+    };
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    video.srcObject = stream;
+    await video.play();
+
+    const decode = async () => {
+      if (!kameraReaderVratka) return;
+      try {
+        const result = await kameraReaderVratka.decodeFromVideoElement(video);
+        if (result) {
+          zavritKameruVratka();
+          document.getElementById('vratkaEan').value = result.getText();
+          hledatEanVratka();
+          return;
+        }
+      } catch(e) {
+        // NotFoundException = kód zatím není vidět, pokračujeme
+      }
+      requestAnimationFrame(decode);
+    };
+    requestAnimationFrame(decode);
+  } catch(e) {
+    document.getElementById('vratkaEanMsg').innerHTML = `<div class="error-msg">Kamera není dostupná: ${e.message}</div>`;
+    wrap.style.display = 'none';
+  }
+}
+
+function zavritKameruVratka() {
+  const wrap = document.getElementById('kameraWrapVratka');
+  wrap.style.display = 'none';
+  const video = document.getElementById('kameraVideoVratka');
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(t => t.stop());
+    video.srcObject = null;
+  }
+  kameraReaderVratka = null;
+}
+
+// ═══════════════════════════════
+// ŽÁDOSTI O VRÁCENÍ (z e-shopu)
+// ═══════════════════════════════
+const stavZadostiPopisky = {
+  nova: '<span class="badge badge-nova">🆕 Nová</span>',
+  schvalena: '<span class="badge badge-ok">✅ Schválená</span>',
+  zamitnuta: '<span class="badge badge-zruseno">❌ Zamítnutá</span>',
+  vyrizena: '<span class="badge badge-ok">✔️ Vyřízená</span>'
+};
+
+async function loadVratkyZadosti() {
+  document.getElementById('vratkyZadostiTable').innerHTML = '<div class="loading">Načítám...</div>';
+  try {
+    const data = await adminFetch(API+'/vratky-zadosti').then(r=>r.json());
+    const seznam = Array.isArray(data) ? data : [];
+
+    const pocetNovych = seznam.filter(z=>z.stav==='nova').length;
+    const badge = document.getElementById('navBadgeVratky');
+    if (pocetNovych > 0) { badge.textContent = pocetNovych; badge.style.display = 'inline-block'; }
+    else { badge.style.display = 'none'; }
+
+    if (!seznam.length) { document.getElementById('vratkyZadostiTable').innerHTML = '<div class="empty">Žádné žádosti o vrácení</div>'; return; }
+
+    document.getElementById('vratkyZadostiTable').innerHTML = `
+      <table><thead><tr><th>Datum</th><th>Objednávka</th><th>Kontakt</th><th>Položky</th><th>Důvod</th><th>Stav</th><th>Akce</th></tr></thead>
+      <tbody>${seznam.map(z=>`<tr>
+        <td>${new Date(z.vytvoreno).toLocaleDateString('cs-CZ')}</td>
+        <td>#${z.objednavka_id}</td>
+        <td>${z.email}${z.telefon?'<br><small>'+z.telefon+'</small>':''}</td>
+        <td>${(z.polozky||[]).map(p=>`${p.nazev} vel.${p.velikost} x${p.pocet}`).join(', ')}</td>
+        <td>${z.duvod||'—'}</td>
+        <td>${stavZadostiPopisky[z.stav]||z.stav}</td>
+        <td style="display:flex;gap:4px;flex-wrap:wrap">
+          ${z.stav==='nova' ? `<button class="btn btn-green btn-sm" onclick="zmenitStavZadosti(${z.id},'schvalena')">✅ Schválit</button>
+          <button class="btn btn-red btn-sm" onclick="zmenitStavZadosti(${z.id},'zamitnuta')">❌ Zamítnout</button>` : ''}
+          ${z.stav==='schvalena' ? `<button class="btn btn-primary btn-sm" onclick="zpracovatZadostVratky(${z.id})">💰 Zpracovat vratku</button>` : ''}
+          <button class="btn btn-outline btn-sm" onclick="smazatZadostVratky(${z.id})">🗑️</button>
+        </td>
+      </tr>`).join('')}</tbody></table>`;
+  } catch(e) { document.getElementById('vratkyZadostiTable').innerHTML = '<div class="error-msg">Chyba načítání</div>'; }
+}
+
+async function zmenitStavZadosti(id, stav) {
+  try {
+    await adminFetch(API+'/vratky-zadosti/'+id+'/stav', {
+      method: 'PATCH', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ stav })
+    });
+    loadVratkyZadosti();
+  } catch(e) { alert('Chyba při změně stavu'); }
+}
+
+async function smazatZadostVratky(id) {
+  if (!confirm('Smazat tuto žádost o vrácení?')) return;
+  try {
+    await adminFetch(API+'/vratky-zadosti/'+id, {method:'DELETE'});
+    loadVratkyZadosti();
+  } catch(e) { alert('Chyba při mazání'); }
+}
+
+async function zpracovatZadostVratky(id) {
+  try {
+    const seznam = await adminFetch(API+'/vratky-zadosti').then(r=>r.json());
+    const zadost = seznam.find(z => z.id === id);
+    if (!zadost) return;
+
+    // Otevřít modal vratky předvyplněný z žádosti
+    document.getElementById('vratkaPolozky').innerHTML = '';
+    document.getElementById('vratkaCastka').value = zadost.polozky.reduce((s,p)=>s+(p.pocet*p.cena),0);
+    document.getElementById('vratkaDuvod').value = zadost.duvod || '';
+    document.getElementById('vratkaNaSklad').checked = true;
+    document.getElementById('vratkaMsg').innerHTML = '';
+    document.getElementById('vratkaEan').value = '';
+    document.getElementById('vratkaEanMsg').innerHTML = '';
+    naplnitVyberProdejVratka();
+    document.getElementById('vratkaProdejVyber').value = '';
+
+    zadost.polozky.forEach(p => pridatVratkaRadek(p.produkt_id, p.nazev, p.velikost, p.pocet, p.cena));
+
+    // Uložit ID objednávky, ať se propíše při ukládání
+    document.getElementById('modalNovaVratka').dataset.objednavkaId = zadost.objednavka_id;
+    document.getElementById('modalNovaVratka').dataset.zadostId = zadost.id;
+
+    openModal('modalNovaVratka');
+  } catch(e) { alert('Chyba při načítání žádosti'); }
+}
+
 function otevritNovaVratka() {
   naplnitVyberProdejVratka();
   document.getElementById('vratkaPolozky').innerHTML = '';
@@ -2112,6 +2275,8 @@ function otevritNovaVratka() {
   document.getElementById('vratkaEanMsg').innerHTML = '';
   document.getElementById('vratkaNaSklad').checked = true;
   document.getElementById('vratkaMsg').innerHTML = '';
+  delete document.getElementById('modalNovaVratka').dataset.objednavkaId;
+  delete document.getElementById('modalNovaVratka').dataset.zadostId;
   pridatVratkaRadek();
   openModal('modalNovaVratka');
   setTimeout(() => document.getElementById('vratkaEan').focus(), 150);
@@ -2167,18 +2332,24 @@ async function ulozitVratku() {
   }
 
   try {
+    const objednavkaId = document.getElementById('modalNovaVratka').dataset.objednavkaId || null;
+    const zadostId = document.getElementById('modalNovaVratka').dataset.zadostId || null;
+
     const res = await adminFetch(API+'/prodejna/vratky', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
-        prodej_id: prodejId, polozky: polozkyProSklad.length ? polozkyProSklad : polozky,
+        prodej_id: prodejId, objednavka_id: objednavkaId, polozky: polozkyProSklad.length ? polozkyProSklad : polozky,
         castka, duvod, vratit_na_sklad: vratitNaSklad && polozkyProSklad.length > 0
       })
     });
     if (res.ok) {
+      if (zadostId) { try { await adminFetch(API+'/vratky-zadosti/'+zadostId+'/stav', {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({stav:'vyrizena'})}); } catch(e){} }
+      zavritKameruVratka();
       closeModal('modalNovaVratka');
       loadVratky();
       loadProdejna();
       loadPrehled();
+      if (document.getElementById('page-vratkyzadosti').classList.contains('active')) loadVratkyZadosti();
     } else {
       const err = await res.json().catch(()=>({}));
       msg.innerHTML = `<div class="error-msg">${err.chyba || 'Chyba při ukládání'}</div>`;

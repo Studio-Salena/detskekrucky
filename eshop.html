@@ -433,6 +433,7 @@ footer {
     <a href="mailto:monikaskarpichova@gmail.com">&#9993; monikaskarpichova@gmail.com</a>
     <a href="https://hasalovaalena-glitch.github.io/detskekrucky/obchodni-podminky.html">Obchodní podmínky</a>
     <a href="reklamacni-rad.html">Reklamační řád</a>
+    <a href="#" onclick="openModal('modalVratky');return false;">↩️ Vrátit zboží</a>
   </div>
   <div class="footer-copy">© 2026 Dětské krůčky – Monika Škarpichová | IČO: 24354635</div>
 </footer>
@@ -532,6 +533,32 @@ footer {
       <button onclick="registrovat()" style="width:100%;padding:14px;background:var(--sage);color:#fff;border:none;border-radius:12px;font-family:'Lato',sans-serif;font-weight:700;font-size:1rem;cursor:pointer;margin-bottom:10px">Zaregistrovat se</button>
     </div>
     <button onclick="closeModal('modalLogin')" style="width:100%;padding:12px;background:none;border:2px solid var(--tan);border-radius:12px;font-family:'Lato',sans-serif;font-weight:700;font-size:0.9rem;cursor:pointer;color:var(--text-light)">Zavřít</button>
+  </div>
+</div>
+
+<!-- VRATKY MODAL -->
+<div class="modal-overlay" id="modalVratky">
+  <div class="modal" style="max-width:520px">
+    <h3 style="font-family:'Dancing Script',cursive;color:var(--brown);font-size:1.6rem;margin-bottom:8px">↩️ Vrátit zboží</h3>
+    <p style="color:var(--text-light);font-size:0.85rem;margin-bottom:20px">Zadejte číslo objednávky a e-mail, kterým jste objednávali – najdeme vaši objednávku a vy vyberete, co chcete vrátit.</p>
+
+    <div id="vratkyKrok1">
+      <div id="vratkyOveritMsg"></div>
+      <div class="form-group"><label>Číslo objednávky</label><input type="text" id="vratkyObjCislo" placeholder="např. 42"></div>
+      <div class="form-group"><label>E-mail z objednávky</label><input type="email" id="vratkyObjEmail" placeholder="jana@email.cz"></div>
+      <button onclick="overitObjednavkuVratky()" style="width:100%;padding:14px;background:var(--brown);color:#fff;border:none;border-radius:12px;font-family:'Lato',sans-serif;font-weight:700;font-size:1rem;cursor:pointer;margin-bottom:10px">Najít objednávku</button>
+    </div>
+
+    <div id="vratkyKrok2" style="display:none">
+      <div id="vratkyOdeslatMsg"></div>
+      <p style="font-weight:700;margin-bottom:10px">Vyberte položky k vrácení:</p>
+      <div id="vratkyPolozkySeznam" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px"></div>
+      <div class="form-group"><label>Důvod vrácení</label><textarea id="vratkyDuvod" rows="3" placeholder="Např. nesedí velikost..." style="width:100%;padding:10px;border:2px solid var(--tan-light);border-radius:10px;font-family:inherit;resize:vertical"></textarea></div>
+      <div class="form-group"><label>Telefon (nepovinné, pro rychlejší domluvu)</label><input type="text" id="vratkyTelefon" placeholder="+420 777 123 456"></div>
+      <button onclick="odeslatZadostVratky()" style="width:100%;padding:14px;background:var(--brown);color:#fff;border:none;border-radius:12px;font-family:'Lato',sans-serif;font-weight:700;font-size:1rem;cursor:pointer;margin-bottom:10px">Odeslat žádost o vrácení</button>
+    </div>
+
+    <button onclick="closeModal('modalVratky')" style="width:100%;padding:12px;background:none;border:2px solid var(--tan);border-radius:12px;font-family:'Lato',sans-serif;font-weight:700;font-size:0.9rem;cursor:pointer;color:var(--text-light)">Zavřít</button>
   </div>
 </div>
 
@@ -877,6 +904,104 @@ function closeModal(id) {
   document.getElementById(id).classList.remove('open');
 }
 
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+}
+
+// ═══════════════════════════════
+// VRATKY – žádost o vrácení zboží
+// ═══════════════════════════════
+let vratkyOverenaObjednavka = null;
+let vratkyPolozkyData = [];
+
+async function overitObjednavkuVratky() {
+  const cislo = document.getElementById('vratkyObjCislo').value.trim();
+  const email = document.getElementById('vratkyObjEmail').value.trim();
+  const msg = document.getElementById('vratkyOveritMsg');
+  if (!cislo || !email) { msg.innerHTML = '<div class="msg msg-error">Vyplňte prosím číslo objednávky i e-mail.</div>'; return; }
+
+  msg.innerHTML = '<div style="color:var(--text-light)">⏳ Hledám objednávku…</div>';
+  try {
+    const res = await fetch(API + '/vratky-zadosti/overit', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ objednavka_id: cislo, email })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      msg.innerHTML = `<div class="msg msg-error">${data.chyba || 'Objednávka nenalezena.'}</div>`;
+      return;
+    }
+    vratkyOverenaObjednavka = data.objednavka;
+    vratkyPolozkyData = data.polozky;
+    msg.innerHTML = '';
+
+    document.getElementById('vratkyPolozkySeznam').innerHTML = vratkyPolozkyData.map((p, i) => `
+      <div style="display:flex;align-items:center;gap:10px;border:2px solid var(--tan-light);border-radius:10px;padding:10px">
+        <input type="checkbox" class="vr-check" data-idx="${i}" style="width:18px;height:18px;flex-shrink:0">
+        <div style="flex:1">
+          <strong>${p.nazev}</strong> – vel. ${p.velikost}<br>
+          <span style="font-size:0.85rem;color:var(--text-light)">Objednáno: ${p.pocet} ks × ${Number(p.cena).toLocaleString('cs-CZ')} Kč</span>
+        </div>
+        <div>
+          <label style="font-size:0.8rem">Vrátit ks:</label>
+          <input type="number" class="vr-pocet" data-idx="${i}" value="${p.pocet}" min="1" max="${p.pocet}" style="width:60px;padding:6px;border:2px solid var(--tan-light);border-radius:8px">
+        </div>
+      </div>
+    `).join('');
+
+    document.getElementById('vratkyKrok1').style.display = 'none';
+    document.getElementById('vratkyKrok2').style.display = 'block';
+  } catch (e) {
+    msg.innerHTML = '<div class="msg msg-error">Chyba spojení, zkuste to prosím znovu.</div>';
+  }
+}
+
+async function odeslatZadostVratky() {
+  const msg = document.getElementById('vratkyOdeslatMsg');
+  const vybranePolozky = [];
+
+  document.querySelectorAll('.vr-check:checked').forEach(cb => {
+    const idx = parseInt(cb.dataset.idx);
+    const pocetInput = document.querySelector(`.vr-pocet[data-idx="${idx}"]`);
+    const pocet = parseInt(pocetInput.value) || 0;
+    const p = vratkyPolozkyData[idx];
+    if (pocet > 0) vybranePolozky.push({ produkt_id: p.produkt_id, nazev: p.nazev, velikost: p.velikost, pocet, cena: p.cena });
+  });
+
+  if (!vybranePolozky.length) { msg.innerHTML = '<div class="msg msg-error">Vyberte prosím aspoň jednu položku k vrácení.</div>'; return; }
+
+  msg.innerHTML = '<div style="color:var(--text-light)">⏳ Odesílám žádost…</div>';
+  try {
+    const res = await fetch(API + '/vratky-zadosti', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        objednavka_id: vratkyOverenaObjednavka.id,
+        email: document.getElementById('vratkyObjEmail').value.trim(),
+        telefon: document.getElementById('vratkyTelefon').value.trim(),
+        polozky: vybranePolozky,
+        duvod: document.getElementById('vratkyDuvod').value.trim()
+      })
+    });
+    if (res.ok) {
+      msg.innerHTML = '<div class="msg msg-success">✅ Žádost byla odeslána! Ozveme se vám co nejdřív s dalším postupem.</div>';
+      setTimeout(() => {
+        closeModal('modalVratky');
+        document.getElementById('vratkyKrok1').style.display = 'block';
+        document.getElementById('vratkyKrok2').style.display = 'none';
+        document.getElementById('vratkyObjCislo').value = '';
+        document.getElementById('vratkyObjEmail').value = '';
+        document.getElementById('vratkyDuvod').value = '';
+        document.getElementById('vratkyTelefon').value = '';
+        msg.innerHTML = '';
+      }, 2500);
+    } else {
+      const data = await res.json().catch(()=>({}));
+      msg.innerHTML = `<div class="msg msg-error">${data.chyba || 'Chyba při odesílání žádosti.'}</div>`;
+    }
+  } catch (e) {
+    msg.innerHTML = '<div class="msg msg-error">Chyba spojení, zkuste to prosím znovu.</div>';
+  }
+}
 function prepnoutTab(tab) {
   if (tab === 'prihlaseni') {
     document.getElementById('formPrihlaseni').style.display = 'block';
