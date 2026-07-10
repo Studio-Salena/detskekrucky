@@ -74,7 +74,7 @@
     color: var(--text-light);
     text-align: center;
   }
-  #skenovatBtn {
+  #skenovatBtn, #startBtn {
     margin-top: 16px;
     padding: 18px 40px;
     font-size: 1.15rem;
@@ -89,8 +89,8 @@
     max-width: 420px;
     transition: transform 0.15s;
   }
-  #skenovatBtn:active { transform: scale(0.96); }
-  #skenovatBtn:disabled { opacity: 0.6; }
+  #skenovatBtn:active, #startBtn:active { transform: scale(0.96); }
+  #skenovatBtn:disabled, #startBtn:disabled { opacity: 0.6; }
 </style>
 </head>
 <body>
@@ -102,9 +102,10 @@
     <div class="ramecek"></div>
   </div>
 
-  <div id="status" class="st-cekam">📷 Připravuji kameru…</div>
+  <div id="status" class="st-cekam">👋 Klikněte na tlačítko pro spuštění kamery</div>
 
-  <button id="skenovatBtn" onclick="skenovatTed()">📸 Skenovat teď</button>
+  <button id="startBtn" onclick="spustitKameru()">▶️ Spustit kameru</button>
+  <button id="skenovatBtn" onclick="skenovatTed()" style="display:none">📸 Skenovat teď</button>
 
   <div class="pocitadlo" id="pocitadlo"></div>
 
@@ -121,12 +122,14 @@ let zpracovavam = false;
 if (!sessionId) {
   statusEl.className = 'st-chyba';
   statusEl.textContent = '❌ Chybí relace. Naskenujte prosím QR kód znovu z PC.';
-} else {
-  spustitKameru();
+  document.getElementById('startBtn').style.display = 'none';
 }
 
 async function spustitKameru() {
   const video = document.getElementById('video');
+  const startBtn = document.getElementById('startBtn');
+  startBtn.disabled = true;
+  startBtn.textContent = '⏳ Spouštím...';
   try {
     reader = new ZXing.BrowserMultiFormatReader();
     const constraints = {
@@ -141,10 +144,14 @@ async function spustitKameru() {
     await video.play();
     statusEl.className = 'st-cekam';
     statusEl.textContent = '📷 Čekám na naskenování…';
+    startBtn.style.display = 'none';
+    document.getElementById('skenovatBtn').style.display = 'block';
     dekodovat(video);
   } catch (e) {
     statusEl.className = 'st-chyba';
     statusEl.textContent = '❌ Kamera není dostupná: ' + e.message;
+    startBtn.disabled = false;
+    startBtn.textContent = '▶️ Zkusit znovu';
   }
 }
 
