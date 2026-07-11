@@ -711,6 +711,12 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <div style="display:flex;gap:8px">
         <input type="text" id="prodejnaPoukazKod" placeholder="DK-XXXX-XXXX nebo naskenuj EAN">
         <button class="btn btn-outline" style="margin-bottom:0" onclick="overitPoukazProdejna()">Ověřit</button>
+        <button class="btn btn-outline" style="margin-bottom:0" onclick="otevritKameruPole('prodejnaPoukazKod','kameraWrapPoukaz','kameraVideoPoukaz')" title="Skenovat kamerou">📷</button>
+        <button class="btn btn-outline" style="margin-bottom:0" onclick="otevritMobilniSken('prodejnaPoukazKod','overitPoukazProdejna')" title="Skenovat mobilem">📱</button>
+      </div>
+      <div id="kameraWrapPoukaz" style="display:none;margin-top:10px;background:#000;border-radius:12px;overflow:hidden;position:relative;">
+        <video id="kameraVideoPoukaz" style="width:100%;max-height:220px;object-fit:cover;" autoplay muted playsinline></video>
+        <button class="btn btn-outline btn-sm" style="position:absolute;top:8px;right:8px;background:#fff" onclick="zavritKameruPole('kameraWrapPoukaz','kameraVideoPoukaz')">✕</button>
       </div>
       <div id="poukazProdejnaMsg" style="margin-top:6px"></div>
     </div>
