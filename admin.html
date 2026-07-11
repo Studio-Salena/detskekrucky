@@ -2623,16 +2623,29 @@ async function zobrazitPoukazDetail(id, poukazData=null) {
   if (!poukaz) return;
   poslednePoukazData = poukaz;
 
+  const proKoho = (poukaz.poznamka && poukaz.poznamka.startsWith('Pro:')) ? poukaz.poznamka.replace('Pro:','').trim() : '';
+
   document.getElementById('poukazDetail').innerHTML = `
-    <div style="font-size:1.8rem;font-weight:900;color:var(--brown);font-family:'Dancing Script',cursive">Dětské krůčky</div>
-    <div style="font-size:0.85rem;color:var(--text-light);margin-bottom:12px">Dárkový poukaz</div>
-    <div style="font-size:2rem;font-weight:900;margin:10px 0">${Number(poukaz.hodnota).toLocaleString('cs-CZ')} Kč</div>
-    <svg id="poukazBarcode"></svg>
-    <div style="font-family:monospace;font-size:1.1rem;letter-spacing:1px;margin:8px 0">${poukaz.kod}</div>
-    <div style="font-size:0.8rem;color:var(--text-light)">Platnost do ${new Date(poukaz.platnost_do).toLocaleDateString('cs-CZ')}</div>
+    <div style="position:relative;background:linear-gradient(160deg,#E5DFD6 0%,#eee8de 40%,#dcd0bd 100%);border:3px dashed var(--brown);border-radius:20px;padding:26px 20px;overflow:hidden">
+      <span style="position:absolute;top:-6px;left:-8px;font-size:2rem;opacity:0.16">🦔</span>
+      <span style="position:absolute;bottom:-8px;right:-6px;font-size:2rem;opacity:0.16;transform:rotate(-8deg)">🦌</span>
+      <div style="position:relative;z-index:1">
+        <div style="display:inline-block;background:linear-gradient(135deg,var(--brown),var(--brown-dark));color:#fff;font-weight:900;font-size:0.65rem;letter-spacing:2px;padding:5px 14px;border-radius:16px;margin-bottom:10px">DÁRKOVÝ POUKAZ</div>
+        <div style="font-family:'Dancing Script',cursive;font-size:1.7rem;color:var(--brown);font-weight:700;line-height:1">Dětské krůčky</div>
+        <div style="font-size:0.65rem;color:var(--text-light);letter-spacing:1px;margin-bottom:14px">BAREFOOT OBUV PRO ZDRAVÉ KRŮČKY</div>
+        ${proKoho ? `<div style="font-size:0.8rem;background:rgba(255,255,255,0.6);border-radius:8px;padding:4px 12px;display:inline-block;margin-bottom:10px">🎁 Pro: <strong>${proKoho}</strong></div><br>` : ''}
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle,#fff 0%,#f5f0e8 100%);border:4px solid var(--sage);border-radius:50%;width:120px;height:120px;font-size:1.5rem;font-weight:900;line-height:1.15;margin:8px auto 16px">
+          <span>${Number(poukaz.hodnota).toLocaleString('cs-CZ')}</span><small style="font-size:0.7rem;font-weight:700">Kč</small>
+        </div>
+        <hr style="border:none;border-top:2px dotted #c9b8a3;margin:14px 0">
+        <svg id="poukazBarcode"></svg>
+        <div style="font-family:'Courier New',monospace;font-size:1rem;letter-spacing:1.5px;margin-top:8px;font-weight:700">${poukaz.kod}</div>
+        <div style="font-size:0.75rem;color:var(--text-light);margin-top:8px">Platnost do ${new Date(poukaz.platnost_do).toLocaleDateString('cs-CZ')}</div>
+      </div>
+    </div>
   `;
   setTimeout(() => {
-    try { JsBarcode('#poukazBarcode', poukaz.ean, {format:'EAN13', width:2, height:60, fontSize:14}); } catch(e){}
+    try { JsBarcode('#poukazBarcode', poukaz.ean, {format:'EAN13', width:2, height:55, fontSize:13, margin:0}); } catch(e){}
   }, 50);
   openModal('modalZobrazitPoukaz');
 }
@@ -2640,27 +2653,104 @@ async function zobrazitPoukazDetail(id, poukazData=null) {
 function tisknoutPoukaz() {
   if (!poslednePoukazData) return;
   const p = poslednePoukazData;
-  const pw = window.open('','_blank','width=420,height=600');
+  const proKoho = (p.poznamka && p.poznamka.startsWith('Pro:')) ? p.poznamka.replace('Pro:','').trim() : '';
+  const pw = window.open('','_blank','width=480,height=720');
   pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Poukaz ${p.kod}</title>
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></scr` + `ipt>
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
   <style>
-    body{font-family:Arial,sans-serif;text-align:center;padding:30px}
-    .card{border:3px dashed #AE6965;border-radius:16px;padding:30px;max-width:340px;margin:0 auto}
-    .brand{font-family:'Comic Sans MS',cursive;font-size:1.8rem;color:#AE6965;font-weight:900}
-    .hodnota{font-size:2.4rem;font-weight:900;margin:16px 0;color:#3d2b1f}
-    .kod{font-family:monospace;font-size:1.2rem;letter-spacing:2px;margin-top:10px}
-    .platnost{font-size:0.85rem;color:#6b5548;margin-top:8px}
+    * { box-sizing: border-box; }
+    body{font-family:'Lato',sans-serif;text-align:center;padding:24px;background:#f0ede6;margin:0}
+    .card{
+      position:relative;
+      background: linear-gradient(160deg, #E5DFD6 0%, #eee8de 40%, #dcd0bd 100%);
+      border:3px dashed #AE6965;
+      border-radius:24px;
+      padding:36px 28px 30px;
+      max-width:380px;
+      margin:0 auto;
+      overflow:hidden;
+      box-shadow: 0 8px 30px rgba(107,76,53,0.18);
+    }
+    .deco { position:absolute; font-size:2.4rem; opacity:0.16; pointer-events:none; }
+    .deco-1 { top:-6px; left:-10px; }
+    .deco-2 { bottom:-10px; right:-8px; transform:rotate(-8deg); }
+    .deco-3 { top:44%; left:-18px; font-size:1.8rem; }
+    .deco-4 { top:20%; right:-14px; font-size:1.6rem; }
+    .ribbon {
+      display:inline-block;
+      background:linear-gradient(135deg,#AE6965,#8a4a46);
+      color:#fff;
+      font-weight:900;
+      font-size:0.72rem;
+      letter-spacing:2.5px;
+      padding:6px 18px;
+      border-radius:20px;
+      margin-bottom:14px;
+      box-shadow:0 3px 8px rgba(174,105,101,0.4);
+    }
+    .brand{font-family:'Dancing Script',cursive;font-size:2rem;color:#AE6965;font-weight:700;line-height:1;position:relative;z-index:1}
+    .tagline{font-size:0.7rem;color:#6b5548;letter-spacing:1px;margin-top:2px;margin-bottom:18px;position:relative;z-index:1}
+    .prokoho{
+      font-size:0.85rem;
+      color:#3d2b1f;
+      background:rgba(255,255,255,0.6);
+      border-radius:10px;
+      padding:6px 14px;
+      display:inline-block;
+      margin-bottom:14px;
+      position:relative;z-index:1;
+    }
+    .hodnota-wrap{ position:relative; z-index:1; margin:8px 0 20px; }
+    .hodnota{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      background:radial-gradient(circle, #fff 0%, #f5f0e8 100%);
+      border:4px solid #7A816C;
+      border-radius:50%;
+      width:150px; height:150px;
+      font-size:1.9rem;
+      font-weight:900;
+      line-height:1.15;
+      color:#3d2b1f;
+      box-shadow: inset 0 2px 6px rgba(0,0,0,0.08);
+    }
+    .hodnota small{ font-size:0.85rem; font-weight:700; }
+    .popis{ font-size:0.82rem; color:#6b5548; margin:0 0 20px; position:relative; z-index:1; line-height:1.5; }
+    .divider { border:none; border-top:2px dotted #c9b8a3; margin:18px 0; position:relative; z-index:1; }
+    .kod{font-family:'Courier New',monospace;font-size:1.15rem;letter-spacing:2px;margin-top:10px;font-weight:700;color:#3d2b1f;position:relative;z-index:1}
+    .platnost{font-size:0.78rem;color:#6b5548;margin-top:10px;position:relative;z-index:1}
+    .footer-brand{ margin-top:18px; font-size:0.72rem; color:#8a7a68; position:relative; z-index:1; }
+    @media print { body{background:#fff;padding:0} .card{box-shadow:none} }
   </style></head><body>
   <div class="card">
-    <div class="brand">🦔 Dětské krůčky</div>
-    <div style="font-size:0.85rem;color:#6b5548">Dárkový poukaz</div>
-    <div class="hodnota">${Number(p.hodnota).toLocaleString('cs-CZ')} Kč</div>
+    <span class="deco deco-1">🦔</span>
+    <span class="deco deco-2">🦌</span>
+    <span class="deco deco-3">🌲</span>
+    <span class="deco deco-4">🍄</span>
+
+    <div class="ribbon">DÁRKOVÝ POUKAZ</div><br>
+    <div class="brand">Dětské krůčky</div>
+    <div class="tagline">BAREFOOT OBUV PRO ZDRAVÉ KRŮČKY</div>
+
+    ${proKoho ? `<div class="prokoho">🎁 Pro: <strong>${proKoho}</strong></div><br>` : ''}
+
+    <div class="hodnota-wrap">
+      <div class="hodnota"><span>${Number(p.hodnota).toLocaleString('cs-CZ')}</span><small>Kč</small></div>
+    </div>
+
+    <p class="popis">Tento poukaz lze uplatnit na nákup obuvi<br>na e-shopu i v naší prodejně.</p>
+
+    <hr class="divider">
     <svg id="bc"></svg>
     <div class="kod">${p.kod}</div>
     <div class="platnost">Platnost do ${new Date(p.platnost_do).toLocaleDateString('cs-CZ')}</div>
+    <div class="footer-brand">www.detskekrucky.cz</div>
   </div>
   <script>
-    JsBarcode('#bc', '${p.ean}', {format:'EAN13', width:2, height:60, fontSize:14});
+    JsBarcode('#bc', '${p.ean}', {format:'EAN13', width:2, height:55, fontSize:13, margin:0});
     window.onload = () => setTimeout(()=>window.print(), 300);
   <\/script>
   </body></html>`);
