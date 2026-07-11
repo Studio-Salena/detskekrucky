@@ -187,8 +187,18 @@ router.post('/pouzit', vyzadovatAdmina, async (req, res) => {
 // DELETE /api/poukazy/:id – zrušit poukaz (zůstává v evidenci pro účetnictví, jen se znepřístupní)
 router.delete('/:id', vyzadovatAdmina, async (req, res) => {
   try {
+    const poukaz = await pool.query('SELECT * FROM darkove_poukazy WHERE id=$1', [req.params.id]);
+    if (poukaz.rows.length === 0) return res.status(404).json({ chyba: 'Poukaz nenalezen.' });
+
+    const nikdyNepouzity = Number(poukaz.rows[0].zustatek) === Number(poukaz.rows[0].hodnota);
+    if (nikdyNepouzity) {
+      // Nikdy nepoužitý poukaz jde bezpečně smazat celý
+      await pool.query('DELETE FROM darkove_poukazy WHERE id=$1', [req.params.id]);
+      return res.json({ ok: true, smazano: true });
+    }
+    // Už částečně/plně použitý poukaz jen zrušíme, ať zůstane účetní stopa
     await pool.query("UPDATE darkove_poukazy SET stav='zruseny' WHERE id=$1", [req.params.id]);
-    res.json({ ok: true });
+    res.json({ ok: true, smazano: false });
   } catch (err) {
     res.status(500).json({ chyba: err.message });
   }

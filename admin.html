@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin — Dětské krůčky</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=Dancing+Script:wght@600;700&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800&family=Dancing+Script:wght@600;700&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -2513,7 +2513,7 @@ async function loadPoukazy() {
           <td>${new Date(p.platnost_do) < new Date() && p.stav==='aktivni' ? '<span class="badge badge-zruseno">⏰ Expirovaný</span>' : (stavPopisek[p.stav]||p.stav)}</td>
           <td style="display:flex;gap:4px">
             <button class="btn btn-outline btn-sm" onclick="zobrazitPoukazDetail(${p.id})">🖨️</button>
-            ${p.stav==='aktivni' ? `<button class="btn btn-red btn-sm" onclick="smazatPoukaz(${p.id})">🗑️</button>` : ''}
+            <button class="btn btn-red btn-sm" onclick="smazatPoukaz(${p.id})">🗑️</button>
           </td>
         </tr>`).join('')}</tbody></table>`;
     }
@@ -2626,26 +2626,25 @@ async function zobrazitPoukazDetail(id, poukazData=null) {
   const proKoho = (poukaz.poznamka && poukaz.poznamka.startsWith('Pro:')) ? poukaz.poznamka.replace('Pro:','').trim() : '';
 
   document.getElementById('poukazDetail').innerHTML = `
-    <div style="position:relative;background:linear-gradient(160deg,#E5DFD6 0%,#eee8de 40%,#dcd0bd 100%);border:3px dashed var(--brown);border-radius:20px;padding:26px 20px;overflow:hidden">
-      <span style="position:absolute;top:-6px;left:-8px;font-size:2rem;opacity:0.16">🦔</span>
-      <span style="position:absolute;bottom:-8px;right:-6px;font-size:2rem;opacity:0.16;transform:rotate(-8deg)">🦌</span>
-      <div style="position:relative;z-index:1">
-        <div style="display:inline-block;background:linear-gradient(135deg,var(--brown),var(--brown-dark));color:#fff;font-weight:900;font-size:0.65rem;letter-spacing:2px;padding:5px 14px;border-radius:16px;margin-bottom:10px">DÁRKOVÝ POUKAZ</div>
-        <div style="font-family:'Dancing Script',cursive;font-size:1.7rem;color:var(--brown);font-weight:700;line-height:1">Dětské krůčky</div>
-        <div style="font-size:0.65rem;color:var(--text-light);letter-spacing:1px;margin-bottom:14px">BAREFOOT OBUV PRO ZDRAVÉ KRŮČKY</div>
-        ${proKoho ? `<div style="font-size:0.8rem;background:rgba(255,255,255,0.6);border-radius:8px;padding:4px 12px;display:inline-block;margin-bottom:10px">🎁 Pro: <strong>${proKoho}</strong></div><br>` : ''}
-        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle,#fff 0%,#f5f0e8 100%);border:4px solid var(--sage);border-radius:50%;width:120px;height:120px;font-size:1.5rem;font-weight:900;line-height:1.15;margin:8px auto 16px">
-          <span>${Number(poukaz.hodnota).toLocaleString('cs-CZ')}</span><small style="font-size:0.7rem;font-weight:700">Kč</small>
+    <div style="display:flex;background:#f7f3ea;border-radius:6px;padding:8px;border:8px solid transparent;border-image:linear-gradient(135deg,#c9a15a,#e8d4a0,#b8874a,#e8d4a0,#c9a15a) 1;box-shadow:0 6px 20px rgba(107,76,53,0.2)">
+      <div style="flex:0 0 110px;display:flex;align-items:center;justify-content:center;padding:10px;border-right:1px solid rgba(107,76,53,0.15)">
+        <img src="logo.jpg" alt="Dětské krůčky" style="width:100%;max-width:100px;border-radius:50%">
+      </div>
+      <div style="flex:1;padding:14px 16px 12px;text-align:left">
+        <div style="font-family:'Playfair Display',serif;font-weight:800;font-size:1.15rem;color:var(--sage);letter-spacing:0.5px;margin-bottom:6px">DÁRKOVÝ POUKAZ</div>
+        <div style="font-size:0.85rem;font-weight:700;color:var(--text);margin-bottom:4px">V HODNOTĚ: <span style="color:var(--brown);font-weight:900;border-bottom:2px solid var(--brown)">${Number(poukaz.hodnota).toLocaleString('cs-CZ')} Kč</span></div>
+        <div style="font-size:0.7rem;color:var(--text-light);margin-bottom:10px">Na nákup barefoot obuvi</div>
+        <div style="font-size:0.68rem;line-height:1.7">
+          <div><strong>PRO:</strong> <span style="border-bottom:1px dotted #9a8a76">${proKoho || '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'}</span></div>
+          <div><strong>PLATNOST DO:</strong> ${new Date(poukaz.platnost_do).toLocaleDateString('cs-CZ')}</div>
+          <div><strong>KÓD POUKAZU:</strong> ${poukaz.kod}</div>
         </div>
-        <hr style="border:none;border-top:2px dotted #c9b8a3;margin:14px 0">
-        <svg id="poukazBarcode"></svg>
-        <div style="font-family:'Courier New',monospace;font-size:1rem;letter-spacing:1.5px;margin-top:8px;font-weight:700">${poukaz.kod}</div>
-        <div style="font-size:0.75rem;color:var(--text-light);margin-top:8px">Platnost do ${new Date(poukaz.platnost_do).toLocaleDateString('cs-CZ')}</div>
+        <svg id="poukazBarcode" style="margin-top:6px"></svg>
       </div>
     </div>
   `;
   setTimeout(() => {
-    try { JsBarcode('#poukazBarcode', poukaz.ean, {format:'EAN13', width:2, height:55, fontSize:13, margin:0}); } catch(e){}
+    try { JsBarcode('#poukazBarcode', poukaz.ean, {format:'EAN13', width:1.2, height:32, fontSize:9, margin:0}); } catch(e){}
   }, 50);
   openModal('modalZobrazitPoukaz');
 }
@@ -2654,111 +2653,96 @@ function tisknoutPoukaz() {
   if (!poslednePoukazData) return;
   const p = poslednePoukazData;
   const proKoho = (p.poznamka && p.poznamka.startsWith('Pro:')) ? p.poznamka.replace('Pro:','').trim() : '';
-  const pw = window.open('','_blank','width=480,height=720');
+  const zakladUrl = window.location.origin + window.location.pathname.replace('admin.html','');
+  const pw = window.open('','_blank','width=760,height=460');
   pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Poukaz ${p.kod}</title>
+  <base href="${zakladUrl}">
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></scr` + `ipt>
-  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; }
-    body{font-family:'Lato',sans-serif;text-align:center;padding:24px;background:#f0ede6;margin:0}
+    body{font-family:'Lato',sans-serif;padding:24px;background:#e8e2d5;margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh}
     .card{
       position:relative;
-      background: linear-gradient(160deg, #E5DFD6 0%, #eee8de 40%, #dcd0bd 100%);
-      border:3px dashed #AE6965;
-      border-radius:24px;
-      padding:36px 28px 30px;
-      max-width:380px;
-      margin:0 auto;
-      overflow:hidden;
-      box-shadow: 0 8px 30px rgba(107,76,53,0.18);
-    }
-    .deco { position:absolute; font-size:2.4rem; opacity:0.16; pointer-events:none; }
-    .deco-1 { top:-6px; left:-10px; }
-    .deco-2 { bottom:-10px; right:-8px; transform:rotate(-8deg); }
-    .deco-3 { top:44%; left:-18px; font-size:1.8rem; }
-    .deco-4 { top:20%; right:-14px; font-size:1.6rem; }
-    .ribbon {
-      display:inline-block;
-      background:linear-gradient(135deg,#AE6965,#8a4a46);
-      color:#fff;
-      font-weight:900;
-      font-size:0.72rem;
-      letter-spacing:2.5px;
-      padding:6px 18px;
-      border-radius:20px;
-      margin-bottom:14px;
-      box-shadow:0 3px 8px rgba(174,105,101,0.4);
-    }
-    .brand{font-family:'Dancing Script',cursive;font-size:2rem;color:#AE6965;font-weight:700;line-height:1;position:relative;z-index:1}
-    .tagline{font-size:0.7rem;color:#6b5548;letter-spacing:1px;margin-top:2px;margin-bottom:18px;position:relative;z-index:1}
-    .prokoho{
-      font-size:0.85rem;
-      color:#3d2b1f;
-      background:rgba(255,255,255,0.6);
-      border-radius:10px;
-      padding:6px 14px;
-      display:inline-block;
-      margin-bottom:14px;
-      position:relative;z-index:1;
-    }
-    .hodnota-wrap{ position:relative; z-index:1; margin:8px 0 20px; }
-    .hodnota{
       display:flex;
-      flex-direction:column;
+      align-items:stretch;
+      background:
+        radial-gradient(circle at 15% 20%, rgba(122,129,108,0.05) 0%, transparent 8%),
+        radial-gradient(circle at 80% 70%, rgba(174,105,101,0.05) 0%, transparent 10%),
+        radial-gradient(circle at 60% 15%, rgba(122,129,108,0.04) 0%, transparent 6%),
+        #f7f3ea;
+      border-radius:6px;
+      width:700px;
+      padding:8px;
+      background-clip:padding-box;
+      box-shadow: 0 10px 35px rgba(107,76,53,0.25);
+      border: 10px solid transparent;
+      border-image: linear-gradient(135deg, #c9a15a, #e8d4a0, #b8874a, #e8d4a0, #c9a15a) 1;
+    }
+    .logo-side{
+      flex:0 0 210px;
+      display:flex;
       align-items:center;
       justify-content:center;
-      background:radial-gradient(circle, #fff 0%, #f5f0e8 100%);
-      border:4px solid #7A816C;
-      border-radius:50%;
-      width:150px; height:150px;
-      font-size:1.9rem;
-      font-weight:900;
-      line-height:1.15;
-      color:#3d2b1f;
-      box-shadow: inset 0 2px 6px rgba(0,0,0,0.08);
+      padding:20px;
+      border-right:1px solid rgba(107,76,53,0.15);
     }
-    .hodnota small{ font-size:0.85rem; font-weight:700; }
-    .popis{ font-size:0.82rem; color:#6b5548; margin:0 0 20px; position:relative; z-index:1; line-height:1.5; }
-    .divider { border:none; border-top:2px dotted #c9b8a3; margin:18px 0; position:relative; z-index:1; }
-    .kod{font-family:'Courier New',monospace;font-size:1.15rem;letter-spacing:2px;margin-top:10px;font-weight:700;color:#3d2b1f;position:relative;z-index:1}
-    .platnost{font-size:0.78rem;color:#6b5548;margin-top:10px;position:relative;z-index:1}
-    .footer-brand{ margin-top:18px; font-size:0.72rem; color:#8a7a68; position:relative; z-index:1; }
+    .logo-side img{ width:100%; max-width:190px; border-radius:50%; }
+    .content-side{
+      flex:1;
+      padding:26px 32px 20px;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+    }
+    .title{
+      font-family:'Playfair Display',serif;
+      font-weight:800;
+      font-size:1.85rem;
+      color:#7A816C;
+      letter-spacing:0.5px;
+      margin:0 0 12px;
+      white-space:nowrap;
+    }
+    .value-row{ font-size:1.3rem; font-weight:700; color:#3d2b1f; margin-bottom:6px; }
+    .value-amount{ color:#AE6965; font-weight:900; border-bottom:3px solid #AE6965; padding-bottom:2px; }
+    .desc{ font-size:0.95rem; color:#4a3a2c; margin-bottom:18px; }
+    .details{ font-size:0.92rem; color:#3d2b1f; }
+    .detail-row{ display:flex; align-items:baseline; gap:8px; margin-bottom:9px; }
+    .detail-label{ font-weight:700; white-space:nowrap; }
+    .detail-fill{ flex:1; border-bottom:1.5px dotted #9a8a76; min-height:1.3em; padding-left:4px; font-weight:700; color:#5a4a3a; }
+    .footer-row{ display:flex; align-items:center; justify-content:space-between; margin-top:16px; }
+    .footer-web{ font-size:0.82rem; color:#4a3a2c; }
     @media print { body{background:#fff;padding:0} .card{box-shadow:none} }
   </style></head><body>
   <div class="card">
-    <span class="deco deco-1">🦔</span>
-    <span class="deco deco-2">🦌</span>
-    <span class="deco deco-3">🌲</span>
-    <span class="deco deco-4">🍄</span>
-
-    <div class="ribbon">DÁRKOVÝ POUKAZ</div><br>
-    <div class="brand">Dětské krůčky</div>
-    <div class="tagline">BAREFOOT OBUV PRO ZDRAVÉ KRŮČKY</div>
-
-    ${proKoho ? `<div class="prokoho">🎁 Pro: <strong>${proKoho}</strong></div><br>` : ''}
-
-    <div class="hodnota-wrap">
-      <div class="hodnota"><span>${Number(p.hodnota).toLocaleString('cs-CZ')}</span><small>Kč</small></div>
+    <div class="logo-side"><img src="logo.jpg" alt="Dětské krůčky"></div>
+    <div class="content-side">
+      <div class="title">DÁRKOVÝ POUKAZ</div>
+      <div class="value-row">V HODNOTĚ: <span class="value-amount">${Number(p.hodnota).toLocaleString('cs-CZ')} Kč</span></div>
+      <div class="desc">Na nákup barefoot obuvi</div>
+      <div class="details">
+        <div class="detail-row"><span class="detail-label">PRO:</span><span class="detail-fill">${proKoho}</span></div>
+        <div class="detail-row"><span class="detail-label">VĚNOVÁNO OD:</span><span class="detail-fill"></span></div>
+        <div class="detail-row"><span class="detail-label">PLATNOST DO:</span><span class="detail-fill">${new Date(p.platnost_do).toLocaleDateString('cs-CZ')}</span></div>
+        <div class="detail-row"><span class="detail-label">KÓD POUKAZU:</span><span class="detail-fill">${p.kod}</span></div>
+      </div>
+      <div class="footer-row">
+        <div class="footer-web">Více na: <strong>www.detskekrucky.cz</strong></div>
+        <svg id="bc"></svg>
+      </div>
     </div>
-
-    <p class="popis">Tento poukaz lze uplatnit na nákup obuvi<br>na e-shopu i v naší prodejně.</p>
-
-    <hr class="divider">
-    <svg id="bc"></svg>
-    <div class="kod">${p.kod}</div>
-    <div class="platnost">Platnost do ${new Date(p.platnost_do).toLocaleDateString('cs-CZ')}</div>
-    <div class="footer-brand">www.detskekrucky.cz</div>
   </div>
   <script>
-    JsBarcode('#bc', '${p.ean}', {format:'EAN13', width:2, height:55, fontSize:13, margin:0});
-    window.onload = () => setTimeout(()=>window.print(), 300);
+    JsBarcode('#bc', '${p.ean}', {format:'EAN13', width:1.3, height:36, fontSize:10, margin:0});
+    window.onload = () => setTimeout(()=>window.print(), 400);
   <\/script>
   </body></html>`);
   pw.document.close();
 }
 
 async function smazatPoukaz(id) {
-  if (!confirm('Opravdu zrušit tento poukaz? Nepůjde ho pak už použít.')) return;
+  if (!confirm('Opravdu smazat/zrušit tento poukaz? Pokud ještě nebyl vůbec použit, smaže se úplně. Pokud už byl částečně uplatněný, jen se znepřístupní (kvůli účetní evidenci).')) return;
   try {
     await adminFetch(API+'/poukazy/'+id, {method:'DELETE'});
     loadPoukazy();
