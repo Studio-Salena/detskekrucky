@@ -193,6 +193,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
 }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
 </head>
 <body>
 
@@ -237,6 +238,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <div class="nav-item" onclick="showPage('produkty',this)"><span class="icon">👟</span> Produkty</div>
       <div class="nav-item" onclick="showPage('kategorie',this)"><span class="icon">🏷️</span> Kategorie</div>
       <div class="nav-item" onclick="showPage('zakaznici',this)"><span class="icon">👥</span> Zákazníci</div>
+      <div class="nav-item" onclick="showPage('poukazy',this)" id="navPoukazy"><span class="icon">🎁</span> Poukazy <span class="nav-badge" id="navBadgePoukazy" style="display:none">0</span></div>
       <div class="nav-item" onclick="showPage('ucetnictvi',this)"><span class="icon">💰</span> Účetnictví</div>
     </div>
     <div class="nav-section">
@@ -351,6 +353,31 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       </div>
     </div>
 
+    <!-- POUKAZY -->
+    <div class="page" id="page-poukazy">
+      <div class="page-header">
+        <div class="page-title">🎁 Dárkové poukazy</div>
+        <div class="table-actions">
+          <button class="btn btn-primary" onclick="otevritVydatPoukaz()">+ Vydat poukaz</button>
+          <button class="btn btn-csv no-print" onclick="exportCSV('poukazy')">⬇ CSV</button>
+          <button class="refresh-btn no-print" onclick="loadPoukazy()">↻</button>
+        </div>
+      </div>
+      <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
+        <div class="stat-card"><div class="stat-label">Aktivní poukazy (nevyužitá hodnota)</div><div class="stat-value" id="poukazyAktivniHodnota">...</div></div>
+        <div class="stat-card"><div class="stat-label">Počet vydaných</div><div class="stat-value" id="poukazyPocet">...</div></div>
+        <div class="stat-card"><div class="stat-label">Plně využité</div><div class="stat-value" id="poukazyVyuzite">...</div></div>
+      </div>
+      <div class="table-wrap">
+        <div class="table-header"><h3>📋 Žádosti o koupi poukazu z e-shopu</h3></div>
+        <div id="poukazyZadostiTable"><div class="loading">Načítám...</div></div>
+      </div>
+      <div class="table-wrap">
+        <div class="table-header"><h3>🎁 Vydané poukazy</h3></div>
+        <div id="poukazyTable"><div class="loading">Načítám...</div></div>
+      </div>
+    </div>
+
     <!-- SKLAD -->
     <div class="page" id="page-sklad">
       <div class="page-header">
@@ -451,11 +478,12 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           <button class="refresh-btn no-print" onclick="loadUcetnictvi()">↻</button>
         </div>
       </div>
-      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="stats-grid" style="grid-template-columns:repeat(5,1fr)">
         <div class="stat-card"><div class="stat-label">Tržby celkem</div><div class="stat-value" id="ucetTrzby">...</div></div>
         <div class="stat-card"><div class="stat-label">Průměrná objednávka</div><div class="stat-value" id="ucetPrumer">...</div></div>
         <div class="stat-card"><div class="stat-label">Počet objednávek</div><div class="stat-value" id="ucetPocet">...</div></div>
         <div class="stat-card"><div class="stat-label">Vratky celkem</div><div class="stat-value" id="ucetVratky" style="color:var(--brown)">...</div></div>
+        <div class="stat-card"><div class="stat-label">Zboží vydané za poukazy</div><div class="stat-value" id="ucetPoukazyZbozi" style="color:var(--sage)">...</div></div>
       </div>
       <div class="table-wrap">
         <div class="table-header"><h3>📅 Tržby po měsících</h3></div>
@@ -669,13 +697,22 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     <div class="section-divider">Platba a zákazník</div>
     <div class="form-grid-2">
       <div class="form-group"><label>Způsob platby</label>
-        <select id="prodejnaPlatba">
+        <select id="prodejnaPlatba" onchange="prepnoutPoukazPole()">
           <option value="hotovost">💵 Hotovost</option>
           <option value="karta">💳 Karta</option>
           <option value="qr">📱 QR platba</option>
+          <option value="poukaz">🎁 Dárkový poukaz</option>
         </select>
       </div>
       <div class="form-group"><label>Jméno zákazníka (volitelné)</label><input type="text" id="prodejnaZakaznik" placeholder="Jana Nováková"></div>
+    </div>
+    <div class="form-group" id="poukazKodWrap" style="display:none">
+      <label>Kód poukazu</label>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="prodejnaPoukazKod" placeholder="DK-XXXX-XXXX nebo naskenuj EAN">
+        <button class="btn btn-outline" style="margin-bottom:0" onclick="overitPoukazProdejna()">Ověřit</button>
+      </div>
+      <div id="poukazProdejnaMsg" style="margin-top:6px"></div>
     </div>
     <div class="form-group"><label>Poznámka</label><input type="text" id="prodejnaPoznamka" placeholder="Volitelná poznámka..."></div>
     <div class="modal-footer">
@@ -732,6 +769,46 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="zavritKameruVratka();closeModal('modalNovaVratka')">Zrušit</button>
       <button class="btn btn-primary" onclick="ulozitVratku()">💾 Uložit vratku</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalVydatPoukaz">
+  <div class="modal" style="max-width:420px">
+    <h3>🎁 Vydat dárkový poukaz</h3>
+    <div id="poukazMsg"></div>
+    <div class="form-group">
+      <label>Hodnota poukazu *</label>
+      <select id="pkHodnota">
+        <option value="500">500 Kč</option>
+        <option value="1000">1000 Kč</option>
+        <option value="1500">1500 Kč</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Prodáno kde</label>
+      <select id="pkKde">
+        <option value="prodejna">Prodejna</option>
+        <option value="eshop">E-shop</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Jméno kupujícího (nepovinné)</label><input type="text" id="pkJmeno" placeholder="Jana Nová"></div>
+    <div class="form-group"><label>E-mail kupujícího (nepovinné)</label><input type="email" id="pkEmail" placeholder="jana@email.cz"></div>
+    <div class="form-group"><label>Poznámka</label><input type="text" id="pkPoznamka" placeholder="Volitelné"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modalVydatPoukaz')">Zrušit</button>
+      <button class="btn btn-primary" onclick="ulozitPoukaz()">💾 Vydat poukaz</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalZobrazitPoukaz">
+  <div class="modal" style="max-width:420px;text-align:center">
+    <h3>🎁 Poukaz vydán!</h3>
+    <div id="poukazDetail" style="margin:16px 0"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modalZobrazitPoukaz')">Zavřít</button>
+      <button class="btn btn-primary" onclick="tisknoutPoukaz()">🖨️ Vytisknout</button>
     </div>
   </div>
 </div>
@@ -837,7 +914,17 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <select id="pKategorie"></select>
     </div>
     <div class="form-group"><label>Popis</label><textarea id="pPopis" rows="3" placeholder="Popis produktu..."></textarea></div>
-    <div class="form-group"><label>EAN kód</label><input type="text" id="pEan" placeholder="např. 1234567890123"></div>
+    <div class="form-group"><label>EAN kód</label>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="pEan" placeholder="např. 1234567890123">
+        <button class="btn btn-outline" style="margin-bottom:0" onclick="otevritKameruPole('pEan','kameraWrapPEan','kameraVideoPEan')" title="Skenovat kamerou">📷</button>
+        <button class="btn btn-outline" style="margin-bottom:0" onclick="otevritMobilniSken('pEan', null)" title="Skenovat mobilem">📱</button>
+      </div>
+      <div id="kameraWrapPEan" style="display:none;margin-top:10px;background:#000;border-radius:12px;overflow:hidden;position:relative;">
+        <video id="kameraVideoPEan" style="width:100%;max-height:220px;object-fit:cover;" autoplay muted playsinline></video>
+        <button class="btn btn-outline btn-sm" style="position:absolute;top:8px;right:8px;background:#fff" onclick="zavritKameruPole('kameraWrapPEan','kameraVideoPEan')">✕</button>
+      </div>
+    </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modalNovyProdukt')">Zrušit</button>
       <button class="btn btn-primary" onclick="ulozitProdukt()">💾 Uložit</button>
@@ -876,7 +963,17 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <select id="upKategorie"></select>
     </div>
     <div class="form-group"><label>Popis</label><textarea id="upPopis" rows="3" style="width:100%;padding:8px;border:1px solid var(--tan-light);border-radius:8px;font-family:inherit;resize:vertical"></textarea></div>
-    <div class="form-group"><label>EAN kód</label><input type="text" id="upEan" placeholder="např. 1234567890123"></div>
+    <div class="form-group"><label>EAN kód</label>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="upEan" placeholder="např. 1234567890123">
+        <button class="btn btn-outline" style="margin-bottom:0" onclick="otevritKameruPole('upEan','kameraWrapUpEan','kameraVideoUpEan')" title="Skenovat kamerou">📷</button>
+        <button class="btn btn-outline" style="margin-bottom:0" onclick="otevritMobilniSken('upEan', null)" title="Skenovat mobilem">📱</button>
+      </div>
+      <div id="kameraWrapUpEan" style="display:none;margin-top:10px;background:#000;border-radius:12px;overflow:hidden;position:relative;">
+        <video id="kameraVideoUpEan" style="width:100%;max-height:220px;object-fit:cover;" autoplay muted playsinline></video>
+        <button class="btn btn-outline btn-sm" style="position:absolute;top:8px;right:8px;background:#fff" onclick="zavritKameruPole('kameraWrapUpEan','kameraVideoUpEan')">✕</button>
+      </div>
+    </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modalUpravitProdukt')">Zrušit</button>
       <button class="btn btn-primary" onclick="ulozitUpravuProduktu()">💾 Uložit</button>
@@ -953,6 +1050,7 @@ function showPage(name, el) {
   if (name==='rezervace') loadRezervace();
   if (name==='newsletter') loadNewsletter();
   if (name==='vratkyzadosti') loadVratkyZadosti();
+  if (name==='poukazy') loadPoukazy();
   // Close mobile sidebar
   document.getElementById('sidebar').classList.remove('open');
 }
@@ -1588,9 +1686,17 @@ async function loadUcetnictvi() {
       vratkyCelkem = Array.isArray(v) ? v.reduce((s,x)=>s+Number(x.castka),0) : 0;
     } catch(e) {}
 
+    let poukazyVydanoZbozi = 0;
+    try {
+      const pp = await adminFetch(API+'/poukazy/pouziti/vse').then(r=>r.json());
+      poukazyVydanoZbozi = Array.isArray(pp) ? pp.reduce((s,x)=>s+Number(x.castka),0) : 0;
+    } catch(e) {}
+
     const celkoveTrzby = trzby + prodejnaTrzbyUcet - vratkyCelkem;
     document.getElementById('ucetTrzby').textContent = celkoveTrzby.toLocaleString('cs-CZ')+' Kč';
     document.getElementById('ucetVratky').textContent = '−'+vratkyCelkem.toLocaleString('cs-CZ')+' Kč';
+    const elPoukazy = document.getElementById('ucetPoukazyZbozi');
+    if (elPoukazy) elPoukazy.textContent = poukazyVydanoZbozi.toLocaleString('cs-CZ')+' Kč';
     document.getElementById('ucetPrumer').textContent = obj.length ? Math.round(trzby/obj.length).toLocaleString('cs-CZ')+' Kč' : '—';
     document.getElementById('ucetPocet').textContent = obj.length;
     const mn = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
@@ -1644,6 +1750,11 @@ async function exportCSV(typ) {
       rows=[['Č.','Datum','Prodej #','Položky','Částka Kč','Důvod','Na sklad']];
       d.forEach(v=>rows.push([v.id,new Date(v.vytvoreno).toLocaleDateString('cs-CZ'),v.prodej_id||'',(v.polozky||[]).map(x=>`${x.nazev||''} vel.${x.velikost} x${x.pocet}`).join('; '),v.castka,v.duvod||'',v.vraceno_na_sklad?'Ano':'Ne']));
       nazev='vratky';
+    } else if (typ==='poukazy') {
+      const d=await adminFetch(API+'/poukazy').then(r=>r.json());
+      rows=[['Kód','Hodnota Kč','Zůstatek Kč','Platnost do','Kde','Kupující','E-mail','Stav']];
+      d.forEach(p=>rows.push([p.kod,p.hodnota,p.zustatek,new Date(p.platnost_do).toLocaleDateString('cs-CZ'),p.zakoupeno_kde||'',p.kupujici_jmeno||'',p.kupujici_email||'',p.stav]));
+      nazev='poukazy';
     } else if (typ==='ucetnictvi') {
       const d=await adminFetch(API+'/objednavky').then(r=>r.json());
       rows=[['ID','Datum','Zákazník','Email','Celkem Kč','Platba','Doprava','Stav']];
@@ -1759,7 +1870,7 @@ function otevritNovyProdejProdejna() {
   }, 150);
 }
 
-function hledatEan() {
+async function hledatEan() {
   const ean = document.getElementById('eanInput').value.trim();
   const msg = document.getElementById('eanMsg');
   if (!ean) { msg.innerHTML = '<div class="error-msg">Zadejte EAN kód.</div>'; return; }
@@ -1767,6 +1878,16 @@ function hledatEan() {
   // Najdi produkt podle EAN v načtených datech skladu
   const produkt = prodejnaSkladData.find(s => s.ean === ean);
   if (!produkt) {
+    // Není to produkt – zkusit, jestli to není EAN dárkového poukazu
+    try {
+      const res = await adminFetch(API+'/poukazy/overit/'+encodeURIComponent(ean));
+      const data = await res.json();
+      if (res.ok) {
+        msg.innerHTML = `<div class="success-msg">🎁 Tohle je dárkový poukaz se zůstatkem <strong>${Number(data.zustatek).toLocaleString('cs-CZ')} Kč</strong>! Dole u „Způsob platby" vyber <strong>Dárkový poukaz</strong> a zadej tento kód: <strong>${data.kod}</strong></div>`;
+        document.getElementById('eanInput').value = '';
+        return;
+      }
+    } catch(e) {}
     msg.innerHTML = `<div class="error-msg">Produkt s EAN <strong>${ean}</strong> nebyl nalezen.</div>`;
     return;
   }
@@ -1902,7 +2023,9 @@ async function kontrolovatMobilniSken() {
     const data = await res.json();
     if (data.ean) {
       document.getElementById(mobilniSkenCil.input).value = data.ean;
-      window[mobilniSkenCil.callback]();
+      if (mobilniSkenCil.callback && typeof window[mobilniSkenCil.callback] === 'function') {
+        window[mobilniSkenCil.callback]();
+      }
       const status = document.getElementById('mobilniSkenStatus');
       status.innerHTML = `✅ Přidán kód: <strong>${data.ean}</strong>`;
       status.style.background = '#e0f0d8';
@@ -1951,9 +2074,26 @@ async function ulozitProdejnaProdat() {
     return;
   }
 
+  const platba = document.getElementById('prodejnaPlatba').value;
+  const poukazKod = document.getElementById('prodejnaPoukazKod').value.trim();
+
+  // Pokud platba poukazem, ověřit PŘED uložením prodeje, ať nevznikne prodej bez pokrytí platby
+  if (platba === 'poukaz') {
+    if (!poukazKod) { document.getElementById('prodejnaMsg').innerHTML = '<div class="error-msg">Zadejte kód poukazu.</div>'; return; }
+    try {
+      const overRes = await adminFetch(API+'/poukazy/overit/'+encodeURIComponent(poukazKod));
+      const overData = await overRes.json();
+      if (!overRes.ok) { document.getElementById('prodejnaMsg').innerHTML = `<div class="error-msg">${overData.chyba}</div>`; return; }
+      if (Number(overData.zustatek) < celkem) {
+        document.getElementById('prodejnaMsg').innerHTML = `<div class="error-msg">Na poukazu zbývá jen ${overData.zustatek} Kč, prodej je za ${celkem} Kč. Zvolte kombinaci s jinou platbou nebo sniž počet položek.</div>`;
+        return;
+      }
+    } catch(e) { document.getElementById('prodejnaMsg').innerHTML = '<div class="error-msg">Chyba při ověřování poukazu</div>'; return; }
+  }
+
   const prodej = {
     zakaznik: document.getElementById('prodejnaZakaznik').value,
-    platba: document.getElementById('prodejnaPlatba').value,
+    platba: platba,
     poznamka: document.getElementById('prodejnaPoznamka').value,
     polozky, celkem
   };
@@ -1978,6 +2118,16 @@ async function ulozitProdejnaProdat() {
     if (res.ok) ulozenyProdej = await res.json();
   } catch(e) { console.error('Chyba ukládání prodeje na server'); }
 
+  // Pokud platba poukazem, teď ho skutečně uplatnit (odečíst zůstatek)
+  if (platba === 'poukaz' && ulozenyProdej.id) {
+    try {
+      await adminFetch(API+'/poukazy/pouzit', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ kod: poukazKod, castka: celkem, prodej_id: ulozenyProdej.id })
+      });
+    } catch(e) { console.error('Chyba při uplatnění poukazu'); }
+  }
+
   // Vytisknout účtenku
   tiskUctenkyData(ulozenyProdej, ulozenyProdej.id || '');
 
@@ -1988,6 +2138,10 @@ async function ulozitProdejnaProdat() {
   // Reset formuláře
   document.getElementById('prodejnaZakaznik').value = '';
   document.getElementById('prodejnaPoznamka').value = '';
+  document.getElementById('prodejnaPoukazKod').value = '';
+  document.getElementById('poukazProdejnaMsg').innerHTML = '';
+  document.getElementById('prodejnaPlatba').value = 'hotovost';
+  prepnoutPoukazPole();
   document.getElementById('prodejnaMsg').innerHTML = '';
   document.getElementById('prodejnaPolozky').innerHTML = `
     <div class="polozka-row polozka-grid">
@@ -1998,6 +2152,23 @@ async function ulozitProdejnaProdat() {
       <button class="btn btn-red btn-sm" style="align-self:end" onclick="this.closest('.polozka-row').remove();prepocitatCelkem()">✕</button>
     </div>`;
   nacistSkladProProdejna();
+}
+
+function prepnoutPoukazPole() {
+  const platba = document.getElementById('prodejnaPlatba').value;
+  document.getElementById('poukazKodWrap').style.display = platba === 'poukaz' ? 'block' : 'none';
+}
+
+async function overitPoukazProdejna() {
+  const kod = document.getElementById('prodejnaPoukazKod').value.trim();
+  const msg = document.getElementById('poukazProdejnaMsg');
+  if (!kod) { msg.innerHTML = '<div class="error-msg">Zadejte kód poukazu.</div>'; return; }
+  try {
+    const res = await adminFetch(API+'/poukazy/overit/'+encodeURIComponent(kod));
+    const data = await res.json();
+    if (!res.ok) { msg.innerHTML = `<div class="error-msg">${data.chyba}</div>`; return; }
+    msg.innerHTML = `<div class="success-msg">✅ Platný poukaz – zůstatek <strong>${Number(data.zustatek).toLocaleString('cs-CZ')} Kč</strong> (platnost do ${new Date(data.platnost_do).toLocaleDateString('cs-CZ')})</div>`;
+  } catch(e) { msg.innerHTML = '<div class="error-msg">Chyba spojení</div>'; }
 }
 
 function tiskUctenky(idx) {
@@ -2264,6 +2435,244 @@ async function zpracovatZadostVratky(id) {
 
     openModal('modalNovaVratka');
   } catch(e) { alert('Chyba při načítání žádosti'); }
+}
+
+let kameraReaderGeneric = null;
+
+async function otevritKameruPole(cilInputId, wrapId, videoId) {
+  const wrap = document.getElementById(wrapId);
+  const video = document.getElementById(videoId);
+  wrap.style.display = 'block';
+  try {
+    kameraReaderGeneric = new ZXing.BrowserMultiFormatReader();
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    video.srcObject = stream;
+    await video.play();
+
+    const decode = async () => {
+      if (!kameraReaderGeneric) return;
+      try {
+        const result = await kameraReaderGeneric.decodeFromVideoElement(video);
+        if (result) {
+          zavritKameruPole(wrapId, videoId);
+          document.getElementById(cilInputId).value = result.getText();
+          return;
+        }
+      } catch(e) { /* kód zatím není vidět */ }
+      requestAnimationFrame(decode);
+    };
+    requestAnimationFrame(decode);
+  } catch(e) {
+    wrap.innerHTML = `<div style="color:#fff;padding:10px;font-size:0.85rem">Kamera není dostupná: ${e.message}</div>`;
+  }
+}
+
+function zavritKameruPole(wrapId, videoId) {
+  const wrap = document.getElementById(wrapId);
+  wrap.style.display = 'none';
+  const video = document.getElementById(videoId);
+  if (video && video.srcObject) {
+    video.srcObject.getTracks().forEach(t => t.stop());
+    video.srcObject = null;
+  }
+  kameraReaderGeneric = null;
+}
+
+// ═══════════════════════════════
+// DÁRKOVÉ POUKAZY
+// ═══════════════════════════════
+let poslednePoukazData = null;
+
+async function loadPoukazy() {
+  try {
+    const data = await adminFetch(API+'/poukazy').then(r=>r.json());
+    const seznam = Array.isArray(data) ? data : [];
+
+    const aktivni = seznam.filter(p => p.stav === 'aktivni');
+    const vyuzite = seznam.filter(p => p.stav === 'pouzity');
+    const hodnotaAktivnich = aktivni.reduce((s,p)=>s+Number(p.zustatek),0);
+    document.getElementById('poukazyAktivniHodnota').textContent = hodnotaAktivnich.toLocaleString('cs-CZ')+' Kč';
+    document.getElementById('poukazyPocet').textContent = seznam.length;
+    document.getElementById('poukazyVyuzite').textContent = vyuzite.length;
+
+    if (!seznam.length) {
+      document.getElementById('poukazyTable').innerHTML = '<div class="empty">Zatím žádné vydané poukazy</div>';
+    } else {
+      const stavPopisek = {aktivni:'<span class="badge badge-ok">✅ Aktivní</span>', pouzity:'<span class="badge badge-zruseno">✔️ Vyčerpaný</span>', zruseny:'<span class="badge badge-zruseno">❌ Zrušený</span>'};
+      document.getElementById('poukazyTable').innerHTML = `
+        <table><thead><tr><th>Kód</th><th>Hodnota</th><th>Zůstatek</th><th>Platnost do</th><th>Kde</th><th>Kupující</th><th>Stav</th><th>Akce</th></tr></thead>
+        <tbody>${seznam.map(p=>`<tr>
+          <td><code style="background:var(--cream);padding:2px 6px;border-radius:4px">${p.kod}</code></td>
+          <td><strong>${Number(p.hodnota).toLocaleString('cs-CZ')} Kč</strong></td>
+          <td><strong style="color:${Number(p.zustatek)>0?'var(--sage)':'var(--text-light)'}">${Number(p.zustatek).toLocaleString('cs-CZ')} Kč</strong></td>
+          <td>${new Date(p.platnost_do).toLocaleDateString('cs-CZ')}</td>
+          <td>${p.zakoupeno_kde==='eshop'?'🛒 E-shop':'🏪 Prodejna'}</td>
+          <td>${p.kupujici_jmeno||'—'}</td>
+          <td>${new Date(p.platnost_do) < new Date() && p.stav==='aktivni' ? '<span class="badge badge-zruseno">⏰ Expirovaný</span>' : (stavPopisek[p.stav]||p.stav)}</td>
+          <td style="display:flex;gap:4px">
+            <button class="btn btn-outline btn-sm" onclick="zobrazitPoukazDetail(${p.id})">🖨️</button>
+            ${p.stav==='aktivni' ? `<button class="btn btn-red btn-sm" onclick="smazatPoukaz(${p.id})">🗑️</button>` : ''}
+          </td>
+        </tr>`).join('')}</tbody></table>`;
+    }
+  } catch(e) { document.getElementById('poukazyTable').innerHTML = '<div class="error-msg">Chyba načítání</div>'; }
+
+  loadPoukazyZadosti();
+}
+
+async function loadPoukazyZadosti() {
+  try {
+    const data = await adminFetch(API+'/poukazy/zadosti/vse').then(r=>r.json());
+    const seznam = Array.isArray(data) ? data : [];
+
+    const pocetNovych = seznam.filter(z=>z.stav==='nova').length;
+    const badge = document.getElementById('navBadgePoukazy');
+    if (pocetNovych > 0) { badge.textContent = pocetNovych; badge.style.display = 'inline-block'; }
+    else { badge.style.display = 'none'; }
+
+    if (!seznam.length) { document.getElementById('poukazyZadostiTable').innerHTML = '<div class="empty">Žádné žádosti</div>'; return; }
+    const stavPopisek = {nova:'<span class="badge badge-nova">🆕 Nová</span>', vyrizena:'<span class="badge badge-ok">✅ Vyřízena</span>', zamitnuta:'<span class="badge badge-zruseno">❌ Zamítnuta</span>'};
+    document.getElementById('poukazyZadostiTable').innerHTML = `
+      <table><thead><tr><th>Datum</th><th>Hodnota</th><th>Kupující</th><th>Pro koho</th><th>Vzkaz</th><th>Stav</th><th>Akce</th></tr></thead>
+      <tbody>${seznam.map(z=>`<tr>
+        <td>${new Date(z.vytvoreno).toLocaleDateString('cs-CZ')}</td>
+        <td><strong>${Number(z.hodnota).toLocaleString('cs-CZ')} Kč</strong></td>
+        <td>${z.kupujici_jmeno}<br><small>${z.kupujici_email}${z.kupujici_telefon?' | '+z.kupujici_telefon:''}</small></td>
+        <td>${z.pro_koho||'—'}</td>
+        <td style="max-width:180px;font-size:0.85rem">${z.vzkaz||'—'}</td>
+        <td>${stavPopisek[z.stav]||z.stav}</td>
+        <td style="display:flex;gap:4px;flex-wrap:wrap">
+          ${z.stav==='nova' ? `<button class="btn btn-green btn-sm" onclick="vyriditPoukazZadost(${z.id})">💳 Potvrdit platbu a vydat</button>
+          <button class="btn btn-red btn-sm" onclick="zamitnoutPoukazZadost(${z.id})">❌ Zamítnout</button>` : ''}
+        </td>
+      </tr>`).join('')}</tbody></table>`;
+  } catch(e) { document.getElementById('poukazyZadostiTable').innerHTML = '<div class="error-msg">Chyba načítání</div>'; }
+}
+
+async function vyriditPoukazZadost(id) {
+  if (!confirm('Potvrzuješ, že jsi přijala platbu za tento poukaz? Poukaz se rovnou vydá a označí jako vyřízený.')) return;
+  try {
+    const seznam = await adminFetch(API+'/poukazy/zadosti/vse').then(r=>r.json());
+    const zadost = seznam.find(z => z.id === id);
+    if (!zadost) return;
+
+    const res = await adminFetch(API+'/poukazy', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ hodnota: zadost.hodnota, zakoupeno_kde: 'eshop', kupujici_jmeno: zadost.kupujici_jmeno, kupujici_email: zadost.kupujici_email, poznamka: zadost.pro_koho ? `Pro: ${zadost.pro_koho}` : '' })
+    });
+    if (res.ok) {
+      const poukaz = await res.json();
+      await adminFetch(API+'/poukazy/zadosti/'+id+'/stav', {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({stav:'vyrizena'})});
+      loadPoukazy();
+      zobrazitPoukazDetail(poukaz.id);
+    } else {
+      alert('Chyba při vydávání poukazu');
+    }
+  } catch(e) { alert('Chyba při zpracování žádosti'); }
+}
+
+async function zamitnoutPoukazZadost(id) {
+  if (!confirm('Opravdu zamítnout tuto žádost?')) return;
+  try {
+    await adminFetch(API+'/poukazy/zadosti/'+id+'/stav', {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({stav:'zamitnuta'})});
+    loadPoukazyZadosti();
+  } catch(e) { alert('Chyba'); }
+}
+
+function otevritVydatPoukaz() {
+  document.getElementById('pkJmeno').value = '';
+  document.getElementById('pkEmail').value = '';
+  document.getElementById('pkPoznamka').value = '';
+  document.getElementById('poukazMsg').innerHTML = '';
+  openModal('modalVydatPoukaz');
+}
+
+async function ulozitPoukaz() {
+  const msg = document.getElementById('poukazMsg');
+  try {
+    const res = await adminFetch(API+'/poukazy', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        hodnota: document.getElementById('pkHodnota').value,
+        zakoupeno_kde: document.getElementById('pkKde').value,
+        kupujici_jmeno: document.getElementById('pkJmeno').value.trim(),
+        kupujici_email: document.getElementById('pkEmail').value.trim(),
+        poznamka: document.getElementById('pkPoznamka').value.trim()
+      })
+    });
+    if (res.ok) {
+      const poukaz = await res.json();
+      closeModal('modalVydatPoukaz');
+      loadPoukazy();
+      zobrazitPoukazDetail(poukaz.id, poukaz);
+    } else {
+      const err = await res.json().catch(()=>({}));
+      msg.innerHTML = `<div class="error-msg">${err.chyba||'Chyba'}</div>`;
+    }
+  } catch(e) { msg.innerHTML = '<div class="error-msg">Chyba spojení</div>'; }
+}
+
+async function zobrazitPoukazDetail(id, poukazData=null) {
+  let poukaz = poukazData;
+  if (!poukaz) {
+    const seznam = await adminFetch(API+'/poukazy').then(r=>r.json());
+    poukaz = seznam.find(p => p.id === id);
+  }
+  if (!poukaz) return;
+  poslednePoukazData = poukaz;
+
+  document.getElementById('poukazDetail').innerHTML = `
+    <div style="font-size:1.8rem;font-weight:900;color:var(--brown);font-family:'Dancing Script',cursive">Dětské krůčky</div>
+    <div style="font-size:0.85rem;color:var(--text-light);margin-bottom:12px">Dárkový poukaz</div>
+    <div style="font-size:2rem;font-weight:900;margin:10px 0">${Number(poukaz.hodnota).toLocaleString('cs-CZ')} Kč</div>
+    <svg id="poukazBarcode"></svg>
+    <div style="font-family:monospace;font-size:1.1rem;letter-spacing:1px;margin:8px 0">${poukaz.kod}</div>
+    <div style="font-size:0.8rem;color:var(--text-light)">Platnost do ${new Date(poukaz.platnost_do).toLocaleDateString('cs-CZ')}</div>
+  `;
+  setTimeout(() => {
+    try { JsBarcode('#poukazBarcode', poukaz.ean, {format:'EAN13', width:2, height:60, fontSize:14}); } catch(e){}
+  }, 50);
+  openModal('modalZobrazitPoukaz');
+}
+
+function tisknoutPoukaz() {
+  if (!poslednePoukazData) return;
+  const p = poslednePoukazData;
+  const pw = window.open('','_blank','width=420,height=600');
+  pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Poukaz ${p.kod}</title>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></scr` + `ipt>
+  <style>
+    body{font-family:Arial,sans-serif;text-align:center;padding:30px}
+    .card{border:3px dashed #AE6965;border-radius:16px;padding:30px;max-width:340px;margin:0 auto}
+    .brand{font-family:'Comic Sans MS',cursive;font-size:1.8rem;color:#AE6965;font-weight:900}
+    .hodnota{font-size:2.4rem;font-weight:900;margin:16px 0;color:#3d2b1f}
+    .kod{font-family:monospace;font-size:1.2rem;letter-spacing:2px;margin-top:10px}
+    .platnost{font-size:0.85rem;color:#6b5548;margin-top:8px}
+  </style></head><body>
+  <div class="card">
+    <div class="brand">🦔 Dětské krůčky</div>
+    <div style="font-size:0.85rem;color:#6b5548">Dárkový poukaz</div>
+    <div class="hodnota">${Number(p.hodnota).toLocaleString('cs-CZ')} Kč</div>
+    <svg id="bc"></svg>
+    <div class="kod">${p.kod}</div>
+    <div class="platnost">Platnost do ${new Date(p.platnost_do).toLocaleDateString('cs-CZ')}</div>
+  </div>
+  <script>
+    JsBarcode('#bc', '${p.ean}', {format:'EAN13', width:2, height:60, fontSize:14});
+    window.onload = () => setTimeout(()=>window.print(), 300);
+  <\/script>
+  </body></html>`);
+  pw.document.close();
+}
+
+async function smazatPoukaz(id) {
+  if (!confirm('Opravdu zrušit tento poukaz? Nepůjde ho pak už použít.')) return;
+  try {
+    await adminFetch(API+'/poukazy/'+id, {method:'DELETE'});
+    loadPoukazy();
+  } catch(e) { alert('Chyba při mazání'); }
 }
 
 function otevritNovaVratka() {

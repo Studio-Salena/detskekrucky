@@ -434,6 +434,7 @@ footer {
     <a href="https://hasalovaalena-glitch.github.io/detskekrucky/obchodni-podminky.html">Obchodní podmínky</a>
     <a href="reklamacni-rad.html">Reklamační řád</a>
     <a href="#" onclick="openModal('modalVratky');return false;">↩️ Vrátit zboží</a>
+    <a href="#" onclick="openModal('modalPoukazy');return false;">🎁 Dárkový poukaz</a>
   </div>
   <div class="footer-copy">© 2026 Dětské krůčky – Monika Škarpichová | IČO: 24354635</div>
 </footer>
@@ -476,6 +477,14 @@ footer {
     </div>
     <div id="checkoutMsg"></div>
     <div class="order-summary" id="orderSummary"></div>
+    <div class="form-group">
+      <label>Mám dárkový poukaz</label>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="chPoukazKod" placeholder="DK-XXXX-XXXX">
+        <button type="button" onclick="uplatnitPoukazEshop()" style="padding:0 16px;background:var(--sage);color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;white-space:nowrap">Uplatnit</button>
+      </div>
+      <div id="chPoukazMsg" style="margin-top:6px"></div>
+    </div>
     <div class="section-divider">Kontaktní údaje</div>
     <div class="form-group"><label>Jméno a příjmení *</label><input type="text" id="chJmeno" placeholder="Jana Nováková"></div>
     <div class="form-row">
@@ -559,6 +568,33 @@ footer {
     </div>
 
     <button onclick="closeModal('modalVratky')" style="width:100%;padding:12px;background:none;border:2px solid var(--tan);border-radius:12px;font-family:'Lato',sans-serif;font-weight:700;font-size:0.9rem;cursor:pointer;color:var(--text-light)">Zavřít</button>
+  </div>
+</div>
+
+<!-- POUKAZY MODAL -->
+<div class="modal-overlay" id="modalPoukazy">
+  <div class="modal" style="max-width:460px">
+    <h3 style="font-family:'Dancing Script',cursive;color:var(--brown);font-size:1.6rem;margin-bottom:8px">🎁 Dárkový poukaz</h3>
+    <p style="color:var(--text-light);font-size:0.85rem;margin-bottom:20px">Ideální dárek, když si obdarovaný vybere velikost a styl sám. Poukaz platí 1 rok a dá se uplatnit na e-shopu i na prodejně.</p>
+    <div id="poukazyKrok1">
+      <div id="poukazyMsg"></div>
+      <div class="form-group">
+        <label>Vyberte hodnotu poukazu</label>
+        <div style="display:flex;gap:10px">
+          <button type="button" class="pk-hodnota-btn" data-hodnota="500" onclick="vybratHodnotuPoukazu(500,this)" style="flex:1;padding:14px;border:2px solid var(--tan-light);background:#fff;border-radius:12px;font-weight:700;cursor:pointer">500 Kč</button>
+          <button type="button" class="pk-hodnota-btn" data-hodnota="1000" onclick="vybratHodnotuPoukazu(1000,this)" style="flex:1;padding:14px;border:2px solid var(--tan-light);background:#fff;border-radius:12px;font-weight:700;cursor:pointer">1000 Kč</button>
+          <button type="button" class="pk-hodnota-btn" data-hodnota="1500" onclick="vybratHodnotuPoukazu(1500,this)" style="flex:1;padding:14px;border:2px solid var(--tan-light);background:#fff;border-radius:12px;font-weight:700;cursor:pointer">1500 Kč</button>
+        </div>
+      </div>
+      <div class="form-group"><label>Vaše jméno *</label><input type="text" id="pkJmeno" placeholder="Jana Nováková"></div>
+      <div class="form-group"><label>Váš e-mail *</label><input type="email" id="pkEmail" placeholder="jana@email.cz"></div>
+      <div class="form-group"><label>Telefon (nepovinné)</label><input type="text" id="pkTelefon" placeholder="+420 777 123 456"></div>
+      <div class="form-group"><label>Pro koho je poukaz (nepovinné)</label><input type="text" id="pkProKoho" placeholder="např. pro vnučku Elišku"></div>
+      <div class="form-group"><label>Vzkaz (nepovinné)</label><textarea id="pkVzkaz" rows="2" placeholder="Krátký vzkaz k dárku..." style="width:100%;padding:10px;border:2px solid var(--tan-light);border-radius:10px;font-family:inherit;resize:vertical"></textarea></div>
+      <p style="font-size:0.8rem;color:var(--text-light)">Po odeslání žádosti vás budeme kontaktovat s pokyny k platbě. Po přijetí platby vám pošleme kód poukazu na e-mail.</p>
+      <button onclick="odeslatZadostPoukaz()" style="width:100%;padding:14px;background:var(--brown);color:#fff;border:none;border-radius:12px;font-family:'Lato',sans-serif;font-weight:700;font-size:1rem;cursor:pointer;margin-bottom:10px">Odeslat žádost o poukaz</button>
+    </div>
+    <button onclick="closeModal('modalPoukazy')" style="width:100%;padding:12px;background:none;border:2px solid var(--tan);border-radius:12px;font-family:'Lato',sans-serif;font-weight:700;font-size:0.9rem;cursor:pointer;color:var(--text-light)">Zavřít</button>
   </div>
 </div>
 
@@ -784,13 +820,38 @@ function closeCart() {
   document.getElementById('cartSidebar').classList.remove('open');
 }
 
+let uplatnenyPoukaz = null;
+
 function openCheckout() {
   closeCart();
+  uplatnenyPoukaz = null;
+  document.getElementById('chPoukazKod').value = '';
+  document.getElementById('chPoukazMsg').innerHTML = '';
+  vykreslitSouhrnObjednavky();
+  document.getElementById('modalCheckout').classList.add('open');
+}
+
+function vykreslitSouhrnObjednavky() {
   const total = kosik.reduce((s, i) => s + i.cena * i.pocet, 0);
+  const sleva = uplatnenyPoukaz ? Math.min(uplatnenyPoukaz.zustatek, total) : 0;
   document.getElementById('orderSummary').innerHTML = `
     ${kosik.map(i => `<div class="order-summary-item"><span>${i.nazev} vel.${i.velikost} x${i.pocet}</span><span>${i.cena * i.pocet} Kč</span></div>`).join('')}
-    <div class="order-summary-total"><span>Celkem</span><span>${total} Kč</span></div>`;
-  document.getElementById('modalCheckout').classList.add('open');
+    ${sleva > 0 ? `<div class="order-summary-item" style="color:var(--sage);font-weight:700"><span>🎁 Poukaz ${uplatnenyPoukaz.kod}</span><span>−${sleva} Kč</span></div>` : ''}
+    <div class="order-summary-total"><span>Celkem</span><span>${total - sleva} Kč</span></div>`;
+}
+
+async function uplatnitPoukazEshop() {
+  const kod = document.getElementById('chPoukazKod').value.trim();
+  const msg = document.getElementById('chPoukazMsg');
+  if (!kod) { msg.innerHTML = '<div class="msg msg-error">Zadejte kód poukazu.</div>'; return; }
+  try {
+    const res = await fetch(API + '/poukazy/overit/' + encodeURIComponent(kod));
+    const data = await res.json();
+    if (!res.ok) { msg.innerHTML = `<div class="msg msg-error">${data.chyba}</div>`; uplatnenyPoukaz = null; vykreslitSouhrnObjednavky(); return; }
+    uplatnenyPoukaz = data;
+    msg.innerHTML = `<div class="msg msg-success">✅ Poukaz uplatněn! Zůstatek ${Number(data.zustatek).toLocaleString('cs-CZ')} Kč</div>`;
+    vykreslitSouhrnObjednavky();
+  } catch(e) { msg.innerHTML = '<div class="msg msg-error">Chyba spojení</div>'; }
 }
 
 function closeCheckout() {
@@ -826,7 +887,8 @@ async function odeslatObjednavku() {
       body: JSON.stringify({
         jmeno, email, telefon, ulice, mesto, psc,
         doprava, platba, celkem: total,
-        polozky: kosik.map(i => ({produkt_id: i.id, velikost: i.velikost, pocet: i.pocet, cena: i.cena}))
+        polozky: kosik.map(i => ({produkt_id: i.id, velikost: i.velikost, pocet: i.pocet, cena: i.cena})),
+        poukaz_kod: uplatnenyPoukaz ? uplatnenyPoukaz.kod : null
       })
     });
 
@@ -834,6 +896,7 @@ async function odeslatObjednavku() {
       document.getElementById('checkoutMsg').innerHTML = '<div class="msg msg-success">&#127881; Objednávka odeslána! Brzy vás zkontaktujeme.</div>';
       kosik = [];
       ulozitKosik();
+      uplatnenyPoukaz = null;
       btn.textContent = 'Hotovo! &#10003;';
       setTimeout(() => {
         document.getElementById('modalCheckout').classList.remove('open');
@@ -954,6 +1017,60 @@ async function overitObjednavkuVratky() {
   } catch (e) {
     msg.innerHTML = '<div class="msg msg-error">Chyba spojení, zkuste to prosím znovu.</div>';
   }
+}
+
+// ═══════════════════════════════
+// DÁRKOVÉ POUKAZY – žádost o koupi
+// ═══════════════════════════════
+let vybranaHodnotaPoukazu = null;
+
+function vybratHodnotuPoukazu(hodnota, btn) {
+  vybranaHodnotaPoukazu = hodnota;
+  document.querySelectorAll('.pk-hodnota-btn').forEach(b => {
+    b.style.background = '#fff';
+    b.style.borderColor = 'var(--tan-light)';
+    b.style.color = 'var(--text)';
+  });
+  btn.style.background = 'var(--brown)';
+  btn.style.borderColor = 'var(--brown)';
+  btn.style.color = '#fff';
+}
+
+async function odeslatZadostPoukaz() {
+  const msg = document.getElementById('poukazyMsg');
+  const jmeno = document.getElementById('pkJmeno').value.trim();
+  const email = document.getElementById('pkEmail').value.trim();
+
+  if (!vybranaHodnotaPoukazu) { msg.innerHTML = '<div class="msg msg-error">Vyberte prosím hodnotu poukazu.</div>'; return; }
+  if (!jmeno || !email) { msg.innerHTML = '<div class="msg msg-error">Vyplňte prosím jméno a e-mail.</div>'; return; }
+
+  msg.innerHTML = '<div style="color:var(--text-light)">⏳ Odesílám žádost…</div>';
+  try {
+    const res = await fetch(API + '/poukazy/zadost', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        hodnota: vybranaHodnotaPoukazu,
+        kupujici_jmeno: jmeno,
+        kupujici_email: email,
+        kupujici_telefon: document.getElementById('pkTelefon').value.trim(),
+        pro_koho: document.getElementById('pkProKoho').value.trim(),
+        vzkaz: document.getElementById('pkVzkaz').value.trim()
+      })
+    });
+    if (res.ok) {
+      msg.innerHTML = '<div class="msg msg-success">✅ Žádost odeslána! Brzy se vám ozveme s pokyny k platbě.</div>';
+      setTimeout(() => {
+        closeModal('modalPoukazy');
+        vybranaHodnotaPoukazu = null;
+        document.querySelectorAll('.pk-hodnota-btn').forEach(b => { b.style.background='#fff'; b.style.borderColor='var(--tan-light)'; b.style.color='var(--text)'; });
+        ['pkJmeno','pkEmail','pkTelefon','pkProKoho','pkVzkaz'].forEach(id=>document.getElementById(id).value='');
+        msg.innerHTML = '';
+      }, 2500);
+    } else {
+      const data = await res.json().catch(()=>({}));
+      msg.innerHTML = `<div class="msg msg-error">${data.chyba || 'Chyba při odesílání žádosti.'}</div>`;
+    }
+  } catch(e) { msg.innerHTML = '<div class="msg msg-error">Chyba spojení, zkuste to prosím znovu.</div>'; }
 }
 
 async function odeslatZadostVratky() {
