@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin — Dětské krůčky</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800&family=Dancing+Script:wght@600;700&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant:wght@400;600;700;800&family=Dancing+Script:wght@600;700&family=Nunito:wght@300;400;700&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -13,23 +13,23 @@
   --red:#e74c3c;--blue:#3498db;--orange:#f39c12;--purple:#9b59b6;
   --text:#3d2b1f;--text-light:#7a5c42;
 }
-body{font-family:'Lato',sans-serif;background:var(--cream);color:var(--text);min-height:100vh}
+body{font-family:'Nunito',sans-serif;background:var(--cream);color:var(--text);min-height:100vh}
 
 /* LOGIN */
 .login-overlay{position:fixed;inset:0;background:linear-gradient(135deg,var(--cream),#fde8d0);display:flex;align-items:center;justify-content:center;z-index:1000}
 .login-box{background:#fff;border-radius:24px;padding:48px;box-shadow:0 8px 40px rgba(139,69,19,0.15);width:100%;max-width:400px;text-align:center}
 .login-logo{font-family:'Dancing Script',cursive;font-size:2.2rem;color:var(--brown);margin-bottom:4px}
 .login-sub{color:var(--text-light);font-size:0.85rem;margin-bottom:32px}
-.login-box input{width:100%;padding:14px 16px;border:2px solid var(--tan-light);border-radius:12px;font-size:1rem;outline:none;margin-bottom:16px;font-family:'Lato',sans-serif}
+.login-box input{width:100%;padding:14px 16px;border:2px solid var(--tan-light);border-radius:12px;font-size:1rem;outline:none;margin-bottom:16px;font-family:'Nunito',sans-serif}
 .login-box input:focus{border-color:var(--brown)}
-.login-btn{width:100%;padding:14px;background:linear-gradient(135deg,var(--brown),var(--brown-dark));color:#fff;border:none;border-radius:12px;font-size:1rem;font-weight:700;cursor:pointer;font-family:'Lato',sans-serif}
+.login-btn{width:100%;padding:14px;background:linear-gradient(135deg,var(--brown),var(--brown-dark));color:#fff;border:none;border-radius:12px;font-size:1rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif}
 .login-error{color:var(--red);font-size:0.85rem;margin-top:12px;display:none}
 
 /* LAYOUT */
 .admin-wrap{display:none;min-height:100vh}
 .sidebar{width:230px;background:#fff;border-right:2px solid var(--tan-light);position:fixed;top:0;left:0;bottom:0;padding:0;display:flex;flex-direction:column;box-shadow:2px 0 12px rgba(139,69,19,0.06);z-index:50;transition:transform 0.3s;overflow-y:auto}
 .sidebar-logo{font-family:'Dancing Script',cursive;font-size:1.4rem;color:var(--brown);padding:20px;border-bottom:1px solid var(--tan-light);display:flex;align-items:center;justify-content:space-between}
-.sidebar-logo span{display:block;font-family:'Lato',sans-serif;font-size:0.65rem;color:var(--text-light);font-weight:400;letter-spacing:1px;text-transform:uppercase}
+.sidebar-logo span{display:block;font-family:'Nunito',sans-serif;font-size:0.65rem;color:var(--text-light);font-weight:400;letter-spacing:1px;text-transform:uppercase}
 .nav-section{padding:8px 0}
 .nav-label{font-size:0.65rem;color:var(--text-light);text-transform:uppercase;letter-spacing:1.5px;padding:8px 20px 4px;font-weight:700}
 .nav-item{display:flex;align-items:center;gap:10px;padding:11px 20px;cursor:pointer;color:var(--text-light);font-weight:600;font-size:0.87rem;transition:all 0.2s;border-left:3px solid transparent;position:relative}
@@ -38,7 +38,7 @@ body{font-family:'Lato',sans-serif;background:var(--cream);color:var(--text);min
 .nav-item .icon{font-size:1rem;width:20px;text-align:center}
 .nav-badge{background:var(--red);color:#fff;border-radius:10px;padding:2px 7px;font-size:0.65rem;font-weight:700;margin-left:auto}
 .sidebar-footer{margin-top:auto;padding:16px;border-top:1px solid var(--tan-light)}
-.logout-btn{width:100%;padding:10px;background:none;border:2px solid var(--tan);border-radius:8px;color:var(--text-light);cursor:pointer;font-family:'Lato',sans-serif;font-weight:600;font-size:0.85rem;transition:all 0.2s}
+.logout-btn{width:100%;padding:10px;background:none;border:2px solid var(--tan);border-radius:8px;color:var(--text-light);cursor:pointer;font-family:'Nunito',sans-serif;font-weight:600;font-size:0.85rem;transition:all 0.2s}
 .logout-btn:hover{border-color:var(--red);color:var(--red)}
 
 /* TOP BAR */
@@ -47,7 +47,7 @@ body{font-family:'Lato',sans-serif;background:var(--cream);color:var(--text);min
 .menu-toggle{display:none;background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--brown)}
 .global-search{display:flex;align-items:center;gap:8px;background:var(--cream);border:2px solid var(--tan-light);border-radius:20px;padding:6px 14px;width:280px;transition:all 0.2s}
 .global-search:focus-within{border-color:var(--brown);background:#fff}
-.global-search input{border:none;background:none;outline:none;font-family:'Lato',sans-serif;font-size:0.85rem;width:100%;color:var(--text)}
+.global-search input{border:none;background:none;outline:none;font-family:'Nunito',sans-serif;font-size:0.85rem;width:100%;color:var(--text)}
 .search-results{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--tan-light);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.1);max-height:300px;overflow-y:auto;display:none;z-index:100;margin-top:4px}
 .search-result-item{padding:10px 16px;cursor:pointer;font-size:0.85rem;border-bottom:1px solid var(--tan-light);transition:background 0.1s}
 .search-result-item:hover{background:var(--cream)}
@@ -62,14 +62,14 @@ body{font-family:'Lato',sans-serif;background:var(--cream);color:var(--text);min
 .page{display:none}
 .page.active{display:block}
 .page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px}
-.page-title{font-family:'Playfair Display',serif;font-size:1.7rem;color:var(--brown)}
+.page-title{font-family:'Cormorant',serif;font-size:1.7rem;color:var(--brown)}
 
 /* STATS */
 .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
 .stat-card{background:#fff;border-radius:16px;padding:18px;border:1px solid var(--tan-light);transition:all 0.2s;cursor:default}
 .stat-card:hover{box-shadow:0 4px 20px rgba(139,69,19,0.1);transform:translateY(-2px)}
 .stat-label{font-size:0.7rem;color:var(--text-light);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
-.stat-value{font-size:1.8rem;font-weight:700;color:var(--brown);font-family:'Playfair Display',serif}
+.stat-value{font-size:1.8rem;font-weight:700;color:var(--brown);font-family:'Cormorant',serif}
 .stat-sub{font-size:0.72rem;margin-top:4px;color:var(--text-light)}
 .stat-green{color:var(--sage)!important}
 .stat-red{color:var(--red)!important}
@@ -77,7 +77,7 @@ body{font-family:'Lato',sans-serif;background:var(--cream);color:var(--text);min
 
 /* CHART */
 .chart-wrap{background:#fff;border-radius:16px;border:1px solid var(--tan-light);padding:20px;margin-bottom:24px}
-.chart-title{font-family:'Playfair Display',serif;color:var(--brown);font-size:1rem;margin-bottom:16px}
+.chart-title{font-family:'Cormorant',serif;color:var(--brown);font-size:1rem;margin-bottom:16px}
 .bar-chart{display:flex;align-items:flex-end;gap:8px;height:120px;padding-bottom:24px;position:relative;border-bottom:2px solid var(--tan-light)}
 .bar-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
 .bar{background:linear-gradient(180deg,var(--brown),var(--tan));border-radius:6px 6px 0 0;width:100%;min-height:4px;transition:all 0.3s;cursor:pointer;position:relative}
@@ -89,7 +89,7 @@ body{font-family:'Lato',sans-serif;background:var(--cream);color:var(--text);min
 /* TABLE */
 .table-wrap{background:#fff;border-radius:16px;border:1px solid var(--tan-light);overflow:hidden;margin-bottom:20px}
 .table-header{padding:16px 20px;border-bottom:1px solid var(--tan-light);display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,#fff,var(--cream));flex-wrap:wrap;gap:8px}
-.table-header h3{font-family:'Playfair Display',serif;color:var(--brown);font-size:1rem}
+.table-header h3{font-family:'Cormorant',serif;color:var(--brown);font-size:1rem}
 .table-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 table{width:100%;border-collapse:collapse}
 th{padding:10px 14px;text-align:left;font-size:0.7rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-light);border-bottom:1px solid var(--tan-light);background:var(--cream);font-weight:700}
@@ -109,7 +109,7 @@ tr:hover td{background:#fffaf5}
 .badge-vyprodano{background:#fde8e8;color:#e74c3c}
 
 /* BUTTONS */
-.btn{padding:7px 14px;border-radius:8px;border:none;cursor:pointer;font-family:'Lato',sans-serif;font-weight:700;font-size:0.8rem;transition:all 0.2s;display:inline-flex;align-items:center;gap:5px}
+.btn{padding:7px 14px;border-radius:8px;border:none;cursor:pointer;font-family:'Nunito',sans-serif;font-weight:700;font-size:0.8rem;transition:all 0.2s;display:inline-flex;align-items:center;gap:5px}
 .btn-primary{background:linear-gradient(135deg,var(--brown),var(--brown-dark));color:#fff}
 .btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(139,69,19,0.3)}
 .btn-sm{padding:4px 9px;font-size:0.73rem}
@@ -123,24 +123,24 @@ tr:hover td{background:#fffaf5}
 .btn-outline:hover{border-color:var(--brown);color:var(--brown)}
 .btn-csv{background:linear-gradient(135deg,#27ae60,#1e8449);color:#fff}
 .btn-print{background:linear-gradient(135deg,#6c757d,#495057);color:#fff}
-.refresh-btn{background:none;border:2px solid var(--tan);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:0.8rem;color:var(--text-light);font-family:'Lato',sans-serif;transition:all 0.2s}
+.refresh-btn{background:none;border:2px solid var(--tan);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:0.8rem;color:var(--text-light);font-family:'Nunito',sans-serif;transition:all 0.2s}
 .refresh-btn:hover{border-color:var(--brown);color:var(--brown)}
 
 /* FORM */
 .form-group{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
 .form-group label{font-size:0.8rem;font-weight:700;color:var(--text-light)}
-.form-group input,.form-group select,.form-group textarea{padding:9px 12px;border:2px solid var(--tan-light);border-radius:10px;font-family:'Lato',sans-serif;font-size:0.88rem;outline:none;background:#fff}
+.form-group input,.form-group select,.form-group textarea{padding:9px 12px;border:2px solid var(--tan-light);border-radius:10px;font-family:'Nunito',sans-serif;font-size:0.88rem;outline:none;background:#fff}
 .form-group input:focus,.form-group select:focus{border-color:var(--brown)}
 .form-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .form-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
-.search-input{padding:7px 12px;border:2px solid var(--tan-light);border-radius:8px;font-family:'Lato',sans-serif;font-size:0.82rem;outline:none;width:180px}
+.search-input{padding:7px 12px;border:2px solid var(--tan-light);border-radius:8px;font-family:'Nunito',sans-serif;font-size:0.82rem;outline:none;width:180px}
 .search-input:focus{border-color:var(--brown)}
 
 /* MODAL */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center;z-index:500;padding:16px}
 .modal-overlay.open{display:flex}
 .modal{background:#fff;border-radius:20px;padding:28px;width:100%;max-width:560px;max-height:92vh;overflow-y:auto}
-.modal h3{font-family:'Playfair Display',serif;color:var(--brown);margin-bottom:18px;font-size:1.2rem}
+.modal h3{font-family:'Cormorant',serif;color:var(--brown);margin-bottom:18px;font-size:1.2rem}
 .modal-footer{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;padding-top:14px;border-top:1px solid var(--tan-light)}
 
 /* MISC */
@@ -150,9 +150,9 @@ tr:hover td{background:#fffaf5}
 .success-msg{background:#e8f7ee;color:#27ae60;padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:0.83rem}
 .info-box{background:var(--cream);border-radius:10px;padding:12px 14px;border:1px solid var(--tan-light);font-size:0.84rem;margin-bottom:12px}
 .section-divider{font-family:'Dancing Script',cursive;font-size:1.1rem;color:var(--brown);margin:16px 0 10px;padding-bottom:5px;border-bottom:1px solid var(--tan-light)}
-select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px;font-size:0.78rem;cursor:pointer;font-family:'Lato',sans-serif}
+select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px;font-size:0.78rem;cursor:pointer;font-family:'Nunito',sans-serif}
 .filter-pills{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
-.pill{padding:5px 12px;border-radius:16px;border:2px solid var(--tan-light);background:#fff;cursor:pointer;font-family:'Lato',sans-serif;font-weight:700;font-size:0.75rem;color:var(--text-light);transition:all 0.2s}
+.pill{padding:5px 12px;border-radius:16px;border:2px solid var(--tan-light);background:#fff;cursor:pointer;font-family:'Nunito',sans-serif;font-weight:700;font-size:0.75rem;color:var(--text-light);transition:all 0.2s}
 .pill.active{background:var(--brown);color:#fff;border-color:var(--brown)}
 .pill:hover:not(.active){border-color:var(--brown);color:var(--brown)}
 
@@ -595,7 +595,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           <div style="padding:16px">
             <div class="form-group">
               <label>Datum</label>
-              <input type="date" id="qDatum" style="padding:9px 12px;border:2px solid var(--tan-light);border-radius:10px;font-family:'Lato',sans-serif;font-size:0.88rem;outline:none;width:100%">
+              <input type="date" id="qDatum" style="padding:9px 12px;border:2px solid var(--tan-light);border-radius:10px;font-family:'Nunito',sans-serif;font-size:0.88rem;outline:none;width:100%">
             </div>
             <div style="font-size:0.78rem;font-weight:700;color:var(--text-light);margin-bottom:8px">Klikni na časy které chceš přidat:</div>
             <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
@@ -2637,7 +2637,7 @@ async function zobrazitPoukazDetail(id, poukazData=null) {
         <img src="logo.jpg" alt="Dětské krůčky" style="width:100%;max-width:100px;border-radius:50%">
       </div>
       <div style="flex:1;padding:14px 16px 12px;text-align:left">
-        <div style="font-family:'Playfair Display',serif;font-weight:800;font-size:1.15rem;color:var(--sage);letter-spacing:0.5px;margin-bottom:6px">DÁRKOVÝ POUKAZ</div>
+        <div style="font-family:'Cormorant',serif;font-weight:800;font-size:1.15rem;color:var(--sage);letter-spacing:0.5px;margin-bottom:6px">DÁRKOVÝ POUKAZ</div>
         <div style="font-size:0.85rem;font-weight:700;color:var(--text);margin-bottom:4px">V HODNOTĚ: <span style="color:var(--brown);font-weight:900;border-bottom:2px solid var(--brown)">${Number(poukaz.hodnota).toLocaleString('cs-CZ')} Kč</span></div>
         <div style="font-size:0.7rem;color:var(--text-light);margin-bottom:10px">Na nákup barefoot obuvi</div>
         <div style="font-size:0.68rem;line-height:1.7">
@@ -2663,10 +2663,10 @@ function tisknoutPoukaz() {
   pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Poukaz ${p.kod}</title>
   <base href="${zakladUrl}">
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></scr` + `ipt>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant:wght@700;800&family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; }
-    body{font-family:'Lato',sans-serif;padding:24px;background:#e8e2d5;margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh}
+    body{font-family:'Nunito',sans-serif;padding:24px;background:#e8e2d5;margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh}
     .card{
       position:relative;
       display:flex;
@@ -2701,7 +2701,7 @@ function tisknoutPoukaz() {
       justify-content:center;
     }
     .title{
-      font-family:'Playfair Display',serif;
+      font-family:'Cormorant',serif;
       font-weight:800;
       font-size:1.85rem;
       color:#7A816C;

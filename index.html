@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dětské krůčky – Barefoot Obuv</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Dancing+Script:wght@600;700&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,400;0,600;0,700;1,400&family=Dancing+Script:wght@600;700&family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
     --cream: #E5DFD6;
@@ -33,7 +33,7 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
-    font-family: 'Lato', sans-serif;
+    font-family: 'Nunito', sans-serif;
     background: #fff8f2;
     color: var(--text);
     overflow-x: hidden;
@@ -88,7 +88,7 @@
     display: block;
   }
   .logo-text .sub {
-    font-family: 'Lato', sans-serif;
+    font-family: 'Nunito', sans-serif;
     font-size: 0.62rem;
     letter-spacing: 0.18em;
     color: var(--brown-light);
@@ -97,7 +97,7 @@
   }
   nav { display: flex; gap: 8px; align-items: center; }
   nav a {
-    font-family: 'Lato', sans-serif;
+    font-family: 'Nunito', sans-serif;
     font-size: 0.88rem;
     font-weight: 400;
     color: var(--text-light);
@@ -258,7 +258,7 @@
     margin-bottom: 8px;
   }
   .section-title {
-    font-family: 'Playfair Display', serif;
+    font-family: 'Cormorant', serif;
     font-size: 2.1rem;
     color: var(--brown-dark);
     margin-bottom: 16px;
@@ -303,7 +303,7 @@
   .philo-card:hover::after { transform: scaleX(1); }
   .philo-icon { font-size: 2.4rem; margin-bottom: 16px; }
   .philo-card h3 {
-    font-family: 'Playfair Display', serif;
+    font-family: 'Cormorant', serif;
     font-size: 1.15rem;
     color: var(--brown);
     margin-bottom: 10px;
@@ -355,7 +355,7 @@
   }
   .col-body { padding: 22px; }
   .col-body h3 {
-    font-family: 'Playfair Display', serif;
+    font-family: 'Cormorant', serif;
     font-size: 1.1rem;
     color: var(--brown-dark);
     margin-bottom: 6px;
@@ -512,7 +512,7 @@
     content: '"';
     position: absolute;
     top: 12px; left: 20px;
-    font-family: 'Playfair Display', serif;
+    font-family: 'Cormorant', serif;
     font-size: 4rem;
     color: var(--sage-light);
     line-height: 1;
@@ -671,7 +671,7 @@
   }
   .strip-item strong {
     display: block;
-    font-family: 'Playfair Display', serif;
+    font-family: 'Cormorant', serif;
     font-size: 1.7rem;
     color: var(--brown-dark);
   }
@@ -1947,7 +1947,7 @@ Z" fill="#f7f0e6" stroke="#6b5a48" stroke-width="3.5" stroke-linejoin="round"/><
     <div style="background:#fff;border-radius:20px;box-shadow:0 6px 28px rgba(107,76,53,0.1);padding:28px;margin-bottom:24px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
         <button onclick="rezMesicZmena(-1)" style="background:#fff8f2;border:2px solid var(--tan-light);border-radius:10px;width:36px;height:36px;font-size:1.1rem;cursor:pointer;color:var(--brown);">‹</button>
-        <h3 id="rez-mesic-label" style="font-family:'Playfair Display',serif;color:var(--brown);font-size:1.15rem;"></h3>
+        <h3 id="rez-mesic-label" style="font-family:'Cormorant',serif;color:var(--brown);font-size:1.15rem;"></h3>
         <button onclick="rezMesicZmena(1)" style="background:#fff8f2;border:2px solid var(--tan-light);border-radius:10px;width:36px;height:36px;font-size:1.1rem;cursor:pointer;color:var(--brown);">›</button>
       </div>
       <div id="rez-cal-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px;">
@@ -1969,31 +1969,31 @@ Z" fill="#f7f0e6" stroke="#6b5a48" stroke-width="3.5" stroke-linejoin="round"/><
 
     <!-- Formulář -->
     <div id="rez-form-wrap" style="display:none;background:#fff;border-radius:20px;box-shadow:0 6px 28px rgba(107,76,53,0.1);padding:28px;margin-bottom:24px;">
-      <h3 style="font-family:'Playfair Display',serif;color:var(--brown);font-size:1.15rem;margin-bottom:18px;">Vaše údaje 📝</h3>
+      <h3 style="font-family:'Cormorant',serif;color:var(--brown);font-size:1.15rem;margin-bottom:18px;">Vaše údaje 📝</h3>
       <div id="rez-selected-summary" style="background:var(--sage-light);border-radius:12px;padding:12px 16px;font-weight:700;font-size:0.9rem;margin-bottom:20px;display:flex;gap:16px;flex-wrap:wrap;color:var(--text);"></div>
       <div class="rez-form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
         <div>
           <label style="display:block;font-size:0.8rem;font-weight:700;color:var(--text-light);margin-bottom:5px;">Jméno a příjmení *</label>
-          <input type="text" id="rez-jmeno" placeholder="Jana Nováková" style="width:100%;padding:10px 14px;border:2px solid var(--tan-light);border-radius:10px;font-family:'Lato',sans-serif;font-size:0.95rem;outline:none;">
+          <input type="text" id="rez-jmeno" placeholder="Jana Nováková" style="width:100%;padding:10px 14px;border:2px solid var(--tan-light);border-radius:10px;font-family:'Nunito',sans-serif;font-size:0.95rem;outline:none;">
         </div>
         <div>
           <label style="display:block;font-size:0.8rem;font-weight:700;color:var(--text-light);margin-bottom:5px;">Telefon *</label>
-          <input type="tel" id="rez-telefon" placeholder="+420 123 456 789" style="width:100%;padding:10px 14px;border:2px solid var(--tan-light);border-radius:10px;font-family:'Lato',sans-serif;font-size:0.95rem;outline:none;">
+          <input type="tel" id="rez-telefon" placeholder="+420 123 456 789" style="width:100%;padding:10px 14px;border:2px solid var(--tan-light);border-radius:10px;font-family:'Nunito',sans-serif;font-size:0.95rem;outline:none;">
         </div>
       </div>
       <div class="rez-form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
         <div>
           <label style="display:block;font-size:0.8rem;font-weight:700;color:var(--text-light);margin-bottom:5px;">E-mail *</label>
-          <input type="email" id="rez-email" placeholder="jana@email.cz" style="width:100%;padding:10px 14px;border:2px solid var(--tan-light);border-radius:10px;font-family:'Lato',sans-serif;font-size:0.95rem;outline:none;">
+          <input type="email" id="rez-email" placeholder="jana@email.cz" style="width:100%;padding:10px 14px;border:2px solid var(--tan-light);border-radius:10px;font-family:'Nunito',sans-serif;font-size:0.95rem;outline:none;">
         </div>
         <div>
           <label style="display:block;font-size:0.8rem;font-weight:700;color:var(--text-light);margin-bottom:5px;">Věk / velikost dítěte</label>
-          <input type="text" id="rez-vek" placeholder="např. 3 roky, vel. 24" style="width:100%;padding:10px 14px;border:2px solid var(--tan-light);border-radius:10px;font-family:'Lato',sans-serif;font-size:0.95rem;outline:none;">
+          <input type="text" id="rez-vek" placeholder="např. 3 roky, vel. 24" style="width:100%;padding:10px 14px;border:2px solid var(--tan-light);border-radius:10px;font-family:'Nunito',sans-serif;font-size:0.95rem;outline:none;">
         </div>
       </div>
       <div style="margin-bottom:20px;">
         <label style="display:block;font-size:0.8rem;font-weight:700;color:var(--text-light);margin-bottom:5px;">Poznámka / typ obuvi</label>
-        <textarea id="rez-poznamka" rows="3" placeholder="Co vás zajímá? Papučky, celoroční, zimní…" style="width:100%;padding:10px 14px;border:2px solid var(--tan-light);border-radius:10px;font-family:'Lato',sans-serif;font-size:0.95rem;outline:none;resize:vertical;"></textarea>
+        <textarea id="rez-poznamka" rows="3" placeholder="Co vás zajímá? Papučky, celoroční, zimní…" style="width:100%;padding:10px 14px;border:2px solid var(--tan-light);border-radius:10px;font-family:'Nunito',sans-serif;font-size:0.95rem;outline:none;resize:vertical;"></textarea>
       </div>
       <button onclick="rezOdeslat()" class="btn-primary" style="width:100%;text-align:center;border:none;cursor:pointer;">Odeslat rezervaci 🐾</button>
     </div>
@@ -2001,7 +2001,7 @@ Z" fill="#f7f0e6" stroke="#6b5a48" stroke-width="3.5" stroke-linejoin="round"/><
     <!-- Úspěch -->
     <div id="rez-success" style="display:none;background:#fff;border-radius:20px;box-shadow:0 6px 28px rgba(107,76,53,0.1);padding:44px 28px;text-align:center;">
       <div style="font-size:3rem;margin-bottom:12px;">🎉</div>
-      <h3 style="font-family:'Playfair Display',serif;color:var(--brown);font-size:1.3rem;margin-bottom:8px;">Rezervace přijata!</h3>
+      <h3 style="font-family:'Cormorant',serif;color:var(--brown);font-size:1.3rem;margin-bottom:8px;">Rezervace přijata!</h3>
       <p style="color:var(--text-light);margin-bottom:24px;">Ozveme se vám co nejdříve na telefon nebo e-mail k potvrzení termínu.</p>
       <button onclick="rezReset()" class="btn-outline" style="border:2px solid var(--brown);cursor:pointer;background:none;">Zamluvit další termín</button>
     </div>
@@ -2705,7 +2705,7 @@ function rezRenderSloty() {
     const chip = document.createElement('button');
     const vybran = rezVybranySlot === s.id;
     chip.textContent = `${s.cas_od.slice(0,5)} – ${s.cas_do.slice(0,5)}`;
-    chip.style.cssText = `padding:10px 18px;border-radius:30px;border:2px solid ${s.obsazeno ? '#e0dbd4' : 'var(--sage-dark)'};background:${vybran ? 'var(--sage-dark)' : '#fff'};color:${s.obsazeno ? '#bbb' : (vybran ? '#fff' : 'var(--text)')};font-family:'Lato',sans-serif;font-weight:700;font-size:0.9rem;cursor:${s.obsazeno?'not-allowed':'pointer'};text-decoration:${s.obsazeno?'line-through':'none'};`;
+    chip.style.cssText = `padding:10px 18px;border-radius:30px;border:2px solid ${s.obsazeno ? '#e0dbd4' : 'var(--sage-dark)'};background:${vybran ? 'var(--sage-dark)' : '#fff'};color:${s.obsazeno ? '#bbb' : (vybran ? '#fff' : 'var(--text)')};font-family:'Nunito',sans-serif;font-weight:700;font-size:0.9rem;cursor:${s.obsazeno?'not-allowed':'pointer'};text-decoration:${s.obsazeno?'line-through':'none'};`;
     if (!s.obsazeno) chip.onclick = () => rezVybratSlot(s.id);
     grid.appendChild(chip);
   });
