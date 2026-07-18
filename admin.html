@@ -1553,7 +1553,7 @@ async function ulozitProdukt() {
   const nazev=document.getElementById('pNazev').value, cena=document.getElementById('pCena').value;
   if (!nazev||!cena) { document.getElementById('produktMsg').innerHTML='<div class="error-msg">Vyplňte název a cenu.</div>'; return; }
   try {
-    const res = await adminFetch(API+'/produkty',{method:'POST',headers:{'Content-Type':'application/json'},
+    const res = await adminFetch(API+'/sklad/produkty',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({nazev,znacka:document.getElementById('pZnacka').value,cena:parseInt(cena),
       cena_puvodni:document.getElementById('pCenaPuvodni').value||null,
       kategorie:document.getElementById('pKategorie').value,
@@ -1601,7 +1601,7 @@ function upravitProdukt(id,nazev,znacka,cena,cenaPuvodni,emoji,popis,ean,kategor
 async function ulozitUpravuProduktu() {
   const id=document.getElementById('upId').value;
   try {
-    const res = await adminFetch(API+'/produkty/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},
+    const res = await adminFetch(API+'/sklad/produkty/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({nazev:document.getElementById('upNazev').value,znacka:document.getElementById('upZnacka').value,
       cena:parseInt(document.getElementById('upCena').value),cena_puvodni:document.getElementById('upCenaPuvodni').value||null,emoji:document.getElementById('upEmoji').value||'',popis:document.getElementById('upPopis').value||'',ean:document.getElementById('upEan').value||null,kategorie:document.getElementById('upKategorie').value})});
     if (res.ok) { document.getElementById('upravitMsg').innerHTML='<div class="success-msg">✅ Uloženo!</div>'; setTimeout(()=>{closeModal('modalUpravitProdukt');loadProdukty();},1500); }
