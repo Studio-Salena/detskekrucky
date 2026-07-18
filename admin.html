@@ -1360,7 +1360,16 @@ function renderSklad(data) {
   if (!data.length) { document.getElementById('skladTable').innerHTML = '<div class="empty">Prázdný sklad</div>'; return; }
   document.getElementById('skladTable').innerHTML = `
     <table><thead><tr><th><input type="checkbox" onchange="vybratVseSklad(this)"></th><th>Produkt</th><th>Značka</th><th>Vel.</th><th>Kusů</th><th>Min.</th><th>Status</th><th>Akce</th></tr></thead>
-    <tbody>${data.map(s=>`<tr>
+    <tbody>${data.map(s=>{
+      if (s.velikost === null) {
+        return `<tr>
+          <td></td>
+          <td><strong>${s.nazev}</strong></td><td>${s.znacka}</td><td colspan="3" style="color:var(--text-light)">Zatím žádná velikost na skladu</td>
+          <td><span class="badge badge-vyprodano">Bez skladu</span></td>
+          <td><button class="btn btn-green btn-sm" onclick="openModal('modalNaskladnit')">+ Naskladnit</button></td>
+        </tr>`;
+      }
+      return `<tr>
       <td><input type="checkbox" data-klic="${s.id}_${s.velikost}" onchange="toggleVybranySklad(this)" ${vybraneSklad.has(s.id+'_'+s.velikost)?'checked':''}></td>
       <td><strong>${s.nazev}</strong></td><td>${s.znacka}</td><td><strong>${s.velikost}</strong></td>
       <td><strong style="color:${s.pocet_kusu===0?'var(--red)':s.nizky_stav?'var(--orange)':'var(--text)'}">${s.pocet_kusu} ks</strong></td>
@@ -1371,7 +1380,8 @@ function renderSklad(data) {
         <button class="btn btn-orange btn-sm" onclick="rychleOdecist(${s.id},${s.velikost},'${s.nazev}')">−</button>
         <button class="btn btn-red btn-sm" onclick="smazatSkladPolozku(${s.id},${s.velikost},'${s.nazev}')">🗑️</button>
       </td>
-    </tr>`).join('')}</tbody></table>`;
+    </tr>`;
+    }).join('')}</tbody></table>`;
 }
 
 function toggleVybranySklad(cb) {

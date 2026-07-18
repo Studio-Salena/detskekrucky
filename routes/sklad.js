@@ -10,7 +10,7 @@ router.get('/', async (req, res) => {
              s.velikost, s.pocet_kusu, s.min_pocet,
              CASE WHEN s.pocet_kusu <= s.min_pocet THEN true ELSE false END as nizky_stav
       FROM produkty p
-      JOIN sklad s ON p.id = s.produkt_id
+      LEFT JOIN sklad s ON p.id = s.produkt_id
       ORDER BY p.nazev, s.velikost
     `);
     res.json(result.rows);
