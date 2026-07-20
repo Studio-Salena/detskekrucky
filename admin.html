@@ -2213,9 +2213,9 @@ function tiskUctenkyData(prodej, cislo) {
     <div style="font-size:11px;color:#999">Barefoot obuv</div>
     <div style="font-size:11px">Monika Škarpichová | IČO: 24354635</div>
     <div style="font-size:11px">Holešovská 752, Hulín 768 24</div>
+    <div style="font-size:10px;color:#999;margin-top:4px">Fyzická osoba zapsaná v živnostenském rejstříku vedeném MÚ Kroměříž.</div>
   </div>
   <div class="divider"></div>
-  <div class="row"><span><strong>Účtenka č.:</strong></span><span>#${String(cislo).padStart(4,'0')}</span></div>
   <div class="row"><span><strong>Datum:</strong></span><span>${datum.toLocaleDateString('cs-CZ')}</span></div>
   <div class="row"><span><strong>Čas:</strong></span><span>${datum.toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})}</span></div>
   ${prodej.zakaznik?`<div class="row"><span><strong>Zákazník:</strong></span><span>${prodej.zakaznik}</span></div>`:''}
