@@ -194,6 +194,8 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body>
 
@@ -474,6 +476,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <div class="page-title">💰 Účetnictví</div>
         <div class="table-actions">
           <button class="btn btn-csv no-print" onclick="exportCSV('ucetnictvi')">⬇ CSV pro účetní</button>
+          <button class="btn btn-csv no-print" onclick="exportUcetnictviPDF()">📄 PDF pro účetní</button>
           <button class="btn btn-print no-print" onclick="window.print()">🖨️ Tisk</button>
           <button class="refresh-btn no-print" onclick="loadUcetnictvi()">↻</button>
         </div>
@@ -1737,6 +1740,117 @@ async function loadUcetnictvi() {
         <td>${o.platba||'—'}</td><td>${stavBadge(o.stav)}</td>
       </tr>`).join('')}</tbody></table>`;
   } catch(e) { console.error(e); }
+}
+
+// EXPORT PDF PRO ÚČETNÍ
+async function exportUcetnictviPDF() {
+  try {
+    const obj = await adminFetch(API+'/objednavky').then(r=>r.json());
+    const objAktivni = obj.filter(o=>o.stav!=='zruseno');
+
+    let prodejnaTrzbyPdf = 0;
+    try {
+      const p = await adminFetch(API+'/prodejna').then(r=>r.json());
+      prodejnaTrzbyPdf = Array.isArray(p) ? p.reduce((s,x)=>s+Number(x.celkem),0) : 0;
+    } catch(e) {}
+
+    let vratkyCelkemPdf = 0;
+    try {
+      const v = await adminFetch(API+'/prodejna/vratky/vse').then(r=>r.json());
+      vratkyCelkemPdf = Array.isArray(v) ? v.reduce((s,x)=>s+Number(x.castka),0) : 0;
+    } catch(e) {}
+
+    let poukazyZbozíPdf = 0;
+    try {
+      const pp = await adminFetch(API+'/poukazy/pouziti/vse').then(r=>r.json());
+      poukazyZbozíPdf = Array.isArray(pp) ? pp.reduce((s,x)=>s+Number(x.castka),0) : 0;
+    } catch(e) {}
+
+    const trzbyEshop = objAktivni.reduce((s,o)=>s+Number(o.celkem),0);
+    const celkoveTrzby = trzbyEshop + prodejnaTrzbyPdf - vratkyCelkemPdf;
+    const prumer = objAktivni.length ? Math.round(trzbyEshop/objAktivni.length) : 0;
+
+    // Měsíční přehled (e-shop objednávky)
+    const mn = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
+    const mesice = {};
+    objAktivni.forEach(o=>{
+      const d=new Date(o.vytvoreno);
+      const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+      if (!mesice[k]) mesice[k]={nazev:mn[d.getMonth()]+' '+d.getFullYear(),trzby:0,pocet:0};
+      mesice[k].trzby+=Number(o.celkem); mesice[k].pocet++;
+    });
+    const ml = Object.entries(mesice).sort((a,b)=>b[0].localeCompare(a[0]));
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    // Hlavička
+    doc.setFontSize(16); doc.setFont(undefined,'bold');
+    doc.text('Dětské krůčky', 14, 18);
+    doc.setFontSize(9); doc.setFont(undefined,'normal');
+    doc.text('Monika Škarpichová | IČO: 24354635', 14, 25);
+    doc.text('Holešovská 752, Hulín 768 24', 14, 30);
+    doc.text('Fyzická osoba zapsaná v živnostenském rejstříku vedeném MÚ Kroměříž.', 14, 35);
+    doc.text('Neplátce DPH', 14, 40);
+
+    doc.setFontSize(13); doc.setFont(undefined,'bold');
+    doc.text('Přehled tržeb pro účetní', 14, 52);
+    doc.setFontSize(9); doc.setFont(undefined,'normal');
+    doc.text('Vygenerováno: ' + new Date().toLocaleDateString('cs-CZ') + ' ' + new Date().toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'}), 14, 58);
+
+    // Souhrn
+    doc.autoTable({
+      startY: 65,
+      head: [['Ukazatel', 'Hodnota']],
+      body: [
+        ['Tržby celkem (e-shop + prodejna − vratky)', celkoveTrzby.toLocaleString('cs-CZ') + ' Kč'],
+        ['Tržby e-shop', trzbyEshop.toLocaleString('cs-CZ') + ' Kč'],
+        ['Tržby prodejna', prodejnaTrzbyPdf.toLocaleString('cs-CZ') + ' Kč'],
+        ['Vratky celkem', '−' + vratkyCelkemPdf.toLocaleString('cs-CZ') + ' Kč'],
+        ['Zboží vydané za poukazy', poukazyZbozíPdf.toLocaleString('cs-CZ') + ' Kč'],
+        ['Počet e-shop objednávek', String(objAktivni.length)],
+        ['Průměrná e-shop objednávka', prumer.toLocaleString('cs-CZ') + ' Kč'],
+      ],
+      theme: 'grid',
+      headStyles: { fillColor: [174,105,101] },
+      styles: { fontSize: 9 },
+    });
+
+    // Měsíční přehled
+    doc.autoTable({
+      startY: doc.lastAutoTable.finalY + 10,
+      head: [['Měsíc', 'Tržby', 'Objednávky', 'Průměr']],
+      body: ml.map(([,m]) => [m.nazev, m.trzby.toLocaleString('cs-CZ')+' Kč', String(m.pocet), Math.round(m.trzby/m.pocet).toLocaleString('cs-CZ')+' Kč']),
+      theme: 'grid',
+      headStyles: { fillColor: [122,129,108] },
+      styles: { fontSize: 9 },
+      margin: { top: 10 },
+    });
+
+    // Detail objednávek
+    doc.addPage();
+    doc.setFontSize(13); doc.setFont(undefined,'bold');
+    doc.text('Detail e-shop objednávek', 14, 18);
+    doc.autoTable({
+      startY: 24,
+      head: [['ID', 'Datum', 'Zákazník', 'Celkem', 'Platba', 'Stav']],
+      body: objAktivni.map(o => [
+        '#'+o.id,
+        new Date(o.vytvoreno).toLocaleDateString('cs-CZ'),
+        o.jmeno || '—',
+        Number(o.celkem).toLocaleString('cs-CZ')+' Kč',
+        o.platba || '—',
+        o.stav || '—'
+      ]),
+      theme: 'striped',
+      headStyles: { fillColor: [174,105,101] },
+      styles: { fontSize: 8 },
+    });
+
+    doc.save(`detskekrucky-ucetnictvi-${new Date().toISOString().slice(0,10)}.pdf`);
+  } catch(e) {
+    alert('❌ Chyba při generování PDF: ' + e.message);
+  }
 }
 
 // EXPORT CSV
