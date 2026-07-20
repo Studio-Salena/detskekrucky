@@ -2228,6 +2228,7 @@ function tiskUctenkyData(prodej, cislo) {
     </div>`).join('')}
   <div class="divider"></div>
   <div class="row total"><span>CELKEM:</span><span>${Number(prodej.celkem).toLocaleString('cs-CZ')} Kč</span></div>
+  <div style="font-size:11px;color:#666;margin-top:4px">Neplátce DPH</div>
   <div class="row"><span>Platba:</span><span>${prodej.platba==='hotovost'?'Hotovost':prodej.platba==='karta'?'Karta':'QR platba'}</span></div>
   ${prodej.poznamka?`<div style="margin-top:8px;font-size:11px;color:#666">Poznámka: ${prodej.poznamka}</div>`:''}
   <div class="footer">
