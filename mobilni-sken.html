@@ -105,7 +105,6 @@
   <div id="status" class="st-cekam">👋 Klikněte na tlačítko pro spuštění kamery</div>
 
   <button id="startBtn" onclick="spustitKameru()">▶️ Spustit kameru</button>
-  <button id="skenovatBtn" onclick="skenovatTed()" style="display:none">📸 Skenovat teď</button>
 
   <div class="pocitadlo" id="pocitadlo"></div>
 
@@ -139,72 +138,23 @@ async function spustitKameru() {
         height: { ideal: 720 }
       }
     };
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
-    video.srcObject = stream;
-    await video.play();
     statusEl.className = 'st-cekam';
     statusEl.textContent = '📷 Čekám na naskenování…';
     startBtn.style.display = 'none';
-    document.getElementById('skenovatBtn').style.display = 'block';
-    dekodovat(video);
+
+    // Vestavěná kontinuální metoda knihovny - spolehlivější než ruční smyčka
+    await reader.decodeFromConstraints(constraints, video, (result, err) => {
+      if (result && !zpracovavam) {
+        odeslatKod(result.getText());
+      }
+      // err (NotFoundException) = kód zatím není vidět, knihovna to zkusí znovu sama
+    });
   } catch (e) {
     statusEl.className = 'st-chyba';
     statusEl.textContent = '❌ Kamera není dostupná: ' + e.message;
     startBtn.disabled = false;
     startBtn.textContent = '▶️ Zkusit znovu';
   }
-}
-
-function dekodovat(video) {
-  const smycka = async () => {
-    if (!reader) return;
-    if (!zpracovavam) {
-      try {
-        const result = await reader.decodeFromVideoElement(video);
-        if (result) {
-          odeslatKod(result.getText());
-        }
-      } catch (e) {
-        // NotFoundException = kód zatím není vidět, pokračujeme
-      }
-    }
-    requestAnimationFrame(smycka);
-  };
-  requestAnimationFrame(smycka);
-}
-
-async function skenovatTed() {
-  const video = document.getElementById('video');
-  const btn = document.getElementById('skenovatBtn');
-  if (!reader || zpracovavam) return;
-
-  btn.disabled = true;
-  zpracovavam = true; // pozastaví automatický sken na pozadí, ať si nekonkurují
-  statusEl.className = 'st-cekam';
-  statusEl.textContent = '🔍 Zkouším přečíst…';
-
-  // Rychlá série pokusů (kamera potřebuje chvíli na doostření)
-  let nalezeno = false;
-  for (let i = 0; i < 8 && !nalezeno; i++) {
-    try {
-      const result = await reader.decodeFromVideoElement(video);
-      if (result) {
-        nalezeno = true;
-        zpracovavam = false;
-        odeslatKod(result.getText());
-      }
-    } catch (e) {
-      // kód zatím nenalezen, zkusíme znovu
-    }
-    if (!nalezeno) await new Promise(r => setTimeout(r, 150));
-  }
-
-  if (!nalezeno) {
-    zpracovavam = false;
-    statusEl.className = 'st-chyba';
-    statusEl.textContent = '❌ Kód se nepodařilo přečíst, zkuste to znovu blíž.';
-  }
-  btn.disabled = false;
 }
 
 async function odeslatKod(ean) {

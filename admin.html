@@ -2074,7 +2074,6 @@ async function otevritKameru() {
   try {
     kameraReader = new ZXing.BrowserMultiFormatReader();
 
-    // Získej stream přímo s preferencí zadní kamery
     const constraints = {
       video: {
         facingMode: { ideal: 'environment' }, // zadní kamera na telefonu
@@ -2083,27 +2082,15 @@ async function otevritKameru() {
       }
     };
 
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
-    video.srcObject = stream;
-    await video.play();
-
-    // Spusť dekódování z video elementu
-    const decode = async () => {
-      if (!kameraReader) return; // kamera byla zavřena
-      try {
-        const result = await kameraReader.decodeFromVideoElement(video);
-        if (result) {
-          zavritKameru();
-          document.getElementById('eanInput').value = result.getText();
-          hledatEan();
-          return;
-        }
-      } catch(e) {
-        // NotFoundException je normální když kód ještě není vidět – opakuj
+    // Vestavěná kontinuální metoda knihovny - spolehlivější než ruční smyčka
+    await kameraReader.decodeFromConstraints(constraints, video, (result, err) => {
+      if (result) {
+        zavritKameru();
+        document.getElementById('eanInput').value = result.getText();
+        hledatEan();
       }
-      requestAnimationFrame(decode);
-    };
-    requestAnimationFrame(decode);
+      // err (NotFoundException) = kód zatím není vidět, knihovna to zkusí znovu sama
+    });
 
   } catch(e) {
     document.getElementById('eanMsg').innerHTML = `<div class="error-msg">Kamera není dostupná: ${e.message}</div>`;
@@ -2114,7 +2101,8 @@ async function otevritKameru() {
 function zavritKameru() {
   const wrap = document.getElementById('kameraWrap');
   wrap.style.display = 'none';
-  // Zastav video stream
+  if (kameraReader) { try { kameraReader.reset(); } catch(e){} }
+  // Zastav video stream (pro jistotu, i kdyby reset() nestihl)
   const video = document.getElementById('kameraVideo');
   if (video.srcObject) {
     video.srcObject.getTracks().forEach(t => t.stop());
@@ -2444,26 +2432,13 @@ async function otevritKameruVratka() {
         height: { ideal: 720 }
       }
     };
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
-    video.srcObject = stream;
-    await video.play();
-
-    const decode = async () => {
-      if (!kameraReaderVratka) return;
-      try {
-        const result = await kameraReaderVratka.decodeFromVideoElement(video);
-        if (result) {
-          zavritKameruVratka();
-          document.getElementById('vratkaEan').value = result.getText();
-          hledatEanVratka();
-          return;
-        }
-      } catch(e) {
-        // NotFoundException = kód zatím není vidět, pokračujeme
+    await kameraReaderVratka.decodeFromConstraints(constraints, video, (result, err) => {
+      if (result) {
+        zavritKameruVratka();
+        document.getElementById('vratkaEan').value = result.getText();
+        hledatEanVratka();
       }
-      requestAnimationFrame(decode);
-    };
-    requestAnimationFrame(decode);
+    });
   } catch(e) {
     document.getElementById('vratkaEanMsg').innerHTML = `<div class="error-msg">Kamera není dostupná: ${e.message}</div>`;
     wrap.style.display = 'none';
@@ -2473,6 +2448,7 @@ async function otevritKameruVratka() {
 function zavritKameruVratka() {
   const wrap = document.getElementById('kameraWrapVratka');
   wrap.style.display = 'none';
+  if (kameraReaderVratka) { try { kameraReaderVratka.reset(); } catch(e){} }
   const video = document.getElementById('kameraVideoVratka');
   if (video.srcObject) {
     video.srcObject.getTracks().forEach(t => t.stop());
@@ -2576,25 +2552,15 @@ async function otevritKameruPole(cilInputId, wrapId, videoId) {
   wrap.style.display = 'block';
   try {
     kameraReaderGeneric = new ZXing.BrowserMultiFormatReader();
-    const stream = await navigator.mediaDevices.getUserMedia({
+    const constraints = {
       video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
-    });
-    video.srcObject = stream;
-    await video.play();
-
-    const decode = async () => {
-      if (!kameraReaderGeneric) return;
-      try {
-        const result = await kameraReaderGeneric.decodeFromVideoElement(video);
-        if (result) {
-          zavritKameruPole(wrapId, videoId);
-          document.getElementById(cilInputId).value = result.getText();
-          return;
-        }
-      } catch(e) { /* kód zatím není vidět */ }
-      requestAnimationFrame(decode);
     };
-    requestAnimationFrame(decode);
+    await kameraReaderGeneric.decodeFromConstraints(constraints, video, (result, err) => {
+      if (result) {
+        zavritKameruPole(wrapId, videoId);
+        document.getElementById(cilInputId).value = result.getText();
+      }
+    });
   } catch(e) {
     wrap.innerHTML = `<div style="color:#fff;padding:10px;font-size:0.85rem">Kamera není dostupná: ${e.message}</div>`;
   }
@@ -2603,6 +2569,7 @@ async function otevritKameruPole(cilInputId, wrapId, videoId) {
 function zavritKameruPole(wrapId, videoId) {
   const wrap = document.getElementById(wrapId);
   wrap.style.display = 'none';
+  if (kameraReaderGeneric) { try { kameraReaderGeneric.reset(); } catch(e){} }
   const video = document.getElementById(videoId);
   if (video && video.srcObject) {
     video.srcObject.getTracks().forEach(t => t.stop());
