@@ -16,7 +16,7 @@ Web a e-shop pro obchod s barefoot obuví pro děti (majitelka: Monika Škarpich
 
 - `index.js` – hlavní backend entry point
 - `routes/sklad.js` – správa skladu/produktů
-- `admin.html` – admin panel (heslo: `detskekrucky`)
+- `admin.html` – admin panel (heslo je v proměnné prostředí `ADMIN_HESLO` na Renderu, není v repozitáři)
 - `index.html` – veřejný web, dynamický obsah se načítá přes fetch
 - Tabulka `nastaveni` (JSONB) – ukládá editovatelné texty webu (`textyWebu`, sekce `procBarefoot`, `vyberteSi`)
 - `rezervace_sloty`, `rezervace` – rezervační systém (sloty + rezervace, admin přehled)
