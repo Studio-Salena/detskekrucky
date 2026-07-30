@@ -196,6 +196,8 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<script src="fonts/DejaVuSans-normal.js"></script>
+<script src="fonts/DejaVuSans-bold.js"></script>
 </head>
 <body>
 
@@ -1784,18 +1786,24 @@ async function exportUcetnictviPDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
 
+    // Font s diakritikou (výchozí Helvetica v jsPDF neumí č,š,ž,ě,ř,ď,ť,ň,ů)
+    doc.addFileToVFS('DejaVuSans-normal.ttf', window.DEJAVU_SANS_NORMAL_B64);
+    doc.addFont('DejaVuSans-normal.ttf', 'DejaVuSans', 'normal');
+    doc.addFileToVFS('DejaVuSans-Bold.ttf', window.DEJAVU_SANS_BOLD_B64);
+    doc.addFont('DejaVuSans-Bold.ttf', 'DejaVuSans', 'bold');
+
     // Hlavička
-    doc.setFontSize(16); doc.setFont(undefined,'bold');
+    doc.setFontSize(16); doc.setFont('DejaVuSans','bold');
     doc.text('Dětské krůčky', 14, 18);
-    doc.setFontSize(9); doc.setFont(undefined,'normal');
+    doc.setFontSize(9); doc.setFont('DejaVuSans','normal');
     doc.text('Monika Škarpichová | IČO: 24354635', 14, 25);
     doc.text('Holešovská 752, Hulín 768 24', 14, 30);
     doc.text('Fyzická osoba zapsaná v živnostenském rejstříku vedeném MÚ Kroměříž.', 14, 35);
     doc.text('Neplátce DPH', 14, 40);
 
-    doc.setFontSize(13); doc.setFont(undefined,'bold');
+    doc.setFontSize(13); doc.setFont('DejaVuSans','bold');
     doc.text('Přehled tržeb pro účetní', 14, 52);
-    doc.setFontSize(9); doc.setFont(undefined,'normal');
+    doc.setFontSize(9); doc.setFont('DejaVuSans','normal');
     doc.text('Vygenerováno: ' + new Date().toLocaleDateString('cs-CZ') + ' ' + new Date().toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'}), 14, 58);
 
     // Souhrn
@@ -1813,7 +1821,7 @@ async function exportUcetnictviPDF() {
       ],
       theme: 'grid',
       headStyles: { fillColor: [174,105,101] },
-      styles: { fontSize: 9 },
+      styles: { fontSize: 9, font: 'DejaVuSans' },
     });
 
     // Měsíční přehled
@@ -1823,13 +1831,13 @@ async function exportUcetnictviPDF() {
       body: ml.map(([,m]) => [m.nazev, m.trzby.toLocaleString('cs-CZ')+' Kč', String(m.pocet), Math.round(m.trzby/m.pocet).toLocaleString('cs-CZ')+' Kč']),
       theme: 'grid',
       headStyles: { fillColor: [122,129,108] },
-      styles: { fontSize: 9 },
+      styles: { fontSize: 9, font: 'DejaVuSans' },
       margin: { top: 10 },
     });
 
     // Detail objednávek
     doc.addPage();
-    doc.setFontSize(13); doc.setFont(undefined,'bold');
+    doc.setFontSize(13); doc.setFont('DejaVuSans','bold');
     doc.text('Detail e-shop objednávek', 14, 18);
     doc.autoTable({
       startY: 24,
@@ -1844,7 +1852,7 @@ async function exportUcetnictviPDF() {
       ]),
       theme: 'striped',
       headStyles: { fillColor: [174,105,101] },
-      styles: { fontSize: 8 },
+      styles: { fontSize: 8, font: 'DejaVuSans' },
     });
 
     doc.save(`detskekrucky-ucetnictvi-${new Date().toISOString().slice(0,10)}.pdf`);
