@@ -2359,6 +2359,11 @@ function tiskUctenkyData(prodej, cislo) {
   <div class="row total"><span>CELKEM:</span><span>${Number(prodej.celkem).toLocaleString('cs-CZ')} Kč</span></div>
   <div style="font-size:11px;color:#666;margin-top:4px">Neplátce DPH</div>
   <div class="row"><span>Platba:</span><span>${prodej.platba==='hotovost'?'Hotovost':prodej.platba==='karta'?'Karta':'QR platba'}</span></div>
+  ${prodej.platba==='qr'?`
+  <div class="center" style="margin-top:12px">
+    <img src="${qrPlatbaUrl(prodej.celkem,'Ucet '+cislo)}" style="width:180px;height:180px" alt="QR platba">
+    <div style="font-size:11px;color:#666;margin-top:4px">Účet: 2003533776/2010</div>
+  </div>`:''}
   ${prodej.poznamka?`<div style="margin-top:8px;font-size:11px;color:#666">Poznámka: ${prodej.poznamka}</div>`:''}
   <div class="footer">
     <div class="divider"></div>
