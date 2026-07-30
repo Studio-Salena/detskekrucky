@@ -507,11 +507,15 @@ footer {
     </div>
     <div class="section-divider">Způsob platby</div>
     <div class="form-group">
-      <select id="chPlatba">
+      <select id="chPlatba" onchange="aktualizovatPlatbuInfo()">
         <option value="dobirka">Dobírka</option>
         <option value="prevod">Bankovní převod</option>
         <option value="karta">Platba kartou</option>
       </select>
+    </div>
+    <div class="form-group" id="chPrevodInfo" style="display:none;background:var(--cream);border-radius:12px;padding:14px;text-align:center">
+      <div style="font-size:0.85rem;margin-bottom:8px">Zaplaťte prosím na účet <strong>2003533776/2010</strong>, případně naskenujte QR kód v bankovní aplikaci:</div>
+      <img id="chPrevodQr" style="width:180px;height:180px;border-radius:8px" alt="QR platba">
     </div>
     <button class="submit-btn" id="submitBtn" onclick="odeslatObjednavku()">Odeslat objednávku &#128230;</button>
     <button class="cancel-btn" onclick="closeCheckout()">Zpět do košíku</button>
@@ -838,6 +842,23 @@ function vykreslitSouhrnObjednavky() {
     ${kosik.map(i => `<div class="order-summary-item"><span>${i.nazev} vel.${i.velikost} x${i.pocet}</span><span>${i.cena * i.pocet} Kč</span></div>`).join('')}
     ${sleva > 0 ? `<div class="order-summary-item" style="color:var(--sage);font-weight:700"><span>🎁 Poukaz ${uplatnenyPoukaz.kod}</span><span>−${sleva} Kč</span></div>` : ''}
     <div class="order-summary-total"><span>Celkem</span><span>${total - sleva} Kč</span></div>`;
+  aktualizovatPlatbuInfo();
+}
+
+// Platebni QR kod (format SPAYD pouzivany ceskymi bankovnimi aplikacemi)
+const UCET_IBAN = 'CZ4620100000002003533776';
+function qrPlatbaUrl(castka, zprava) {
+  const spd = `SPD*1.0*ACC:${UCET_IBAN}*AM:${Number(castka).toFixed(2)}*CC:CZK*MSG:${zprava}`;
+  return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(spd)}`;
+}
+function aktualizovatPlatbuInfo() {
+  const platba = document.getElementById('chPlatba').value;
+  document.getElementById('chPrevodInfo').style.display = platba === 'prevod' ? 'block' : 'none';
+  if (platba === 'prevod') {
+    const total = kosik.reduce((s, i) => s + i.cena * i.pocet, 0);
+    const sleva = uplatnenyPoukaz ? Math.min(uplatnenyPoukaz.zustatek, total) : 0;
+    document.getElementById('chPrevodQr').src = qrPlatbaUrl(total - sleva, 'Eshop Detske krucky');
+  }
 }
 
 async function uplatnitPoukazEshop() {

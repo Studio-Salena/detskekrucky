@@ -46,6 +46,13 @@ async function odeslat_potvrzeni(objednavka) {
         </p>
         <p>Doprava: ${objednavka.doprava}</p>
         <p>Platba: ${objednavka.platba}</p>
+        ${objednavka.platba === 'prevod' ? `
+        <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-top:12px">
+          <p style="margin:0 0 6px 0"><strong>Udaje pro platbu prevodem:</strong></p>
+          <p style="margin:0">Cislo uctu: <strong>2003533776/2010</strong></p>
+          <p style="margin:0">Castka: <strong>${objednavka.celkem} Kc</strong></p>
+          <p style="margin:0">Variabilni symbol: <strong>${objednavka.objednavka_id}</strong></p>
+        </div>` : ''}
         <hr>
         <p style="color:#666;font-size:13px">
           Detske krucky | 773 517 733 | masaze.hasalova@gmail.com
