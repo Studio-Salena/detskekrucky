@@ -5,14 +5,9 @@ const skladRoutes = require('./routes/sklad');
 const objednavkyRoutes = require('./routes/objednavky');
 const authRoutes = require('./routes/auth');
 const platbyRoutes = require('./routes/platby');
-const { createClient } = require('@supabase/supabase-js');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
 
-const supabase = createClient(
-  'https://ipzkriwfcghlqfaqenaj.supabase.co',
-  'sb_publishable_OtUgL2vcvU17-s4FsdbrqQ_QWD98Xz8'
-);
 const app = express();
 app.use(cors());
 app.use(express.json());

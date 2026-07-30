@@ -1,7 +1,11 @@
 const { Pool } = require('pg');
 
+if (!process.env.DATABASE_URL) {
+  console.error('CHYBA: DATABASE_URL není nastavena v proměnných prostředí!');
+}
+
 const pool = new Pool({
-  connectionString: 'postgresql://postgres.ipzkriwfcghlqfaqenaj:detskekrucky2026@aws-0-eu-west-1.pooler.supabase.com:5432/postgres',
+  connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
