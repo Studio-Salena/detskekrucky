@@ -498,6 +498,26 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <div class="table-header"><h3>📋 Přehled objednávek pro účetní</h3></div>
         <div id="ucetObjednavky"><div class="loading">Načítám...</div></div>
       </div>
+
+      <div class="table-wrap">
+        <div class="table-header">
+          <h3>🧾 Roční přehled pro daňové přiznání (paušální výdaje)</h3>
+        </div>
+        <div style="padding:16px;display:flex;gap:12px;align-items:end;flex-wrap:wrap">
+          <div class="form-group" style="margin:0">
+            <label>Rok</label>
+            <input type="number" id="rocniPrehledRok" style="width:100px;padding:8px;border:1px solid var(--tan-light);border-radius:6px">
+          </div>
+          <button class="btn btn-primary" onclick="nahledRocniPrehled()">👁️ Zobrazit náhled</button>
+          <button class="btn btn-csv" onclick="exportRocniPrehledPDF()">📄 Stáhnout PDF</button>
+        </div>
+        <div id="rocniPrehledNahled" style="padding:0 16px 16px"></div>
+        <div style="padding:0 16px 16px;font-size:0.78rem;color:var(--text-light)">
+          ℹ️ Toto je informativní podklad pro tebe nebo tvého daňového poradce – <strong>není to oficiální daňové přiznání</strong>.
+          Sazba 60 % a strop 1 200 000 Kč platí pro volnou/vázanou živnost k roku 2026 – před podáním si aktuální hodnoty ověř
+          (mění se čas od času), ideálně s daňovým poradcem.
+        </div>
+      </div>
     </div>
 
     <!-- NASTAVENÍ -->
@@ -1700,6 +1720,8 @@ async function ulozitOteviracku() {
   }
 }
 async function loadUcetnictvi() {
+  const rokPole = document.getElementById('rocniPrehledRok');
+  if (rokPole && !rokPole.value) rokPole.value = new Date().getFullYear() - 1;
   try {
     const data = await adminFetch(API+'/objednavky').then(r=>r.json());
     const obj = Array.isArray(data) ? data.filter(o=>o.stav!=='zruseno') : [];
@@ -1861,6 +1883,134 @@ async function exportUcetnictviPDF() {
     });
 
     doc.save(`detskekrucky-ucetnictvi-${new Date().toISOString().slice(0,10)}.pdf`);
+  } catch(e) {
+    alert('❌ Chyba při generování PDF: ' + e.message);
+  }
+}
+
+// ROČNÍ PŘEHLED PRO DAŇOVÉ PŘIZNÁNÍ (paušální výdaje)
+const PAUSAL_SAZBA = 0.60;       // 60 % pro volnou/vázanou živnost (k roku 2026 - ověř aktuální!)
+const PAUSAL_STROP = 1200000;    // max. výdaje 1 200 000 Kč (k roku 2026 - ověř aktuální!)
+
+async function spocitatRocniData(rok) {
+  const obj = await adminFetch(API+'/objednavky').then(r=>r.json());
+  const objRok = (Array.isArray(obj)?obj:[]).filter(o => o.stav!=='zruseno' && new Date(o.vytvoreno).getFullYear()===rok);
+
+  let prodejnaRok = [];
+  try {
+    const p = await adminFetch(API+'/prodejna').then(r=>r.json());
+    prodejnaRok = (Array.isArray(p)?p:[]).filter(x => new Date(x.datum).getFullYear()===rok);
+  } catch(e) {}
+
+  let vratkyRok = [];
+  try {
+    const v = await adminFetch(API+'/prodejna/vratky/vse').then(r=>r.json());
+    vratkyRok = (Array.isArray(v)?v:[]).filter(x => new Date(x.vytvoreno).getFullYear()===rok);
+  } catch(e) {}
+
+  const trzbyEshop = objRok.reduce((s,o)=>s+Number(o.celkem),0);
+  const trzbyProdejna = prodejnaRok.reduce((s,p)=>s+Number(p.celkem),0);
+  const vratkyCelkem = vratkyRok.reduce((s,v)=>s+Number(v.castka),0);
+  const prijmyCelkem = trzbyEshop + trzbyProdejna - vratkyCelkem;
+
+  const pausalniVydaje = Math.min(Math.round(prijmyCelkem * PAUSAL_SAZBA), PAUSAL_STROP);
+  const zakladDane = Math.max(prijmyCelkem - pausalniVydaje, 0);
+
+  const mn = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
+  const mesice = mn.map((nazev,i)=>{
+    const eshopM = objRok.filter(o=>new Date(o.vytvoreno).getMonth()===i).reduce((s,o)=>s+Number(o.celkem),0);
+    const prodejnaM = prodejnaRok.filter(p=>new Date(p.datum).getMonth()===i).reduce((s,p)=>s+Number(p.celkem),0);
+    return { nazev, prijmy: eshopM + prodejnaM };
+  });
+
+  return { rok, trzbyEshop, trzbyProdejna, vratkyCelkem, prijmyCelkem, pausalniVydaje, zakladDane, mesice };
+}
+
+function vykreslitRocniNahled(d) {
+  return `
+    <div style="background:var(--cream);border-radius:10px;padding:16px;margin-top:10px">
+      <table style="width:100%;font-size:0.88rem">
+        <tr><td style="padding:4px 0">Příjmy e-shop</td><td style="text-align:right">${d.trzbyEshop.toLocaleString('cs-CZ')} Kč</td></tr>
+        <tr><td style="padding:4px 0">Příjmy prodejna</td><td style="text-align:right">${d.trzbyProdejna.toLocaleString('cs-CZ')} Kč</td></tr>
+        <tr><td style="padding:4px 0">Vratky</td><td style="text-align:right">−${d.vratkyCelkem.toLocaleString('cs-CZ')} Kč</td></tr>
+        <tr style="border-top:1px solid var(--tan-light);font-weight:700"><td style="padding:6px 0">Příjmy celkem</td><td style="text-align:right">${d.prijmyCelkem.toLocaleString('cs-CZ')} Kč</td></tr>
+        <tr><td style="padding:4px 0">Paušální výdaje (60 %, max. 1 200 000 Kč)</td><td style="text-align:right">−${d.pausalniVydaje.toLocaleString('cs-CZ')} Kč</td></tr>
+        <tr style="border-top:2px solid var(--brown);font-weight:700;color:var(--brown)"><td style="padding:8px 0">Základ daně (dílčí základ dle §7)</td><td style="text-align:right">${d.zakladDane.toLocaleString('cs-CZ')} Kč</td></tr>
+      </table>
+    </div>
+  `;
+}
+
+async function nahledRocniPrehled() {
+  const rok = parseInt(document.getElementById('rocniPrehledRok').value);
+  const kont = document.getElementById('rocniPrehledNahled');
+  kont.innerHTML = '<div class="loading">Počítám...</div>';
+  try {
+    const d = await spocitatRocniData(rok);
+    kont.innerHTML = vykreslitRocniNahled(d);
+  } catch(e) {
+    kont.innerHTML = '<div class="error-msg">Chyba při výpočtu</div>';
+  }
+}
+
+async function exportRocniPrehledPDF() {
+  const rok = parseInt(document.getElementById('rocniPrehledRok').value);
+  try {
+    const d = await spocitatRocniData(rok);
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    doc.addFileToVFS('DejaVuSans-normal.ttf', window.DEJAVU_SANS_NORMAL_B64);
+    doc.addFont('DejaVuSans-normal.ttf', 'DejaVuSans', 'normal');
+    doc.addFileToVFS('DejaVuSans-Bold.ttf', window.DEJAVU_SANS_BOLD_B64);
+    doc.addFont('DejaVuSans-Bold.ttf', 'DejaVuSans', 'bold');
+
+    doc.setFontSize(16); doc.setFont('DejaVuSans','bold');
+    doc.text('Dětské krůčky', 14, 18);
+    doc.setFontSize(9); doc.setFont('DejaVuSans','normal');
+    doc.text('Monika Škarpichová | IČO: 24354635', 14, 25);
+    doc.text('Holešovská 752, Hulín 768 24', 14, 30);
+    doc.text('Fyzická osoba zapsaná v živnostenském rejstříku vedeném MÚ Kroměříž.', 14, 35);
+    doc.text('Neplátce DPH', 14, 40);
+
+    doc.setFontSize(13); doc.setFont('DejaVuSans','bold');
+    doc.text(`Roční přehled příjmů za rok ${d.rok} (podklad pro daňové přiznání)`, 14, 52);
+    doc.setFontSize(9); doc.setFont('DejaVuSans','normal');
+    doc.text('Vygenerováno: ' + new Date().toLocaleDateString('cs-CZ'), 14, 58);
+
+    doc.autoTable({
+      startY: 65,
+      head: [['Položka', 'Částka']],
+      body: [
+        ['Příjmy e-shop', d.trzbyEshop.toLocaleString('cs-CZ')+' Kč'],
+        ['Příjmy prodejna', d.trzbyProdejna.toLocaleString('cs-CZ')+' Kč'],
+        ['Vratky', '−'+d.vratkyCelkem.toLocaleString('cs-CZ')+' Kč'],
+        ['Příjmy celkem (§7 ZDP)', d.prijmyCelkem.toLocaleString('cs-CZ')+' Kč'],
+        ['Paušální výdaje (60 %, max. 1 200 000 Kč)', '−'+d.pausalniVydaje.toLocaleString('cs-CZ')+' Kč'],
+        ['Základ daně (dílčí základ dle §7)', d.zakladDane.toLocaleString('cs-CZ')+' Kč'],
+      ],
+      theme: 'grid',
+      headStyles: { fillColor: [174,105,101] },
+      styles: { fontSize: 9, font: 'DejaVuSans' },
+      didParseCell: (data) => { if (data.row.index === 5) { data.cell.styles.fontStyle = 'bold'; } }
+    });
+
+    doc.autoTable({
+      startY: doc.lastAutoTable.finalY + 10,
+      head: [['Měsíc', 'Příjmy']],
+      body: d.mesice.map(m => [m.nazev, m.prijmy.toLocaleString('cs-CZ')+' Kč']),
+      theme: 'grid',
+      headStyles: { fillColor: [122,129,108] },
+      styles: { fontSize: 9, font: 'DejaVuSans' },
+    });
+
+    const finalY = doc.lastAutoTable.finalY + 12;
+    doc.setFontSize(8); doc.setFont('DejaVuSans','normal');
+    doc.text('Toto je informativní podklad, nejde o oficiální daňové přiznání. Sazba paušálu (60 %) a strop', 14, finalY);
+    doc.text('(1 200 000 Kč) platí pro volnou/vázanou živnost k roku 2026 - před podáním ověř aktuální hodnoty,', 14, finalY+5);
+    doc.text('ideálně s daňovým poradcem.', 14, finalY+10);
+
+    doc.save(`detskekrucky-rocni-prehled-${d.rok}.pdf`);
   } catch(e) {
     alert('❌ Chyba při generování PDF: ' + e.message);
   }
