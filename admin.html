@@ -892,6 +892,17 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <div class="form-group"><label>Velikost</label><input type="number" id="nsVelikost" placeholder="24"></div>
       <div class="form-group"><label>Počet kusů</label><input type="number" id="nsPocet" placeholder="10" min="1"></div>
     </div>
+    <div class="form-group"><label>EAN kód (pro tuto velikost, volitelné)</label>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="nsEan" placeholder="např. 1234567890123">
+        <button class="btn btn-outline" style="margin-bottom:0" onclick="otevritKameruPole('nsEan','kameraWrapNsEan','kameraVideoNsEan')" title="Skenovat kamerou">📷</button>
+        <button class="btn btn-outline" style="margin-bottom:0" onclick="otevritMobilniSken('nsEan', null)" title="Skenovat mobilem">📱</button>
+      </div>
+      <div id="kameraWrapNsEan" style="display:none;margin-top:10px;background:#000;border-radius:12px;overflow:hidden;position:relative;">
+        <video id="kameraVideoNsEan" style="width:100%;max-height:220px;object-fit:cover;" autoplay muted playsinline></video>
+        <button class="btn btn-outline btn-sm" style="position:absolute;top:8px;right:8px;background:#fff" onclick="zavritKameruPole('kameraWrapNsEan','kameraVideoNsEan')">✕</button>
+      </div>
+    </div>
     <div class="form-group"><label>Typ pohybu</label>
       <select id="nsTyp">
         <option value="naskladneni">➕ Naskladnění (příjem)</option>
@@ -951,7 +962,12 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <select id="pKategorie"></select>
     </div>
     <div class="form-group"><label>Popis</label><textarea id="pPopis" rows="3" placeholder="Popis produktu..."></textarea></div>
-    <div class="form-group"><label>EAN kód</label>
+    <div class="section-divider">První varianta na skladu (volitelné, další velikosti přidáš přes „+ Naskladnit")</div>
+    <div class="form-grid-2">
+      <div class="form-group"><label>Velikost</label><input type="number" id="pVelikost" placeholder="24"></div>
+      <div class="form-group"><label>Počet kusů</label><input type="number" id="pPocet" placeholder="10" min="0"></div>
+    </div>
+    <div class="form-group"><label>EAN kód (pro tuto velikost)</label>
       <div style="display:flex;gap:8px">
         <input type="text" id="pEan" placeholder="např. 1234567890123">
         <button class="btn btn-outline" style="margin-bottom:0" onclick="otevritKameruPole('pEan','kameraWrapPEan','kameraVideoPEan')" title="Skenovat kamerou">📷</button>
@@ -1000,17 +1016,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <select id="upKategorie"></select>
     </div>
     <div class="form-group"><label>Popis</label><textarea id="upPopis" rows="3" style="width:100%;padding:8px;border:1px solid var(--tan-light);border-radius:8px;font-family:inherit;resize:vertical"></textarea></div>
-    <div class="form-group"><label>EAN kód</label>
-      <div style="display:flex;gap:8px">
-        <input type="text" id="upEan" placeholder="např. 1234567890123">
-        <button class="btn btn-outline" style="margin-bottom:0" onclick="otevritKameruPole('upEan','kameraWrapUpEan','kameraVideoUpEan')" title="Skenovat kamerou">📷</button>
-        <button class="btn btn-outline" style="margin-bottom:0" onclick="otevritMobilniSken('upEan', null)" title="Skenovat mobilem">📱</button>
-      </div>
-      <div id="kameraWrapUpEan" style="display:none;margin-top:10px;background:#000;border-radius:12px;overflow:hidden;position:relative;">
-        <video id="kameraVideoUpEan" style="width:100%;max-height:220px;object-fit:cover;" autoplay muted playsinline></video>
-        <button class="btn btn-outline btn-sm" style="position:absolute;top:8px;right:8px;background:#fff" onclick="zavritKameruPole('kameraWrapUpEan','kameraVideoUpEan')">✕</button>
-      </div>
-    </div>
+    <div style="font-size:0.85rem;color:var(--text-light);margin-bottom:10px">EAN kódy se upravují u jednotlivých velikostí v záložce Sklad (✏️ u dané položky).</div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modalUpravitProdukt')">Zrušit</button>
       <button class="btn btn-primary" onclick="ulozitUpravuProduktu()">💾 Uložit</button>
@@ -1403,12 +1409,12 @@ let vybraneSklad = new Set();
 function renderSklad(data) {
   if (!data.length) { document.getElementById('skladTable').innerHTML = '<div class="empty">Prázdný sklad</div>'; return; }
   document.getElementById('skladTable').innerHTML = `
-    <table><thead><tr><th><input type="checkbox" onchange="vybratVseSklad(this)"></th><th>Produkt</th><th>Značka</th><th>Vel.</th><th>Kusů</th><th>Min.</th><th>Status</th><th>Akce</th></tr></thead>
+    <table><thead><tr><th><input type="checkbox" onchange="vybratVseSklad(this)"></th><th>Produkt</th><th>Značka</th><th>Vel.</th><th>EAN</th><th>Kusů</th><th>Min.</th><th>Status</th><th>Akce</th></tr></thead>
     <tbody>${data.map(s=>{
       if (s.velikost === null) {
         return `<tr>
           <td></td>
-          <td><strong>${s.nazev}</strong></td><td>${s.znacka}</td><td colspan="3" style="color:var(--text-light)">Zatím žádná velikost na skladu</td>
+          <td><strong>${s.nazev}</strong></td><td>${s.znacka}</td><td colspan="4" style="color:var(--text-light)">Zatím žádná velikost na skladu</td>
           <td><span class="badge badge-vyprodano">Bez skladu</span></td>
           <td><button class="btn btn-green btn-sm" onclick="openModal('modalNaskladnit')">+ Naskladnit</button></td>
         </tr>`;
@@ -1416,12 +1422,14 @@ function renderSklad(data) {
       return `<tr>
       <td><input type="checkbox" data-klic="${s.id}_${s.velikost}" onchange="toggleVybranySklad(this)" ${vybraneSklad.has(s.id+'_'+s.velikost)?'checked':''}></td>
       <td><strong>${s.nazev}</strong></td><td>${s.znacka}</td><td><strong>${s.velikost}</strong></td>
+      <td style="font-size:0.82rem;color:var(--text-light)">${s.ean||'—'}</td>
       <td><strong style="color:${s.pocet_kusu===0?'var(--red)':s.nizky_stav?'var(--orange)':'var(--text)'}">${s.pocet_kusu} ks</strong></td>
       <td>${s.min_pocet} ks</td>
       <td>${s.pocet_kusu===0?'<span class="badge badge-vyprodano">Vyprodáno</span>':s.nizky_stav?'<span class="badge badge-nizky">Nízký stav</span>':'<span class="badge badge-ok">OK</span>'}</td>
       <td style="display:flex;gap:4px">
         <button class="btn btn-green btn-sm" onclick="rychleNaskladnit(${s.id},${s.velikost},'${s.nazev}')">+</button>
         <button class="btn btn-orange btn-sm" onclick="rychleOdecist(${s.id},${s.velikost},'${s.nazev}')">−</button>
+        <button class="btn btn-outline btn-sm" onclick="rychleUpravitEan(${s.id},${s.velikost},'${s.nazev}','${s.ean||''}')" title="Upravit EAN">✏️</button>
         <button class="btn btn-red btn-sm" onclick="smazatSkladPolozku(${s.id},${s.velikost},'${s.nazev}')">🗑️</button>
       </td>
     </tr>`;
@@ -1524,16 +1532,25 @@ function rychleOdecist(id, vel, nazev) {
   adminFetch(API+'/sklad/odecist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({produkt_id:id,velikost:vel,pocet:parseInt(pocet),poznamka:'Odečtení z adminu'})})
     .then(()=>{loadSklad();alert('✅ Odečteno!');}).catch(()=>alert('❌ Chyba'));
 }
+function rychleUpravitEan(id, vel, nazev, aktualniEan) {
+  const ean = prompt(`✏️ EAN kód\n${nazev} vel. ${vel}`, aktualniEan || '');
+  if (ean === null) return;
+  adminFetch(API+'/sklad/naskladnit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({produkt_id:id,velikost:vel,pocet:0,ean:ean.trim()||null,poznamka:'Úprava EAN z adminu'})})
+    .then(()=>{loadSklad();alert('✅ EAN uložen!');}).catch(()=>alert('❌ Chyba'));
+}
 
 async function ulozitNaskladneni() {
   const id=document.getElementById('nsProdukt').value, vel=document.getElementById('nsVelikost').value;
   const pocet=document.getElementById('nsPocet').value, typ=document.getElementById('nsTyp').value;
-  const poz=document.getElementById('nsPoznamka').value;
+  const poz=document.getElementById('nsPoznamka').value, ean=document.getElementById('nsEan').value.trim();
   if (!vel||!pocet) { document.getElementById('naskladnitMsg').innerHTML='<div class="error-msg">Vyplňte velikost a počet.</div>'; return; }
   const ep = typ==='naskladneni'?'/sklad/naskladnit':'/sklad/odecist';
+  const telo = {produkt_id:parseInt(id),velikost:parseInt(vel),pocet:parseInt(pocet),poznamka:poz};
+  if (typ==='naskladneni' && ean) telo.ean = ean;
   try {
-    await adminFetch(API+ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({produkt_id:parseInt(id),velikost:parseInt(vel),pocet:parseInt(pocet),poznamka:poz})});
+    await adminFetch(API+ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(telo)});
     document.getElementById('naskladnitMsg').innerHTML='<div class="success-msg">✅ Uloženo!</div>';
+    document.getElementById('nsEan').value = '';
     setTimeout(()=>{closeModal('modalNaskladnit');loadSklad();loadPrehled();},1500);
   } catch(e) { document.getElementById('naskladnitMsg').innerHTML='<div class="error-msg">Chyba</div>'; }
 }
@@ -1557,19 +1574,22 @@ async function loadProdukty() {
   try {
     const data = await adminFetch(API+'/sklad').then(r=>r.json());
     const map = {};
-    if (Array.isArray(data)) data.forEach(s=>{if(!map[s.id])map[s.id]={...s,celkem:0};map[s.id].celkem+=s.pocet_kusu;});
+    if (Array.isArray(data)) data.forEach(s=>{
+      if(!map[s.id])map[s.id]={...s,celkem:0,velikosti:0};
+      map[s.id].celkem+=s.pocet_kusu||0;
+      if (s.velikost!=null) map[s.id].velikosti++;
+    });
     const list = Object.values(map);
     if (!list.length) { document.getElementById('produktyTable').innerHTML='<div class="empty">Žádné produkty</div>'; return; }
     document.getElementById('produktyTable').innerHTML=`
-      <table><thead><tr><th><input type="checkbox" onchange="vybratVseProdukty(this)"></th><th>ID</th><th>Název</th><th>Značka</th><th>Kategorie</th><th>Cena</th><th>EAN</th><th>Celkem ks</th><th>Akce</th></tr></thead>
+      <table><thead><tr><th><input type="checkbox" onchange="vybratVseProdukty(this)"></th><th>ID</th><th>Název</th><th>Značka</th><th>Kategorie</th><th>Cena</th><th>Velikostí / ks</th><th>Akce</th></tr></thead>
       <tbody>${list.map(p=>`<tr>
         <td><input type="checkbox" data-id="${p.id}" onchange="toggleVybranyProdukt(this)" ${vybraneProdukty.has(String(p.id))?'checked':''}></td>
         <td>${p.id}</td><td>${p.emoji && p.emoji.startsWith("http") ? `<img src="${p.emoji}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;margin-right:8px">` : p.emoji || ""}  <strong>${p.nazev}</strong></td><td>${p.znacka}</td>
         <td>${p.kategorie}</td><td><strong>${p.cena.toLocaleString('cs-CZ')} Kč</strong></td>
-        <td style="font-size:0.82rem;color:var(--text-light)">${p.ean||'—'}</td>
-        <td><strong>${p.celkem} ks</strong></td>
+        <td style="font-size:0.82rem;color:var(--text-light)">${p.velikosti} vel. / <strong>${p.celkem} ks</strong> <span style="display:block">(EAN viz záložka Sklad)</span></td>
         <td style="display:flex;gap:4px">
-          <button class="btn btn-orange btn-sm" onclick="upravitProdukt(${p.id},'${p.nazev.replace(/'/g,"\\'")}','${p.znacka}',${p.cena},${p.cena_puvodni||0},'${p.emoji||''}','${(p.popis||'').replace(/'/g,"\\'")}','${p.ean||''}','${p.kategorie||''}')">✏️ Upravit</button>
+          <button class="btn btn-orange btn-sm" onclick="upravitProdukt(${p.id},'${p.nazev.replace(/'/g,"\\'")}','${p.znacka}',${p.cena},${p.cena_puvodni||0},'${p.emoji||''}','${(p.popis||'').replace(/'/g,"\\'")}','${p.kategorie||''}')">✏️ Upravit</button>
           <button class="btn btn-red btn-sm" onclick="smazatProdukt(${p.id},'${p.nazev.replace(/'/g,"\\'")}')">🗑️ Smazat</button>
         </td>
       </tr>`).join('')}</tbody></table>`;
@@ -1607,12 +1627,15 @@ async function ulozitProdukt() {
   const nazev=document.getElementById('pNazev').value, cena=document.getElementById('pCena').value;
   if (!nazev||!cena) { document.getElementById('produktMsg').innerHTML='<div class="error-msg">Vyplňte název a cenu.</div>'; return; }
   try {
+    const velikost = document.getElementById('pVelikost').value;
     const res = await adminFetch(API+'/sklad/produkty',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({nazev,znacka:document.getElementById('pZnacka').value,cena:parseInt(cena),
       cena_puvodni:document.getElementById('pCenaPuvodni').value||null,
       kategorie:document.getElementById('pKategorie').value,
       emoji:document.getElementById('pEmoji').value,
       popis:document.getElementById('pPopis').value,
+      velikost: velikost?parseInt(velikost):null,
+      pocet: parseInt(document.getElementById('pPocet').value)||0,
       ean:document.getElementById('pEan').value||null})});
     if (res.ok) { document.getElementById('produktMsg').innerHTML='<div class="success-msg">✅ Uloženo!</div>'; setTimeout(()=>{closeModal('modalNovyProdukt');loadProdukty();},1500); }
     else { document.getElementById('produktMsg').innerHTML='<div class="error-msg">Chyba serveru</div>'; }
@@ -1639,7 +1662,7 @@ function otevritNovyProdukt() {
   openModal('modalNovyProdukt');
 }
 
-function upravitProdukt(id,nazev,znacka,cena,cenaPuvodni,emoji,popis,ean,kategorie) {
+function upravitProdukt(id,nazev,znacka,cena,cenaPuvodni,emoji,popis,kategorie) {
   document.getElementById('upId').value=id;
   document.getElementById('upNazev').value=nazev;
   document.getElementById('upZnacka').value=znacka;
@@ -1647,7 +1670,6 @@ function upravitProdukt(id,nazev,znacka,cena,cenaPuvodni,emoji,popis,ean,kategor
   document.getElementById('upCenaPuvodni').value=cenaPuvodni||'';
   document.getElementById('upEmoji').value=emoji||'';
   document.getElementById('upPopis').value=popis||'';
-  document.getElementById('upEan').value=ean||'';
   naplnitVyberKategorii('upKategorie', kategorie);
   openModal('modalUpravitProdukt');
 }
@@ -1657,7 +1679,7 @@ async function ulozitUpravuProduktu() {
   try {
     const res = await adminFetch(API+'/sklad/produkty/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({nazev:document.getElementById('upNazev').value,znacka:document.getElementById('upZnacka').value,
-      cena:parseInt(document.getElementById('upCena').value),cena_puvodni:document.getElementById('upCenaPuvodni').value||null,emoji:document.getElementById('upEmoji').value||'',popis:document.getElementById('upPopis').value||'',ean:document.getElementById('upEan').value||null,kategorie:document.getElementById('upKategorie').value})});
+      cena:parseInt(document.getElementById('upCena').value),cena_puvodni:document.getElementById('upCenaPuvodni').value||null,emoji:document.getElementById('upEmoji').value||'',popis:document.getElementById('upPopis').value||'',kategorie:document.getElementById('upKategorie').value})});
     if (res.ok) { document.getElementById('upravitMsg').innerHTML='<div class="success-msg">✅ Uloženo!</div>'; setTimeout(()=>{closeModal('modalUpravitProdukt');loadProdukty();},1500); }
     else { document.getElementById('upravitMsg').innerHTML='<div class="error-msg">Chyba serveru</div>'; }
   } catch(e) { document.getElementById('upravitMsg').innerHTML='<div class="error-msg">Chyba</div>'; }

@@ -6,8 +6,8 @@ const vyzadovatAdmina = require('../middleware/adminAuth');
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT p.id, p.nazev, p.znacka, p.emoji, p.kategorie, p.cena, p.ean,
-             s.velikost, s.pocet_kusu, s.min_pocet,
+      SELECT p.id, p.nazev, p.znacka, p.emoji, p.kategorie, p.cena,
+             s.velikost, s.ean, s.pocet_kusu, s.min_pocet,
              CASE WHEN s.pocet_kusu <= s.min_pocet THEN true ELSE false END as nizky_stav
       FROM produkty p
       LEFT JOIN sklad s ON p.id = s.produkt_id
@@ -25,17 +25,31 @@ router.use(vyzadovatAdmina);
 
 router.post('/naskladnit', async (req, res) => {
   const { produkt_id, velikost, pocet, poznamka } = req.body;
+  // EAN se aktualizuje jen pokud ho klient v těle poslal (i prázdný = smazat),
+  // aby běžné naskladnění bez EAN pole nepřepsalo už uložený EAN na null.
+  const eanZadan = Object.prototype.hasOwnProperty.call(req.body, 'ean');
   try {
-    await pool.query(`
-      INSERT INTO sklad (produkt_id, velikost, pocet_kusu)
-      VALUES ($1, $2, $3)
-      ON CONFLICT (produkt_id, velikost)
-      DO UPDATE SET pocet_kusu = sklad.pocet_kusu + $3
-    `, [produkt_id, velikost, pocet]);
-    await pool.query(`
-      INSERT INTO pohyby_skladu (produkt_id, velikost, typ, pocet, poznamka)
-      VALUES ($1, $2, 'naskladneni', $3, $4)
-    `, [produkt_id, velikost, pocet, poznamka]);
+    if (eanZadan) {
+      await pool.query(`
+        INSERT INTO sklad (produkt_id, velikost, pocet_kusu, ean)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (produkt_id, velikost)
+        DO UPDATE SET pocet_kusu = sklad.pocet_kusu + $3, ean = $4
+      `, [produkt_id, velikost, pocet, req.body.ean || null]);
+    } else {
+      await pool.query(`
+        INSERT INTO sklad (produkt_id, velikost, pocet_kusu)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (produkt_id, velikost)
+        DO UPDATE SET pocet_kusu = sklad.pocet_kusu + $3
+      `, [produkt_id, velikost, pocet]);
+    }
+    if (pocet > 0) {
+      await pool.query(`
+        INSERT INTO pohyby_skladu (produkt_id, velikost, typ, pocet, poznamka)
+        VALUES ($1, $2, 'naskladneni', $3, $4)
+      `, [produkt_id, velikost, pocet, poznamka]);
+    }
     res.json({ zprava: 'Naskladneno uspesne' });
   } catch (err) {
     res.status(500).json({ chyba: err.message });
@@ -97,27 +111,47 @@ router.get('/nizky-stav', async (req, res) => {
 });
 
 
-// Přidat nový produkt
+// Přidat nový produkt (volitelně rovnou i s první variantou - velikost/počet/EAN)
 router.post('/produkty', async (req, res) => {
-  const { nazev, znacka, emoji, popis, kategorie, cena, cena_puvodni, ean } = req.body;
+  const { nazev, znacka, emoji, popis, kategorie, cena, cena_puvodni, velikost, pocet, ean } = req.body;
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
-      'INSERT INTO produkty (nazev, znacka, emoji, popis, kategorie, cena, cena_puvodni, ean) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
-      [nazev, znacka, emoji||'', popis||'', kategorie, cena, cena_puvodni||null, ean||null]
+    await client.query('BEGIN');
+    const result = await client.query(
+      'INSERT INTO produkty (nazev, znacka, emoji, popis, kategorie, cena, cena_puvodni) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
+      [nazev, znacka, emoji||'', popis||'', kategorie, cena, cena_puvodni||null]
     );
-    res.json(result.rows[0]);
+    const produkt = result.rows[0];
+    if (velikost) {
+      const pocetKusu = pocet || 0;
+      await client.query(
+        'INSERT INTO sklad (produkt_id, velikost, pocet_kusu, ean) VALUES ($1,$2,$3,$4)',
+        [produkt.id, velikost, pocetKusu, ean || null]
+      );
+      if (pocetKusu > 0) {
+        await client.query(
+          `INSERT INTO pohyby_skladu (produkt_id, velikost, typ, pocet, poznamka) VALUES ($1,$2,'naskladneni',$3,$4)`,
+          [produkt.id, velikost, pocetKusu, 'Založení produktu']
+        );
+      }
+    }
+    await client.query('COMMIT');
+    res.json(produkt);
   } catch (err) {
+    await client.query('ROLLBACK');
     res.status(500).json({ chyba: err.message });
+  } finally {
+    client.release();
   }
 });
 
 // Upravit produkt
 router.patch('/produkty/:id', async (req, res) => {
-  const { nazev, znacka, cena, cena_puvodni, popis, ean, kategorie } = req.body;
+  const { nazev, znacka, cena, cena_puvodni, popis, kategorie } = req.body;
   try {
     const result = await pool.query(
-      'UPDATE produkty SET nazev=$1, znacka=$2, cena=$3, cena_puvodni=$4, popis=$5, ean=$6, kategorie=$7 WHERE id=$8 RETURNING *',
-      [nazev, znacka, cena, cena_puvodni||null, popis||'', ean||null, kategorie, req.params.id]
+      'UPDATE produkty SET nazev=$1, znacka=$2, cena=$3, cena_puvodni=$4, popis=$5, kategorie=$6 WHERE id=$7 RETURNING *',
+      [nazev, znacka, cena, cena_puvodni||null, popis||'', kategorie, req.params.id]
     );
     res.json(result.rows[0]);
   } catch (err) {

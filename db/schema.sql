@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS sklad (
   velikost INTEGER NOT NULL,
   pocet_kusu INTEGER NOT NULL DEFAULT 0,
   min_pocet INTEGER NOT NULL DEFAULT 3,
+  ean TEXT,
   UNIQUE(produkt_id, velikost)
 );
 
