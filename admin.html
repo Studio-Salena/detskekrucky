@@ -1374,14 +1374,27 @@ function hledatZakazniky(q) {
 }
 
 // SKLAD
+// Když má víc produktů stejný název (např. různé velikosti/EAN zavedené jako samostatné
+// produkty), doplní se do popisku EAN, ať jde v nabídkách rozlišit, který je který.
+function popiskyProduktu(produkty) {
+  const pocty = {};
+  Object.values(produkty).forEach(p => { pocty[p.nazev] = (pocty[p.nazev]||0) + 1; });
+  const vysl = {};
+  Object.entries(produkty).forEach(([id,p]) => {
+    vysl[id] = pocty[p.nazev] > 1 ? `${p.nazev} — EAN ${p.ean || 'bez EAN'}` : p.nazev;
+  });
+  return vysl;
+}
+
 async function loadSklad() {
   document.getElementById('skladTable').innerHTML = '<div class="loading">Načítám...</div>';
   try {
     const data = await adminFetch(API+'/sklad').then(r=>r.json());
     veskerySklad = Array.isArray(data) ? data : [];
     const produkty = {};
-    veskerySklad.forEach(s => { if (!produkty[s.id]) produkty[s.id] = s.nazev; });
-    document.getElementById('nsProdukt').innerHTML = Object.entries(produkty).map(([id,n])=>`<option value="${id}">${n}</option>`).join('');
+    veskerySklad.forEach(s => { if (!produkty[s.id]) produkty[s.id] = {nazev:s.nazev, ean:s.ean}; });
+    const popisky = popiskyProduktu(produkty);
+    document.getElementById('nsProdukt').innerHTML = Object.keys(produkty).map(id=>`<option value="${id}">${popisky[id]}</option>`).join('');
     renderSklad(veskerySklad);
   } catch(e) { document.getElementById('skladTable').innerHTML = '<div class="error-msg">Chyba</div>'; }
 }
@@ -2117,10 +2130,11 @@ async function nacistSkladProProdejna() {
     prodejnaSkladData = Array.isArray(data) ? data : [];
     // Naplnit selecty produktů
     const produkty = {};
-    prodejnaSkladData.forEach(s=>{if(!produkty[s.id])produkty[s.id]={nazev:s.nazev,cena:s.cena};});
+    prodejnaSkladData.forEach(s=>{if(!produkty[s.id])produkty[s.id]={nazev:s.nazev,cena:s.cena,ean:s.ean};});
+    const popisky = popiskyProduktu(produkty);
     document.querySelectorAll('.prod-select').forEach(sel=>{
       sel.innerHTML = '<option value="">Vyberte produkt...</option>' +
-        Object.entries(produkty).map(([id,p])=>`<option value="${id}" data-cena="${p.cena}">${p.nazev}</option>`).join('');
+        Object.entries(produkty).map(([id,p])=>`<option value="${id}" data-cena="${p.cena}">${popisky[id]}</option>`).join('');
     });
   } catch(e) {}
 }
@@ -2138,7 +2152,8 @@ function nacistVelikostiProdejna(sel) {
 
 function pridatPolozku() {
   const produkty = {};
-  prodejnaSkladData.forEach(s=>{if(!produkty[s.id])produkty[s.id]={nazev:s.nazev,cena:s.cena};});
+  prodejnaSkladData.forEach(s=>{if(!produkty[s.id])produkty[s.id]={nazev:s.nazev,cena:s.cena,ean:s.ean};});
+  const popisky = popiskyProduktu(produkty);
   const div = document.createElement('div');
   div.className = 'polozka-row';
   div.style = 'display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px';
@@ -2146,7 +2161,7 @@ function pridatPolozku() {
   div.innerHTML = `
     <div class="form-group" style="margin:0"><label>Produkt</label><select class="prod-select" onchange="nacistVelikostiProdejna(this)">
       <option value="">Vyberte produkt...</option>
-      ${Object.entries(produkty).map(([id,p])=>`<option value="${id}" data-cena="${p.cena}">${p.nazev}</option>`).join('')}
+      ${Object.entries(produkty).map(([id,p])=>`<option value="${id}" data-cena="${p.cena}">${popisky[id]}</option>`).join('')}
     </select></div>
     <div class="form-group" style="margin:0"><label>Velikost</label><select class="vel-select"><option value="">-</option></select></div>
     <div class="form-group" style="margin:0"><label>Ks</label><input type="number" class="pocet-input" value="1" min="1" oninput="prepocitatCelkem()"></div>
@@ -2195,7 +2210,8 @@ async function hledatEan() {
 
   // Přidej nový řádek s předvyplněným produktem
   const produkty = {};
-  prodejnaSkladData.forEach(s=>{ if(!produkty[s.id]) produkty[s.id]={nazev:s.nazev,cena:s.cena}; });
+  prodejnaSkladData.forEach(s=>{ if(!produkty[s.id]) produkty[s.id]={nazev:s.nazev,cena:s.cena,ean:s.ean}; });
+  const popisky = popiskyProduktu(produkty);
   const div = document.createElement('div');
   div.className = 'polozka-row';
   div.style = 'display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px';
@@ -2203,7 +2219,7 @@ async function hledatEan() {
   div.innerHTML = `
     <div class="form-group" style="margin:0"><label>Produkt</label><select class="prod-select" onchange="nacistVelikostiProdejna(this)">
       <option value="">Vyberte produkt...</option>
-      ${Object.entries(produkty).map(([id,p])=>`<option value="${id}" data-cena="${p.cena}" ${id==produkt.id?'selected':''}>${p.nazev}</option>`).join('')}
+      ${Object.entries(produkty).map(([id,p])=>`<option value="${id}" data-cena="${p.cena}" ${id==produkt.id?'selected':''}>${popisky[id]}</option>`).join('')}
     </select></div>
     <div class="form-group" style="margin:0"><label>Velikost</label><select class="vel-select">
       <option value="">-</option>
@@ -2221,7 +2237,7 @@ async function hledatEan() {
   // Vyčisti EAN pole a zprávu
   document.getElementById('eanInput').value = '';
   document.getElementById('eanInput').focus();
-  msg.innerHTML = `<div class="success-msg">✅ Přidán: <strong>${produkt.nazev}</strong></div>`;
+  msg.innerHTML = `<div class="success-msg">✅ Přidán: <strong>${popisky[produkt.id]}</strong></div>`;
   setTimeout(() => msg.innerHTML = '', 2500);
 }
 
