@@ -2478,27 +2478,31 @@ function tiskUctenkyData(prodej, cislo) {
   pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
   <title>Účtenka #${cislo}</title>
   <style>
-    body{font-family:Arial,sans-serif;padding:20px;max-width:320px;margin:0 auto;font-size:13px}
+    @page{ size:58mm auto; margin:0; }
+    *{ box-sizing:border-box; }
+    html,body{width:58mm}
+    body{font-family:'Courier New',Consolas,monospace;margin:0 auto;padding:2mm 2mm;font-size:11px;line-height:1.4;color:#000}
     .center{text-align:center}
-    .logo{font-size:1.4rem;font-weight:bold;color:#8B4513}
-    .divider{border-top:1px dashed #ccc;margin:10px 0}
-    .row{display:flex;justify-content:space-between;margin:4px 0}
-    .total{font-size:1.1rem;font-weight:bold;border-top:2px solid #333;padding-top:8px;margin-top:8px}
-    .footer{text-align:center;font-size:11px;color:#999;margin-top:16px}
-    @media print{body{padding:0}}
+    .logo{font-size:14px;font-weight:bold}
+    .divider{border-top:1px dashed #000;margin:6px 0}
+    .row{display:flex;justify-content:space-between;margin:2px 0}
+    .total{font-size:13px;font-weight:bold;border-top:1px solid #000;padding-top:4px;margin-top:4px}
+    .footer{text-align:center;font-size:10px;margin-top:10px}
+    img{max-width:100%}
+    @media print{body{padding:2mm 2mm}}
   </style>
   </head><body>
   <div class="center">
     <div class="logo">Dětské krůčky</div>
-    <div style="font-size:11px;color:#999">Barefoot obuv</div>
-    <div style="font-size:11px">Monika Škarpichová | IČO: 24354635</div>
-    <div style="font-size:11px">Holešovská 752, Hulín 768 24</div>
-    <div style="font-size:10px;color:#999;margin-top:4px">Fyzická osoba zapsaná v živnostenském rejstříku vedeném MÚ Kroměříž.</div>
+    <div style="font-size:10px">Barefoot obuv</div>
+    <div style="font-size:10px">Monika Škarpichová | IČO: 24354635</div>
+    <div style="font-size:10px">Holešovská 752, Hulín 768 24</div>
+    <div style="font-size:9px;margin-top:4px">Fyzická osoba zapsaná v živnostenském rejstříku vedeném MÚ Kroměříž.</div>
   </div>
   <div class="divider"></div>
-  <div class="row"><span><strong>Datum:</strong></span><span>${datum.toLocaleDateString('cs-CZ')}</span></div>
-  <div class="row"><span><strong>Čas:</strong></span><span>${datum.toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})}</span></div>
-  ${prodej.zakaznik?`<div class="row"><span><strong>Zákazník:</strong></span><span>${prodej.zakaznik}</span></div>`:''}
+  <div class="row"><span>Datum:</span><span>${datum.toLocaleDateString('cs-CZ')}</span></div>
+  <div class="row"><span>Čas:</span><span>${datum.toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})}</span></div>
+  ${prodej.zakaznik?`<div class="row"><span>Zákazník:</span><span>${prodej.zakaznik}</span></div>`:''}
   <div class="divider"></div>
   <div><strong>Položky:</strong></div>
   ${prodej.polozky.map(p=>`
@@ -2508,14 +2512,14 @@ function tiskUctenkyData(prodej, cislo) {
     </div>`).join('')}
   <div class="divider"></div>
   <div class="row total"><span>CELKEM:</span><span>${Number(prodej.celkem).toLocaleString('cs-CZ')} Kč</span></div>
-  <div style="font-size:11px;color:#666;margin-top:4px">Neplátce DPH</div>
+  <div style="font-size:10px;margin-top:4px">Neplátce DPH</div>
   <div class="row"><span>Platba:</span><span>${prodej.platba==='hotovost'?'Hotovost':prodej.platba==='karta'?'Karta':'QR platba'}</span></div>
   ${prodej.platba==='qr'?`
   <div class="center" style="margin-top:12px">
-    <img src="${qrPlatbaUrl(prodej.celkem,'Ucet '+cislo)}" style="width:180px;height:180px" alt="QR platba">
-    <div style="font-size:11px;color:#666;margin-top:4px">Účet: 2003533776/2010</div>
+    <img src="${qrPlatbaUrl(prodej.celkem,'Ucet '+cislo)}" style="width:32mm;height:32mm" alt="QR platba">
+    <div style="font-size:10px;margin-top:4px">Účet: 2003533776/2010</div>
   </div>`:''}
-  ${prodej.poznamka?`<div style="margin-top:8px;font-size:11px;color:#666">Poznámka: ${prodej.poznamka}</div>`:''}
+  ${prodej.poznamka?`<div style="margin-top:8px;font-size:10px">Poznámka: ${prodej.poznamka}</div>`:''}
   <div class="footer">
     <div class="divider"></div>
     <div>Děkujeme za nákup! 🦔</div>
