@@ -5,9 +5,11 @@ if (!process.env.EMAIL_PASS) {
 }
 
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.forpsi.com',
+  port: 465,
+  secure: true,
   auth: {
-    user: process.env.EMAIL || 'masaze.hasalova@gmail.com',
+    user: process.env.EMAIL || 'info@detskekrucky.cz',
     pass: process.env.EMAIL_PASS
   }
 });
@@ -22,7 +24,7 @@ async function odeslat_potvrzeni(objednavka) {
   `).join('');
 
   await transporter.sendMail({
-    from: '"Detske krucky" <masaze.hasalova@gmail.com>',
+    from: '"Detske krucky" <info@detskekrucky.cz>',
     to: objednavka.email,
     subject: `Potvrzeni objednavky #${objednavka.objednavka_id}`,
     html: `
@@ -55,7 +57,7 @@ async function odeslat_potvrzeni(objednavka) {
         </div>` : ''}
         <hr>
         <p style="color:#666;font-size:13px">
-          Detske krucky | 773 517 733 | masaze.hasalova@gmail.com
+          Detske krucky | 773 517 733 | info@detskekrucky.cz
         </p>
       </div>
     `
