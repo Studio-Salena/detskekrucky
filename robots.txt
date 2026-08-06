@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin.html
+Disallow: /admin
+Disallow: /mobilni-sken.html
+
+Sitemap: https://www.detskekrucky.cz/sitemap.xml
