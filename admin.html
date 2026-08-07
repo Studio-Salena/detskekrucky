@@ -716,9 +716,30 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       </div>
     </div>
     <button class="btn btn-outline" style="width:100%;margin-bottom:16px" onclick="pridatPolozku()">+ Přidat položku</button>
-    <div style="display:flex;justify-content:space-between;align-items:center;background:var(--cream);padding:12px 16px;border-radius:10px;margin-bottom:16px">
-      <strong>Celkem:</strong>
-      <strong style="font-size:1.3rem;color:var(--brown)" id="prodejnaCelkem">0 Kč</strong>
+    <div style="background:var(--cream);padding:12px 16px;border-radius:10px;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span>Mezisoučet:</span>
+        <span id="prodejnaMezisoucet">0 Kč</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:10px">
+        <div class="form-group" style="margin:0;flex:1">
+          <label>Sleva</label>
+          <select id="prodejnaSlevaTyp" onchange="prepocitatCelkem()">
+            <option value="zadna">Bez slevy</option>
+            <option value="procenta">Procenta (%)</option>
+            <option value="castka">Částka (Kč)</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;flex:1">
+          <label>Hodnota</label>
+          <input type="number" id="prodejnaSlevaHodnota" min="0" value="0" oninput="prepocitatCelkem()" disabled>
+        </div>
+        <div style="min-width:90px;text-align:right;padding-bottom:9px;color:var(--brown);font-weight:600" id="prodejnaSlevaCastka">−0 Kč</div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--tan);padding-top:10px">
+        <strong>Celkem:</strong>
+        <strong style="font-size:1.3rem;color:var(--brown)" id="prodejnaCelkem">0 Kč</strong>
+      </div>
     </div>
     <div class="section-divider">Platba a zákazník</div>
     <div class="form-grid-2">
@@ -2363,14 +2384,40 @@ function zavritMobilniSken() {
   mobilniSkenId = null;
 }
 
-function prepocitatCelkem() {
-  let total = 0;
+// Spočítá mezisoučet, slevu a celkovou částku podle položek a zvolené slevy.
+// Sdílené mezi zobrazením (prepocitatCelkem) a uložením (ulozitProdejnaProdat).
+function spocitatProdej() {
+  let mezisoucet = 0;
   document.querySelectorAll('.polozka-row').forEach(row=>{
     const pocet = parseInt(row.querySelector('.pocet-input')?.value)||0;
     const cena = parseInt(row.querySelector('.cena-input')?.value)||0;
-    total += pocet * cena;
+    mezisoucet += pocet * cena;
   });
-  document.getElementById('prodejnaCelkem').textContent = total.toLocaleString('cs-CZ')+' Kč';
+
+  const typ = document.getElementById('prodejnaSlevaTyp').value;
+  let hodnota = parseFloat(document.getElementById('prodejnaSlevaHodnota').value) || 0;
+  if (hodnota < 0) hodnota = 0;
+
+  let sleva = 0, popis = '';
+  if (typ === 'procenta') {
+    if (hodnota > 100) hodnota = 100;
+    sleva = Math.round(mezisoucet * hodnota / 100);
+    popis = hodnota + ' %';
+  } else if (typ === 'castka') {
+    sleva = Math.round(hodnota);
+    popis = sleva.toLocaleString('cs-CZ') + ' Kč';
+  }
+  if (sleva > mezisoucet) sleva = mezisoucet; // sleva nemůže přesáhnout mezisoučet
+
+  return { mezisoucet, typ, hodnota, sleva, popis, celkem: mezisoucet - sleva };
+}
+
+function prepocitatCelkem() {
+  const s = spocitatProdej();
+  document.getElementById('prodejnaSlevaHodnota').disabled = (s.typ === 'zadna');
+  document.getElementById('prodejnaMezisoucet').textContent = s.mezisoucet.toLocaleString('cs-CZ')+' Kč';
+  document.getElementById('prodejnaSlevaCastka').textContent = '−'+s.sleva.toLocaleString('cs-CZ')+' Kč';
+  document.getElementById('prodejnaCelkem').textContent = s.celkem.toLocaleString('cs-CZ')+' Kč';
   if (document.getElementById('prodejnaPlatba').value === 'qr') aktualizovatQrPlatbu();
 }
 
@@ -2387,7 +2434,6 @@ function aktualizovatQrPlatbu() {
 
 async function ulozitProdejnaProdat() {
   const polozky = [];
-  let celkem = 0;
   let ok = true;
 
   document.querySelectorAll('.polozka-row').forEach(row=>{
@@ -2398,13 +2444,14 @@ async function ulozitProdejnaProdat() {
     if (!prodSel.value || !velSel.value || pocet<=0) { ok=false; return; }
     const nazev = prodSel.options[prodSel.selectedIndex]?.text || '';
     polozky.push({produkt_id:parseInt(prodSel.value), nazev, velikost:parseInt(velSel.value), pocet, cena});
-    celkem += pocet * cena;
   });
 
   if (!ok || !polozky.length) {
     document.getElementById('prodejnaMsg').innerHTML = '<div class="error-msg">Vyplňte všechny položky.</div>';
     return;
   }
+
+  const { mezisoucet, sleva, popis: sleva_popis, celkem } = spocitatProdej();
 
   const platba = document.getElementById('prodejnaPlatba').value;
   const poukazKod = document.getElementById('prodejnaPoukazKod').value.trim();
@@ -2427,7 +2474,8 @@ async function ulozitProdejnaProdat() {
     zakaznik: document.getElementById('prodejnaZakaznik').value,
     platba: platba,
     poznamka: document.getElementById('prodejnaPoznamka').value,
-    polozky, celkem
+    polozky, celkem,
+    mezisoucet, sleva, sleva_popis: sleva_popis || null
   };
 
   // Odečíst ze skladu
@@ -2473,6 +2521,8 @@ async function ulozitProdejnaProdat() {
   document.getElementById('prodejnaPoukazKod').value = '';
   document.getElementById('poukazProdejnaMsg').innerHTML = '';
   document.getElementById('prodejnaPlatba').value = 'hotovost';
+  document.getElementById('prodejnaSlevaTyp').value = 'zadna';
+  document.getElementById('prodejnaSlevaHodnota').value = '0';
   prepnoutPoukazPole();
   document.getElementById('prodejnaMsg').innerHTML = '';
   document.getElementById('prodejnaPolozky').innerHTML = `
@@ -2484,6 +2534,7 @@ async function ulozitProdejnaProdat() {
       <button class="btn btn-red btn-sm" style="align-self:end" onclick="this.closest('.polozka-row').remove();prepocitatCelkem()">✕</button>
     </div>`;
   nacistSkladProProdejna();
+  prepocitatCelkem();
 }
 
 function prepnoutPoukazPole() {
@@ -2549,6 +2600,9 @@ function tiskUctenkyData(prodej, cislo) {
       <div class="row"><span>${p.pocet} ks × ${Number(p.cena).toLocaleString('cs-CZ')} Kč</span><span><strong>${(p.pocet*Number(p.cena)).toLocaleString('cs-CZ')} Kč</strong></span></div>
     </div>`).join('')}
   <div class="divider"></div>
+  ${Number(prodej.sleva)>0?`
+  <div class="row"><span>Mezisoučet:</span><span>${Number(prodej.mezisoucet).toLocaleString('cs-CZ')} Kč</span></div>
+  <div class="row"><span>Sleva${prodej.sleva_popis?' ('+prodej.sleva_popis+')':''}:</span><span>−${Number(prodej.sleva).toLocaleString('cs-CZ')} Kč</span></div>`:''}
   <div class="row total"><span>CELKEM:</span><span>${Number(prodej.celkem).toLocaleString('cs-CZ')} Kč</span></div>
   <div style="font-size:10px;margin-top:4px">Neplátce DPH</div>
   <div class="row"><span>Platba:</span><span>${prodej.platba==='hotovost'?'Hotovost':prodej.platba==='karta'?'Karta':'QR platba'}</span></div>
