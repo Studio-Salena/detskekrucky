@@ -867,7 +867,9 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     <div id="poukazDetail" style="margin:16px 0"></div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modalZobrazitPoukaz')">Zavřít</button>
-      <button class="btn btn-primary" onclick="tisknoutPoukaz()">🖨️ Vytisknout</button>
+      <button class="btn btn-outline" onclick="tisknoutPoukazEAN()">🏷️ Jen EAN</button>
+      <button class="btn btn-outline" onclick="tisknoutPoukaz(false)">🖨️ Poukaz bez EAN</button>
+      <button class="btn btn-primary" onclick="tisknoutPoukaz(true)">🖨️ Poukaz s EAN</button>
     </div>
   </div>
 </div>
@@ -3043,9 +3045,10 @@ async function zobrazitPoukazDetail(id, poukazData=null) {
   openModal('modalZobrazitPoukaz');
 }
 
-function tisknoutPoukaz() {
+function tisknoutPoukaz(sEanem = true) {
   if (!poslednePoukazData) return;
   const p = poslednePoukazData;
+  const zobrazitEan = sEanem && !!p.ean;
   const proKoho = (p.poznamka && p.poznamka.startsWith('Pro:')) ? p.poznamka.replace('Pro:','').trim() : '';
   const zakladUrl = window.location.origin + window.location.pathname.replace('admin.html','');
   const pw = window.open('','_blank','width=760,height=460');
@@ -3121,13 +3124,50 @@ function tisknoutPoukaz() {
         <div class="detail-row"><span class="detail-label">PLATNOST DO:</span><span class="detail-fill">${new Date(p.platnost_do).toLocaleDateString('cs-CZ')}</span></div>
       </div>
       <div class="footer-row" style="flex-direction:column;align-items:flex-start;gap:8px">
-        <svg id="bc"></svg>
+        ${zobrazitEan ? '<svg id="bc"></svg>' : ''}
         <div class="footer-web">Více na: <strong>www.detskekrucky.cz</strong></div>
       </div>
     </div>
   </div>
   <script>
-    JsBarcode('#bc', '${p.ean}', {format:'EAN13', width:1.8, height:48, fontSize:13, margin:0});
+    ${zobrazitEan ? `JsBarcode('#bc', '${p.ean}', {format:'EAN13', width:1.8, height:48, fontSize:13, margin:0});` : ''}
+    window.onload = () => setTimeout(()=>window.print(), 400);
+  <\/script>
+  </body></html>`);
+  pw.document.close();
+}
+
+// Vytiskne jen samotný EAN čárový kód jako malý štítek k vystřižení a nalepení
+// na předtištěný poukaz. Nad kódem je malý řádek (hodnota + platnost) pro rozlišení,
+// který jde v případě potřeby odstřihnout.
+function tisknoutPoukazEAN() {
+  if (!poslednePoukazData) return;
+  const p = poslednePoukazData;
+  if (!p.ean) { alert('Tento poukaz nemá EAN kód.'); return; }
+  const platnost = new Date(p.platnost_do).toLocaleDateString('cs-CZ');
+  const pw = window.open('','_blank','width=420,height=300');
+  pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>EAN poukaz ${p.kod}</title>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></scr` + `ipt>
+  <style>
+    * { box-sizing:border-box; }
+    body{font-family:Arial,sans-serif;margin:0;padding:14px}
+    .stitek{
+      display:inline-block;
+      border:1px dashed #999;
+      border-radius:6px;
+      padding:10px 14px 8px;
+      text-align:center;
+    }
+    .popis{ font-size:11px; color:#555; margin-bottom:6px; }
+    svg{ display:block; }
+    @media print { .stitek{border-color:#ccc} }
+  </style></head><body>
+  <div class="stitek">
+    <div class="popis">Poukaz ${Number(p.hodnota).toLocaleString('cs-CZ')} Kč &middot; platnost do ${platnost}</div>
+    <svg id="bcean"></svg>
+  </div>
+  <script>
+    JsBarcode('#bcean', '${p.ean}', {format:'EAN13', width:2, height:60, fontSize:14, margin:0});
     window.onload = () => setTimeout(()=>window.print(), 400);
   <\/script>
   </body></html>`);
