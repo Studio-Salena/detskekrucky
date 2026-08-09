@@ -1493,10 +1493,10 @@
 
   /* ── COOKIE BAR ── */
   #cookie-bar {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
     width: 100%;
     z-index: 9999;
     background: linear-gradient(135deg, #3d2b1f, #6b4c35);
@@ -2508,8 +2508,13 @@ window.addEventListener('scroll', function() {
 <script>
   // Show cookie bar only if not already accepted
   (function() {
+    const bar = document.getElementById('cookie-bar');
+    // Přesun přímo pod <body>, aby fixní pozice byla vždy vůči oknu (ne vůči rodiči)
+    if (bar && bar.parentElement !== document.body) {
+      document.body.appendChild(bar);
+    }
     if (localStorage.getItem('cookieAccepted')) {
-      document.getElementById('cookie-bar').style.display = 'none';
+      bar.style.display = 'none';
     }
   })();
   function closeCookie() {
