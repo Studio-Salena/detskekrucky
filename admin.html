@@ -595,7 +595,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <div class="stats-grid" style="grid-template-columns:repeat(1,1fr);max-width:260px">
         <div class="stat-card"><div class="stat-label">Přihlášených e-mailů</div><div class="stat-value" id="newsletterPocet">...</div></div>
       </div>
-      <p style="color:var(--text-light);font-size:0.85rem;margin:0 0 16px">💡 „Napsat všem" otevře tvůj e-mailový program s adresami ve skryté kopii (BCC) – příjemci se navzájem neuvidí. Když by tlačítko nefungovalo, použij „Zkopírovat e-maily" a vlož je do BCC ručně.</p>
+      <p style="color:var(--text-light);font-size:0.85rem;margin:0 0 16px">💡 „Napsat všem" otevře Gmail okno pro napsání zprávy s adresami ve skryté kopii (BCC) – příjemci se navzájem neuvidí. (Musíš být přihlášená v Gmailu v prohlížeči; případně povol vyskakovací okna.) Když bys chtěla použít jiný e-mail, klikni na „Zkopírovat e-maily" a vlož adresy do BCC ručně.</p>
 
       <div class="table-wrap">
         <div class="table-header"><h3>📋 Seznam přihlášených</h3></div>
@@ -3552,9 +3552,12 @@ async function poslatZkusebniEmail() {
 // Otevře e-mailový program s adresami odběratelů ve skryté kopii (BCC)
 function napsatVsem() {
   if (!newsletterEmaily.length) { alert('Zatím nejsou žádní přihlášení k newsletteru.'); return; }
-  const predmet = encodeURIComponent('Novinky z Dětských krůčků');
-  const telo = encodeURIComponent('Dobrý den,\n\n');
-  window.location.href = `mailto:?bcc=${newsletterEmaily.join(',')}&subject=${predmet}&body=${telo}`;
+  const bcc = encodeURIComponent(newsletterEmaily.join(','));
+  const su = encodeURIComponent('Novinky z Dětských krůčků');
+  const body = encodeURIComponent('Dobrý den,\n\n');
+  // Otevře Gmail okno pro napsání zprávy (spolehlivé i bez výchozího poštovního programu ve Windows)
+  const url = `https://mail.google.com/mail/?view=cm&fs=1&bcc=${bcc}&su=${su}&body=${body}`;
+  window.open(url, '_blank');
 }
 
 // Zkopíruje všechny e-maily do schránky (fallback / pro vložení do BCC ručně)
