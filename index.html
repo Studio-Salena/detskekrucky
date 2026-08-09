@@ -2508,10 +2508,16 @@ window.addEventListener('scroll', function() {
   // Show cookie bar only if not already accepted
   (function() {
     const bar = document.getElementById('cookie-bar');
-    // Přesun přímo pod <body>, aby fixní pozice byla vždy vůči oknu (ne vůči rodiči)
-    if (bar && bar.parentElement !== document.body) {
-      document.body.appendChild(bar);
-    }
+    if (!bar) return;
+    // Přesun přímo pod <body> a vynucení fixní pozice za běhu (přebije jakékoli CSS)
+    document.body.appendChild(bar);
+    bar.style.setProperty('position', 'fixed', 'important');
+    bar.style.setProperty('left', '0', 'important');
+    bar.style.setProperty('right', '0', 'important');
+    bar.style.setProperty('bottom', '0', 'important');
+    bar.style.setProperty('top', 'auto', 'important');
+    bar.style.setProperty('transform', 'none', 'important');
+    bar.style.setProperty('z-index', '2147483647', 'important');
     if (localStorage.getItem('cookieAccepted')) {
       bar.style.display = 'none';
     }
@@ -2519,9 +2525,7 @@ window.addEventListener('scroll', function() {
   function closeCookie() {
     localStorage.setItem('cookieAccepted', '1');
     const bar = document.getElementById('cookie-bar');
-    bar.style.transition = 'transform 0.4s ease';
-    bar.style.transform = 'translateY(100%)';
-    setTimeout(() => bar.style.display = 'none', 400);
+    if (bar) bar.style.display = 'none';
   }
 </script>
 
