@@ -79,6 +79,19 @@ let textyWebu = {
     { ikona: '👣', nadpis: 'Zdravý vývoj', podnadpis: 'Barefoot filozofie' },
     { ikona: '🏅', nadpis: 'S láskou vybrané', podnadpis: '' },
     { ikona: '💛', nadpis: 'Spokojené děti', podnadpis: 'Stovky šťastných nožiček' }
+  ],
+  mereniKroky: [
+    { nadpis: 'Připravte papír a tužku', text: 'Položte list papíru na pevnou rovnou podlahu. Dítě by mělo stát při měření.' },
+    { nadpis: 'Obkreslete stopu', text: 'Nechte dítě stát na papíru a opatrně obkreslete celou nožičku tužkou.' },
+    { nadpis: 'Změřte délku v mm', text: 'Odměřte vzdálenost od paty k nejdelšímu prstu. Přidejte 10–15 mm pro zdravý prostor.' },
+    { nadpis: 'Vyberte správnou velikost', text: 'Porovnejte změřenou délku s velikostí uvedenou u každého produktu. V případě pochybností vyberte větší.' }
+  ],
+  typyChodidel: [
+    { nadpis: 'EGYPTSKÝ TYP', podtitul: '(dominuje palec)', popis: 'Palec je nejdelší, ostatní prsty postupně kratší.', tipy: ['Potřebují botičky s dostatkem místa vpředu', 'Prsty by neměly být stlačené'] },
+    { nadpis: 'ŘECKÝ TYP', podtitul: '(dominuje 2. prst)', popis: 'Druhý prst je delší než palec.', tipy: ['Důležitá je široká špička, ať mají prsty prostor', 'Nepřetlačovat'] },
+    { nadpis: 'ŘÍMSKÝ TYP', podtitul: '(prsty přibližně stejné)', popis: 'Prsty jsou téměř stejně dlouhé.', tipy: ['Vyhledávejte modely kopírující přirozený tvar chodidla'] },
+    { nadpis: 'ŠIROKÝ TYP', podtitul: '(širší chodidlo)', popis: 'Chodidlo je širší v přední části.', tipy: ['Potřebují botičky s extra prostorem vepředu'] },
+    { nadpis: 'ÚZKÝ TYP', podtitul: '(užší chodidlo)', popis: 'Chodidlo je užší, s užší patou.', tipy: ['Hledejte botičky, které lépe drží úzkou patu a kotník'] }
   ]
 };
 

@@ -542,6 +542,17 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
   </div>
 
   <div class="card" style="margin-bottom:20px">
+    <h3 style="margin-bottom:16px">Sekce „Jak orientačně změřit nožičku" (4 kroky)</h3>
+    <div id="txMereniKroky" style="display:flex;flex-direction:column;gap:16px"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:20px">
+    <h3 style="margin-bottom:16px">Typy chodidel (5 typů)</h3>
+    <p style="color:var(--text-light);font-size:0.85rem;margin-bottom:16px">Obrázek nožičky u každého typu zůstává, mění se jen texty. Druhý tip můžeš nechat prázdný.</p>
+    <div id="txTypyChodidel" style="display:flex;flex-direction:column;gap:16px"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:20px">
     <p style="color:var(--text-light);font-size:0.85rem">ℹ️ Sekce „Vyberte si" na webu se teď generuje automaticky podle kategorií – uprav ji v sekci <strong>🏷️ Kategorie</strong> (Popis a Značky u každé kategorie).</p>
   </div>
 
@@ -3563,6 +3574,8 @@ function formatDatum(d) {
   return `${day}. ${m}. ${y}`;
 }
 function escH(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escHtml(s) { return escH(s); }
+function escAttr(s) { return escH(s).replace(/"/g,'&quot;'); }
 
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
@@ -3574,6 +3587,19 @@ const vychoziTrustBadges = [
   { ikona:'👣', nadpis:'Zdravý vývoj', podnadpis:'Barefoot filozofie' },
   { ikona:'🏅', nadpis:'S láskou vybrané', podnadpis:'' },
   { ikona:'💛', nadpis:'Spokojené děti', podnadpis:'Stovky šťastných nožiček' }
+];
+const vychoziMereniKroky = [
+  { nadpis:'Připravte papír a tužku', text:'Položte list papíru na pevnou rovnou podlahu. Dítě by mělo stát při měření.' },
+  { nadpis:'Obkreslete stopu', text:'Nechte dítě stát na papíru a opatrně obkreslete celou nožičku tužkou.' },
+  { nadpis:'Změřte délku v mm', text:'Odměřte vzdálenost od paty k nejdelšímu prstu. Přidejte 10–15 mm pro zdravý prostor.' },
+  { nadpis:'Vyberte správnou velikost', text:'Porovnejte změřenou délku s velikostí uvedenou u každého produktu. V případě pochybností vyberte větší.' }
+];
+const vychoziTypyChodidel = [
+  { nadpis:'EGYPTSKÝ TYP', podtitul:'(dominuje palec)', popis:'Palec je nejdelší, ostatní prsty postupně kratší.', tipy:['Potřebují botičky s dostatkem místa vpředu','Prsty by neměly být stlačené'] },
+  { nadpis:'ŘECKÝ TYP', podtitul:'(dominuje 2. prst)', popis:'Druhý prst je delší než palec.', tipy:['Důležitá je široká špička, ať mají prsty prostor','Nepřetlačovat'] },
+  { nadpis:'ŘÍMSKÝ TYP', podtitul:'(prsty přibližně stejné)', popis:'Prsty jsou téměř stejně dlouhé.', tipy:['Vyhledávejte modely kopírující přirozený tvar chodidla'] },
+  { nadpis:'ŠIROKÝ TYP', podtitul:'(širší chodidlo)', popis:'Chodidlo je širší v přední části.', tipy:['Potřebují botičky s extra prostorem vepředu'] },
+  { nadpis:'ÚZKÝ TYP', podtitul:'(užší chodidlo)', popis:'Chodidlo je užší, s užší patou.', tipy:['Hledejte botičky, které lépe drží úzkou patu a kotník'] }
 ];
 async function loadTexty() {
   try {
@@ -3621,6 +3647,53 @@ async function loadTexty() {
         </div>`;
     });
 
+    // Jak změřit nožičku (4 kroky)
+    const kontKroky = document.getElementById('txMereniKroky');
+    kontKroky.innerHTML = '';
+    const kroky = (data.mereniKroky && data.mereniKroky.length) ? data.mereniKroky : vychoziMereniKroky;
+    kroky.forEach((k, i) => {
+      kontKroky.innerHTML += `
+        <div style="border:1px solid var(--tan-light);border-radius:10px;padding:12px">
+          <b>Krok ${i+1}</b>
+          <div class="form-group" style="margin-top:8px"><label>Nadpis</label>
+            <input type="text" id="mk_nadpis_${i}" value="${escAttr(k.nadpis)}" style="width:100%;padding:6px;border:1px solid var(--tan-light);border-radius:6px;font-family:inherit">
+          </div>
+          <div class="form-group" style="margin-top:8px"><label>Text</label>
+            <textarea id="mk_text_${i}" rows="2" style="width:100%;padding:6px;border:1px solid var(--tan-light);border-radius:6px;font-family:inherit;resize:vertical">${escHtml(k.text)}</textarea>
+          </div>
+        </div>`;
+    });
+
+    // Typy chodidel (5 typů)
+    const kontTypy = document.getElementById('txTypyChodidel');
+    kontTypy.innerHTML = '';
+    const typy = (data.typyChodidel && data.typyChodidel.length) ? data.typyChodidel : vychoziTypyChodidel;
+    typy.forEach((t, i) => {
+      const tip0 = (t.tipy && t.tipy[0]) || '';
+      const tip1 = (t.tipy && t.tipy[1]) || '';
+      kontTypy.innerHTML += `
+        <div style="border:1px solid var(--tan-light);border-radius:10px;padding:12px">
+          <b>Typ ${i+1}</b>
+          <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap">
+            <div class="form-group" style="margin:0;flex:1;min-width:160px"><label>Nadpis</label>
+              <input type="text" id="tc_nadpis_${i}" value="${escAttr(t.nadpis)}" style="width:100%;padding:6px;border:1px solid var(--tan-light);border-radius:6px;font-family:inherit">
+            </div>
+            <div class="form-group" style="margin:0;flex:1;min-width:160px"><label>Podtitulek</label>
+              <input type="text" id="tc_podtitul_${i}" value="${escAttr(t.podtitul)}" style="width:100%;padding:6px;border:1px solid var(--tan-light);border-radius:6px;font-family:inherit">
+            </div>
+          </div>
+          <div class="form-group" style="margin-top:8px"><label>Popis</label>
+            <textarea id="tc_popis_${i}" rows="2" style="width:100%;padding:6px;border:1px solid var(--tan-light);border-radius:6px;font-family:inherit;resize:vertical">${escHtml(t.popis)}</textarea>
+          </div>
+          <div class="form-group" style="margin-top:8px"><label>Tip 1</label>
+            <input type="text" id="tc_tip0_${i}" value="${escAttr(tip0)}" style="width:100%;padding:6px;border:1px solid var(--tan-light);border-radius:6px;font-family:inherit">
+          </div>
+          <div class="form-group" style="margin-top:8px"><label>Tip 2 (nepovinné)</label>
+            <input type="text" id="tc_tip1_${i}" value="${escAttr(tip1)}" style="width:100%;padding:6px;border:1px solid var(--tan-light);border-radius:6px;font-family:inherit">
+          </div>
+        </div>`;
+    });
+
   } catch(e) {
     document.getElementById('textyMsg').innerHTML='<div class="error-msg">Chyba načítání</div>';
   }
@@ -3648,8 +3721,23 @@ async function ulozitTexty() {
     podnadpis: document.getElementById(`tb_podnadpis_${i}`)?.value || ''
   }));
 
+  const mereniKroky = [0,1,2,3].map(i => ({
+    nadpis: document.getElementById(`mk_nadpis_${i}`)?.value || '',
+    text: document.getElementById(`mk_text_${i}`)?.value || ''
+  }));
+
+  const typyChodidel = [0,1,2,3,4].map(i => ({
+    nadpis: document.getElementById(`tc_nadpis_${i}`)?.value || '',
+    podtitul: document.getElementById(`tc_podtitul_${i}`)?.value || '',
+    popis: document.getElementById(`tc_popis_${i}`)?.value || '',
+    tipy: [
+      document.getElementById(`tc_tip0_${i}`)?.value || '',
+      document.getElementById(`tc_tip1_${i}`)?.value || ''
+    ].filter(t => t.trim() !== '')
+  }));
+
   // Zachovat i ostatní klíče (např. vyberteSi), server ukládá celý objekt
-  const payload = { ...textyWebuData, procBarefoot, trustBadges };
+  const payload = { ...textyWebuData, procBarefoot, trustBadges, mereniKroky, typyChodidel };
 
   try {
     const res = await adminFetch(API+'/nastaveni/texty', {
