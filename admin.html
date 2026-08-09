@@ -536,6 +536,12 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
   </div>
 
   <div class="card" style="margin-bottom:20px">
+    <h3 style="margin-bottom:16px">Pruh s ikonami (4 dlaždice)</h3>
+    <p style="color:var(--text-light);font-size:0.85rem;margin-bottom:16px">Barevný pruh s ikonami pod obsahem webu. Podnadpis můžeš nechat prázdný.</p>
+    <div id="txTrustBadges" style="display:flex;flex-direction:column;gap:16px"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:20px">
     <p style="color:var(--text-light);font-size:0.85rem">ℹ️ Sekce „Vyberte si" na webu se teď generuje automaticky podle kategorií – uprav ji v sekci <strong>🏷️ Kategorie</strong> (Popis a Značky u každé kategorie).</p>
   </div>
 
@@ -3562,9 +3568,17 @@ function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
 // TEXTY WEBU
+let textyWebuData = {};
+const vychoziTrustBadges = [
+  { ikona:'🌿', nadpis:'Přírodní materiály', podnadpis:'Kůže, bavlna, textil' },
+  { ikona:'👣', nadpis:'Zdravý vývoj', podnadpis:'Barefoot filozofie' },
+  { ikona:'🏅', nadpis:'S láskou vybrané', podnadpis:'' },
+  { ikona:'💛', nadpis:'Spokojené děti', podnadpis:'Stovky šťastných nožiček' }
+];
 async function loadTexty() {
   try {
     const data = await adminFetch(API+'/nastaveni/texty').then(r=>r.json());
+    textyWebuData = data || {};
 
     // Proč barefoot karty
     const kontBarefoot = document.getElementById('txProcBarefoot');
@@ -3581,6 +3595,28 @@ async function loadTexty() {
           </div>
           <div class="form-group" style="margin-top:8px"><label>Text</label>
             <textarea id="bf_text_${i}" rows="3" style="width:100%;padding:6px;border:1px solid var(--tan-light);border-radius:6px;font-family:inherit;resize:vertical">${karta.text||''}</textarea>
+          </div>
+        </div>`;
+    });
+
+    // Pruh s ikonami (trust badges)
+    const kontBadges = document.getElementById('txTrustBadges');
+    kontBadges.innerHTML = '';
+    const badges = (data.trustBadges && data.trustBadges.length) ? data.trustBadges : vychoziTrustBadges;
+    badges.forEach((b, i) => {
+      kontBadges.innerHTML += `
+        <div style="border:1px solid var(--tan-light);border-radius:10px;padding:12px">
+          <b>Dlaždice ${i+1}</b>
+          <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap">
+            <div class="form-group" style="margin:0"><label>Ikona (emoji)</label>
+              <input type="text" id="tb_ikona_${i}" value="${b.ikona||''}" style="width:80px;padding:6px;border:1px solid var(--tan-light);border-radius:6px;font-family:inherit;font-size:1.2rem">
+            </div>
+            <div class="form-group" style="margin:0;flex:1;min-width:160px"><label>Nadpis</label>
+              <input type="text" id="tb_nadpis_${i}" value="${b.nadpis||''}" style="width:100%;padding:6px;border:1px solid var(--tan-light);border-radius:6px;font-family:inherit">
+            </div>
+            <div class="form-group" style="margin:0;flex:1;min-width:160px"><label>Podnadpis (nepovinné)</label>
+              <input type="text" id="tb_podnadpis_${i}" value="${b.podnadpis||''}" style="width:100%;padding:6px;border:1px solid var(--tan-light);border-radius:6px;font-family:inherit">
+            </div>
           </div>
         </div>`;
     });
@@ -3606,7 +3642,14 @@ async function ulozitTexty() {
     text: document.getElementById(`bf_text_${i}`)?.value || ''
   }));
 
-  const payload = { procBarefoot };
+  const trustBadges = [0,1,2,3].map(i => ({
+    ikona: document.getElementById(`tb_ikona_${i}`)?.value || '',
+    nadpis: document.getElementById(`tb_nadpis_${i}`)?.value || '',
+    podnadpis: document.getElementById(`tb_podnadpis_${i}`)?.value || ''
+  }));
+
+  // Zachovat i ostatní klíče (např. vyberteSi), server ukládá celý objekt
+  const payload = { ...textyWebuData, procBarefoot, trustBadges };
 
   try {
     const res = await adminFetch(API+'/nastaveni/texty', {

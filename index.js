@@ -73,6 +73,12 @@ let textyWebu = {
     { nadpis: 'Celoroční boty', text: 'Odolné a pohodlné boty pro aktivní dětský dobrodružný den venku i ve městě. Máme značky Froddo, Protetika,' },
     { nadpis: 'Zimní botičky', text: '' },
     { nadpis: 'Gumáky', text: '' }
+  ],
+  trustBadges: [
+    { ikona: '🌿', nadpis: 'Přírodní materiály', podnadpis: 'Kůže, bavlna, textil' },
+    { ikona: '👣', nadpis: 'Zdravý vývoj', podnadpis: 'Barefoot filozofie' },
+    { ikona: '🏅', nadpis: 'S láskou vybrané', podnadpis: '' },
+    { ikona: '💛', nadpis: 'Spokojené děti', podnadpis: 'Stovky šťastných nožiček' }
   ]
 };
 

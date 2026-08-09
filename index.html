@@ -2055,23 +2055,23 @@ Z" fill="#f7f0e6" stroke="#6b5a48" stroke-width="3.5" stroke-linejoin="round"/><
 <section style="background:linear-gradient(90deg,#e8fff0,#fffbe8,#e8f4ff,#fff0f8);padding:36px 0;border-top:2px solid rgba(107,76,53,0.07);border-bottom:2px solid rgba(107,76,53,0.07);">
   <div style="max-width:1100px;margin:0 auto;padding:0 32px;display:flex;flex-wrap:wrap;justify-content:center;gap:32px;align-items:center;">
     <div style="display:flex;align-items:center;gap:12px;">
-      <div style="width:54px;height:54px;background:linear-gradient(135deg,#7A816C,#565c4c);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.6rem;box-shadow:0 4px 14px rgba(107,191,122,0.35);">🌿</div>
-      <div><strong style="display:block;color:#3d2b1f;font-size:0.95rem;">Přírodní materiály</strong><span style="font-size:0.78rem;color:#7a5c42;">Kůže, bavlna, textil</span></div>
+      <div id="tb-ikona-0" style="width:54px;height:54px;background:linear-gradient(135deg,#7A816C,#565c4c);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.6rem;box-shadow:0 4px 14px rgba(107,191,122,0.35);">🌿</div>
+      <div><strong id="tb-nadpis-0" style="display:block;color:#3d2b1f;font-size:0.95rem;">Přírodní materiály</strong><span id="tb-podnadpis-0" style="font-size:0.78rem;color:#7a5c42;">Kůže, bavlna, textil</span></div>
     </div>
     <div style="width:2px;height:40px;background:rgba(107,76,53,0.1);"></div>
     <div style="display:flex;align-items:center;gap:12px;">
-      <div style="width:54px;height:54px;background:linear-gradient(135deg,#A58B71,#D1A9A5);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.6rem;box-shadow:0 4px 14px rgba(240,168,85,0.35);">👣</div>
-      <div><strong style="display:block;color:#3d2b1f;font-size:0.95rem;">Zdravý vývoj</strong><span style="font-size:0.78rem;color:#7a5c42;">Barefoot filozofie</span></div>
+      <div id="tb-ikona-1" style="width:54px;height:54px;background:linear-gradient(135deg,#A58B71,#D1A9A5);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.6rem;box-shadow:0 4px 14px rgba(240,168,85,0.35);">👣</div>
+      <div><strong id="tb-nadpis-1" style="display:block;color:#3d2b1f;font-size:0.95rem;">Zdravý vývoj</strong><span id="tb-podnadpis-1" style="font-size:0.78rem;color:#7a5c42;">Barefoot filozofie</span></div>
     </div>
     <div style="width:2px;height:40px;background:rgba(107,76,53,0.1);"></div>
     <div style="display:flex;align-items:center;gap:12px;">
-      <div style="width:54px;height:54px;background:linear-gradient(135deg,#5ba8d4,#2d7db8);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.6rem;box-shadow:0 4px 14px rgba(91,168,212,0.35);">🏅</div>
-      <div><strong style="display:block;color:#3d2b1f;font-size:0.95rem;">S láskou vybrané</strong></div>
+      <div id="tb-ikona-2" style="width:54px;height:54px;background:linear-gradient(135deg,#5ba8d4,#2d7db8);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.6rem;box-shadow:0 4px 14px rgba(91,168,212,0.35);">🏅</div>
+      <div><strong id="tb-nadpis-2" style="display:block;color:#3d2b1f;font-size:0.95rem;">S láskou vybrané</strong><span id="tb-podnadpis-2" style="font-size:0.78rem;color:#7a5c42;"></span></div>
     </div>
     <div style="width:2px;height:40px;background:rgba(107,76,53,0.1);"></div>
     <div style="display:flex;align-items:center;gap:12px;">
-      <div style="width:54px;height:54px;background:linear-gradient(135deg,#f7a8b8,#e0607a);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.6rem;box-shadow:0 4px 14px rgba(247,168,184,0.35);">💛</div>
-      <div><strong style="display:block;color:#3d2b1f;font-size:0.95rem;">Spokojené děti</strong><span style="font-size:0.78rem;color:#7a5c42;">Stovky šťastných nožiček</span></div>
+      <div id="tb-ikona-3" style="width:54px;height:54px;background:linear-gradient(135deg,#f7a8b8,#e0607a);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.6rem;box-shadow:0 4px 14px rgba(247,168,184,0.35);">💛</div>
+      <div><strong id="tb-nadpis-3" style="display:block;color:#3d2b1f;font-size:0.95rem;">Spokojené děti</strong><span id="tb-podnadpis-3" style="font-size:0.78rem;color:#7a5c42;">Stovky šťastných nožiček</span></div>
     </div>
   </div>
 </section>
@@ -2604,6 +2604,16 @@ document.querySelectorAll('nav a').forEach(a => {
             karty[i].querySelector('h3').textContent = karta.nadpis;
             karty[i].querySelector('p').textContent = karta.text;
           }
+        });
+      }
+      if (data.trustBadges) {
+        data.trustBadges.forEach((b, i) => {
+          const ikona = document.getElementById('tb-ikona-' + i);
+          const nadpis = document.getElementById('tb-nadpis-' + i);
+          const podnadpis = document.getElementById('tb-podnadpis-' + i);
+          if (ikona) ikona.textContent = b.ikona || '';
+          if (nadpis) nadpis.textContent = b.nadpis || '';
+          if (podnadpis) podnadpis.textContent = b.podnadpis || '';
         });
       }
     } catch (e) {
