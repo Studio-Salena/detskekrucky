@@ -1050,9 +1050,6 @@
     #back-to-top { font-size: 0.8rem; padding: 8px 12px; bottom: 80px; }
     /* Float contact smaller */
     .float-contact a { width: 44px; height: 44px; }
-    /* Cookie bar */
-    #cookie-bar { padding: 12px 16px; flex-direction: column; text-align: center; }
-    .cookie-buttons { justify-content: center; }
     /* Opening hours widget */
     #welcome-popup { bottom: 16px; left: 16px; }
     .popup-bubble { max-width: 200px; }
@@ -1491,70 +1488,7 @@
     display: none;
   }
 
-  /* ── COOKIE BAR ── */
-  #cookie-bar {
-    position: fixed !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    width: 100%;
-    z-index: 9999;
-    background: linear-gradient(135deg, #3d2b1f, #6b4c35);
-    color: rgba(255,255,255,0.9);
-    padding: 16px 32px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 20px;
-    flex-wrap: wrap;
-    z-index: 99999;
-    box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
-    border-top: 3px solid #A58B71;
-  }
-  @keyframes slideUp {
-    from { transform: translateY(100%); }
-    to   { transform: translateY(0); }
-  }
-  #cookie-bar p {
-    font-size: 0.85rem;
-    line-height: 1.5;
-    margin: 0;
-    flex: 1;
-    min-width: 200px;
-  }
-  #cookie-bar a {
-    color: #A58B71;
-    text-decoration: underline;
-  }
-  .cookie-buttons {
-    display: flex;
-    gap: 10px;
-    flex-shrink: 0;
-  }
-  .cookie-btn-accept {
-    background: linear-gradient(135deg, #7A816C, #565c4c);
-    color: #fff;
-    border: none;
-    border-radius: 20px;
-    padding: 9px 20px;
-    font-size: 0.85rem;
-    font-weight: 700;
-    cursor: pointer;
-    box-shadow: 0 3px 10px rgba(107,191,122,0.4);
-    transition: transform 0.2s;
-  }
-  .cookie-btn-accept:hover { transform: scale(1.05); }
-  .cookie-btn-decline {
-    background: transparent;
-    color: rgba(255,255,255,0.6);
-    border: 1px solid rgba(255,255,255,0.3);
-    border-radius: 20px;
-    padding: 9px 20px;
-    font-size: 0.85rem;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .cookie-btn-decline:hover { color: #fff; border-color: #fff; }
+  /* ── COOKIE BAR ── styly jsou přímo inline na elementu (viz konec body) ── */
 
   /* ── MOBILNÍ OPRAVY ── */
   @media (max-width: 480px) {
@@ -1585,11 +1519,6 @@
     #welcome-popup { left: 8px; bottom: 12px; }
     .popup-bubble { max-width: 180px; font-size: 0.8rem; padding: 12px 14px; }
     .popup-hedgehog { font-size: 2.4rem; }
-
-    /* Cookie bar */
-    #cookie-bar { padding: 10px 12px; }
-    #cookie-bar p { font-size: 0.78rem; }
-    .cookie-btn-accept, .cookie-btn-decline { padding: 7px 14px; font-size: 0.78rem; }
 
     /* Logo text menší */
     .logo-name { font-size: 1rem; }
