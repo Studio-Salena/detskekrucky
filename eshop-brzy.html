@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>E-shop se připravuje – Dětské krůčky</title>
+<meta name="robots" content="noindex">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant:wght@600;700&family=Dancing+Script:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="icon" href="logo.jpg" type="image/jpeg">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family:'Nunito',sans-serif;
+    background:linear-gradient(160deg,#E5DFD6 0%,#f0fbf4 60%,#fff8f2 100%);
+    color:#3d2b1f;
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+  }
+  .card {
+    background:#fff8f2;
+    border:2px solid #d4c4b0;
+    border-radius:24px;
+    box-shadow:0 12px 40px rgba(107,76,53,0.15);
+    max-width:520px;
+    width:100%;
+    padding:40px 32px;
+    text-align:center;
+  }
+  .logo { width:120px;height:120px;border-radius:50%;object-fit:cover;border:3px solid #d4c4b0;margin-bottom:20px; }
+  .emoji { font-size:2.6rem; display:block; margin-bottom:10px; }
+  h1 {
+    font-family:'Cormorant',serif;
+    font-size:2rem;
+    color:#8a4a46;
+    margin-bottom:14px;
+    line-height:1.2;
+  }
+  p { color:#6b5548; font-size:1.02rem; line-height:1.7; margin-bottom:12px; }
+  .buttons { display:flex; flex-wrap:wrap; gap:12px; justify-content:center; margin-top:24px; }
+  .btn {
+    display:inline-block;
+    text-decoration:none;
+    border-radius:30px;
+    padding:13px 26px;
+    font-weight:700;
+    font-size:0.95rem;
+    cursor:pointer;
+    transition:transform 0.15s;
+  }
+  .btn:hover { transform:translateY(-2px); }
+  .btn-primary { background:linear-gradient(135deg,#7A816C,#565c4c); color:#fff; box-shadow:0 4px 14px rgba(122,129,108,0.4); }
+  .btn-outline { background:none; border:2px solid #AE6965; color:#8a4a46; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <img src="logo.jpg" alt="Dětské krůčky" class="logo">
+    <span class="emoji">🦔🛒</span>
+    <h1>Na e-shopu se pracuje</h1>
+    <p>Právě pro vás připravujeme e-shop s barefoot obuví pro děti. Brzy si u nás nakoupíte i online! 🐾</p>
+    <p>Než ho spustíme, stavte se na naší prodejně v Hulíně, nebo si nezávazně rezervujte termín na vyzkoušení.</p>
+    <div class="buttons">
+      <a href="index.html" class="btn btn-primary">← Zpět na web</a>
+      <a href="index.html#rezervace" class="btn btn-outline">📅 Rezervovat termín</a>
+    </div>
+  </div>
+</body>
+</html>
