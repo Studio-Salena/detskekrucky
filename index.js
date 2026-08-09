@@ -20,6 +20,7 @@ const prodejnaRoutes = require('./routes/prodejna');
 const vratkyZadostiRoutes = require('./routes/vratkyZadosti');
 const poukazyRoutes = require('./routes/poukazy');
 const vyzadovatAdmina = require('./middleware/adminAuth');
+const { odeslat_test } = require('./routes/emaily');
 
 // Přihlášení do admin panelu – heslo se ověřuje tady na serveru,
 // nikdy není součástí kódu na frontendu.
@@ -33,6 +34,21 @@ app.post('/api/admin-prihlaseni', (req, res) => {
     return res.json({ ok: true });
   }
   res.status(401).json({ chyba: 'Nesprávné heslo.' });
+});
+
+// Zkušební e-mail – ověří, že server umí odesílat (EMAIL_PASS + SMTP)
+app.post('/api/test-email', vyzadovatAdmina, async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ chyba: 'Chybí e-mailová adresa.' });
+  if (!process.env.EMAIL_PASS) {
+    return res.status(500).json({ chyba: 'EMAIL_PASS není nastaven v proměnných prostředí.' });
+  }
+  try {
+    await odeslat_test(email);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ chyba: e.message });
+  }
 });
 
 app.get('/', (req, res) => {

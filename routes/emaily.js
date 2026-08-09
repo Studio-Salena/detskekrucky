@@ -4,12 +4,13 @@ if (!process.env.EMAIL_PASS) {
   console.error('CHYBA: EMAIL_PASS neni nastaven v promennych prostredi! Odesilani emailu nebude fungovat.');
 }
 
+// Odesílání běží přes Gmail (účet v EMAIL / EMAIL_PASS na Renderu).
+// Pozn.: až bude schránka info@detskekrucky.cz reálně u Forpsi, lze přepnout na
+// host 'smtp.forpsi.com', port 465, secure:true a EMAIL_PASS = heslo té schránky.
 const transporter = nodemailer.createTransport({
-  host: 'smtp.forpsi.com',
-  port: 465,
-  secure: true,
+  service: 'gmail',
   auth: {
-    user: process.env.EMAIL || 'info@detskekrucky.cz',
+    user: process.env.EMAIL || 'masaze.hasalova@gmail.com',
     pass: process.env.EMAIL_PASS
   }
 });
@@ -65,4 +66,22 @@ async function odeslat_potvrzeni(objednavka) {
   console.log('Email odoslan na:', objednavka.email);
 }
 
-module.exports = { odeslat_potvrzeni };
+// Zkušební e-mail – pro ověření, že server umí odesílat (EMAIL_PASS + SMTP)
+async function odeslat_test(komu) {
+  await transporter.sendMail({
+    from: '"Detske krucky" <info@detskekrucky.cz>',
+    to: komu,
+    subject: 'Zkušební e-mail z webu Dětské krůčky',
+    html: `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+        <h2 style="color:#7A816C">✅ Odesílání e-mailů funguje!</h2>
+        <p>Toto je zkušební e-mail z administrace Dětských krůčků.</p>
+        <p>Pokud jsi ho dostala, server je správně nastavený a umí odesílat e-maily.</p>
+        <hr>
+        <p style="color:#666;font-size:13px">Dětské krůčky | www.detskekrucky.cz</p>
+      </div>
+    `
+  });
+}
+
+module.exports = { odeslat_potvrzeni, odeslat_test };

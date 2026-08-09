@@ -596,6 +596,18 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <div class="stat-card"><div class="stat-label">Přihlášených e-mailů</div><div class="stat-value" id="newsletterPocet">...</div></div>
       </div>
       <p style="color:var(--text-light);font-size:0.85rem;margin:0 0 16px">💡 „Napsat všem" otevře tvůj e-mailový program s adresami ve skryté kopii (BCC) – příjemci se navzájem neuvidí. Když by tlačítko nefungovalo, použij „Zkopírovat e-maily" a vlož je do BCC ručně.</p>
+
+      <div class="table-wrap" style="margin-bottom:16px">
+        <div class="table-header"><h3>🧪 Zkušební e-mail (test odesílání ze serveru)</h3></div>
+        <div style="padding:16px">
+          <p style="color:var(--text-light);font-size:0.85rem;margin-bottom:12px">Ověř, jestli server umí odesílat e-maily (tj. jestli je správně nastavené <code>EMAIL_PASS</code>). Zadej svou adresu a klikni – měl by ti přijít zkušební e-mail.</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <input type="email" id="testEmailInput" placeholder="tvuj@email.cz" style="flex:1;min-width:200px;padding:9px 12px;border:1px solid var(--tan-light);border-radius:8px;font-family:inherit">
+            <button class="btn btn-primary" onclick="poslatZkusebniEmail()">📤 Poslat zkušební e-mail</button>
+          </div>
+          <div id="testEmailMsg" style="margin-top:10px"></div>
+        </div>
+      </div>
       <div class="table-wrap">
         <div class="table-header"><h3>📋 Seznam přihlášených</h3></div>
         <div id="newsletterTable"><div class="loading">Načítám...</div></div>
@@ -3413,6 +3425,29 @@ async function loadNewsletter() {
         <td><button class="btn btn-red btn-sm" onclick="smazatNewsletter('${n.id}','${n.email}')">🗑️ Smazat</button></td>
       </tr>`).join('')}</tbody></table>`;
   } catch(e) { document.getElementById('newsletterTable').innerHTML = '<div class="error-msg">Chyba načítání</div>'; }
+}
+
+// Pošle zkušební e-mail přes server – ověří nastavení EMAIL_PASS / SMTP
+async function poslatZkusebniEmail() {
+  const email = document.getElementById('testEmailInput').value.trim();
+  const msg = document.getElementById('testEmailMsg');
+  if (!email) { msg.innerHTML = '<div class="error-msg">Zadej e-mailovou adresu.</div>'; return; }
+  msg.innerHTML = '⏳ Odesílám…';
+  try {
+    const res = await adminFetch(API+'/test-email', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ email })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      msg.innerHTML = `<div class="success-msg">✅ Odesláno! Zkontroluj schránku <strong>${email}</strong> (i spam). Odesílání ze serveru funguje.</div>`;
+    } else {
+      msg.innerHTML = `<div class="error-msg">❌ Nepodařilo se odeslat: ${data.chyba || 'neznámá chyba'}</div>`;
+    }
+  } catch(e) {
+    msg.innerHTML = '<div class="error-msg">❌ Chyba spojení se serverem.</div>';
+  }
 }
 
 // Otevře e-mailový program s adresami odběratelů ve skryté kopii (BCC)
