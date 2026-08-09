@@ -1,20 +1,36 @@
-const nodemailer = require('nodemailer');
+// Odesílání e-mailů přes Resend (HTTP API) – Render blokuje odchozí SMTP,
+// proto se neposílá přes nodemailer/SMTP, ale přes https://api.resend.com.
+// Na Renderu musí být proměnná RESEND_API_KEY. Odesílatel = info@detskekrucky.cz
+// (doména musí být v Resendu ověřená přes DNS záznamy u Forpsi).
 
-if (!process.env.EMAIL_PASS) {
-  console.error('CHYBA: EMAIL_PASS neni nastaven v promennych prostredi! Odesilani emailu nebude fungovat.');
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const ODESILATEL = 'Dětské krůčky <info@detskekrucky.cz>';
+
+if (!RESEND_API_KEY) {
+  console.error('CHYBA: RESEND_API_KEY neni nastaven v promennych prostredi! Odesilani emailu nebude fungovat.');
 }
 
-// Odesílání běží přes Forpsi SMTP – e-maily odcházejí z info@detskekrucky.cz.
-// Na Renderu musí být: EMAIL = info@detskekrucky.cz, EMAIL_PASS = heslo té schránky u Forpsi.
-const transporter = nodemailer.createTransport({
-  host: 'smtp.forpsi.com',
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.EMAIL || 'info@detskekrucky.cz',
-    pass: process.env.EMAIL_PASS
+async function odeslatEmail({ to, subject, html }) {
+  if (!RESEND_API_KEY) throw new Error('RESEND_API_KEY není nastaven na serveru.');
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      from: ODESILATEL,
+      to: Array.isArray(to) ? to : [to],
+      subject,
+      html
+    })
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Resend ${res.status}: ${txt}`);
   }
-});
+  return res.json();
+}
 
 async function odeslat_potvrzeni(objednavka) {
   const polozky_html = objednavka.polozky.map(p => `
@@ -25,8 +41,7 @@ async function odeslat_potvrzeni(objednavka) {
     </tr>
   `).join('');
 
-  await transporter.sendMail({
-    from: '"Detske krucky" <info@detskekrucky.cz>',
+  await odeslatEmail({
     to: objednavka.email,
     subject: `Potvrzeni objednavky #${objednavka.objednavka_id}`,
     html: `
@@ -67,10 +82,9 @@ async function odeslat_potvrzeni(objednavka) {
   console.log('Email odoslan na:', objednavka.email);
 }
 
-// Zkušební e-mail – pro ověření, že server umí odesílat (EMAIL_PASS + SMTP)
+// Zkušební e-mail – pro ověření, že server umí odesílat (RESEND_API_KEY + ověřená doména)
 async function odeslat_test(komu) {
-  await transporter.sendMail({
-    from: '"Detske krucky" <info@detskekrucky.cz>',
+  await odeslatEmail({
     to: komu,
     subject: 'Zkušební e-mail z webu Dětské krůčky',
     html: `

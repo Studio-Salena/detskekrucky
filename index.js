@@ -40,8 +40,8 @@ app.post('/api/admin-prihlaseni', (req, res) => {
 app.post('/api/test-email', vyzadovatAdmina, async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ chyba: 'Chybí e-mailová adresa.' });
-  if (!process.env.EMAIL_PASS) {
-    return res.status(500).json({ chyba: 'EMAIL_PASS není nastaven v proměnných prostředí.' });
+  if (!process.env.RESEND_API_KEY) {
+    return res.status(500).json({ chyba: 'RESEND_API_KEY není nastaven v proměnných prostředí.' });
   }
   try {
     await odeslat_test(email);
