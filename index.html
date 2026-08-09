@@ -2374,58 +2374,6 @@ window.addEventListener('scroll', () => {
 })();
 </script>
 
-<!-- BACK TO TOP -->
-<button id="back-to-top" title="Zpět nahoru" onclick="window.scrollTo({top:0,behavior:'smooth'})">👣</but</button>
-
-<!-- BEDA CURSOR FOLLOWER -->
-<div id="beda-cursor">🦔</div>
-
-<script>
-// Back to top visibility
-window.addEventListener('scroll', function() {
-  const btn = document.getElementById('back-to-top');
-  if (window.scrollY > 300) btn.classList.add('visible');
-  else btn.classList.remove('visible');
-});
-
-// Ježek Béďa follows mouse
-(function() {
-  const beda = document.getElementById('beda-cursor');
-  let mouseX = 0, mouseY = 0;
-  let bedaX = 0, bedaY = 0;
-  let visible = false;
-
-  document.addEventListener('mousemove', function(e) {
-    mouseX = e.clientX;
-    mouseY = e.clientY;
-    if (!visible) {
-      beda.style.display = 'block';
-      visible = true;
-    }
-  });
-
-  document.addEventListener('mouseleave', function() {
-    beda.style.display = 'none';
-    visible = false;
-  });
-
-  // Smooth follow with slight lag
-  function animate() {
-    bedaX += (mouseX - bedaX) * 0.12;
-    bedaY += (mouseY - bedaY) * 0.12;
-    beda.style.left = bedaX + 'px';
-    beda.style.top  = bedaY + 'px';
-
-    // Flip direction based on movement
-    const dx = mouseX - bedaX;
-    beda.style.transform = `translate(-50%, -50%) scaleX(${dx < -2 ? -1 : 1})`;
-
-    requestAnimationFrame(animate);
-  }
-  animate();
-})();
-</script>
-
 <script>
 function toggleNav() {
   const nav = document.querySelector('nav');
