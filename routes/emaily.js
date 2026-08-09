@@ -4,13 +4,14 @@ if (!process.env.EMAIL_PASS) {
   console.error('CHYBA: EMAIL_PASS neni nastaven v promennych prostredi! Odesilani emailu nebude fungovat.');
 }
 
-// Odesílání běží přes Gmail (účet v EMAIL / EMAIL_PASS na Renderu).
-// Pozn.: až bude schránka info@detskekrucky.cz reálně u Forpsi, lze přepnout na
-// host 'smtp.forpsi.com', port 465, secure:true a EMAIL_PASS = heslo té schránky.
+// Odesílání běží přes Forpsi SMTP – e-maily odcházejí z info@detskekrucky.cz.
+// Na Renderu musí být: EMAIL = info@detskekrucky.cz, EMAIL_PASS = heslo té schránky u Forpsi.
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.forpsi.com',
+  port: 465,
+  secure: true,
   auth: {
-    user: process.env.EMAIL || 'masaze.hasalova@gmail.com',
+    user: process.env.EMAIL || 'info@detskekrucky.cz',
     pass: process.env.EMAIL_PASS
   }
 });
