@@ -2498,11 +2498,11 @@ window.addEventListener('scroll', function() {
 </script>
 
 <!-- COOKIE BAR -->
-<div id="cookie-bar" style="position:fixed;left:0;right:0;bottom:0;top:auto;z-index:2147483647;background:linear-gradient(135deg,#3d2b1f,#6b4c35);color:rgba(255,255,255,0.92);padding:12px 20px;display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;box-shadow:0 -4px 20px rgba(0,0,0,0.2);border-top:3px solid #A58B71;">
-  <span style="flex:1 1 280px;font-size:0.85rem;line-height:1.4;">🍪 Používáme cookies, abychom ti zajistili co nejlepší zážitek na našem webu. Více informací v <a href="obchodni-podminky.html" style="color:#A58B71;text-decoration:underline;">obchodních podmínkách</a>.</span>
-  <span style="display:flex;gap:10px;flex:0 0 auto;">
-    <button onclick="closeCookie()" style="background:transparent;color:rgba(255,255,255,0.75);border:1px solid rgba(255,255,255,0.35);border-radius:20px;padding:9px 18px;font-size:0.85rem;cursor:pointer;font-family:inherit;">Odmítnout</button>
-    <button onclick="closeCookie()" style="background:linear-gradient(135deg,#7A816C,#565c4c);color:#fff;border:none;border-radius:20px;padding:9px 22px;font-size:0.85rem;font-weight:700;cursor:pointer;font-family:inherit;">Přijmout vše 🎉</button>
+<div id="cookie-bar" style="position:fixed;left:0;right:0;bottom:0;top:auto;z-index:2147483647;background:linear-gradient(135deg,#3d2b1f,#6b4c35);color:rgba(255,255,255,0.92);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:nowrap;box-shadow:0 -4px 20px rgba(0,0,0,0.2);border-top:3px solid #A58B71;">
+  <span style="flex:1 1 auto;min-width:0;font-size:0.82rem;line-height:1.35;">🍪 Používáme cookies pro co nejlepší zážitek. Více v <a href="obchodni-podminky.html" style="color:#A58B71;text-decoration:underline;">obchodních podmínkách</a>.</span>
+  <span style="display:flex;gap:8px;flex-shrink:0;">
+    <button onclick="closeCookie()" style="background:transparent;color:rgba(255,255,255,0.8);border:1px solid rgba(255,255,255,0.4);border-radius:20px;padding:8px 14px;font-size:0.8rem;cursor:pointer;font-family:inherit;white-space:nowrap;">Odmítnout</button>
+    <button onclick="closeCookie()" style="background:linear-gradient(135deg,#7A816C,#565c4c);color:#fff;border:none;border-radius:20px;padding:8px 16px;font-size:0.8rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">Přijmout vše</button>
   </span>
 </div>
 <script>
