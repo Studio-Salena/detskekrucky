@@ -1002,6 +1002,35 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
   </div>
 </div>
 
+<!-- MODAL UPRAVIT ZÁKAZNÍKA -->
+<div class="modal-overlay" id="modalUpravitZakaznik">
+  <div class="modal">
+    <h3>✏️ Upravit zákazníka</h3>
+    <div id="upravitZakaznikMsg"></div>
+    <input type="hidden" id="uzId">
+    <div class="form-grid-2">
+      <div class="form-group"><label>Jméno a příjmení *</label><input type="text" id="uzJmeno"></div>
+      <div class="form-group"><label>E-mail *</label><input type="email" id="uzEmail"></div>
+    </div>
+    <div class="form-grid-2">
+      <div class="form-group"><label>Telefon</label><input type="text" id="uzTelefon"></div>
+      <div class="form-group"><label>Město</label><input type="text" id="uzMesto"></div>
+    </div>
+    <div class="form-grid-2">
+      <div class="form-group"><label>Ulice</label><input type="text" id="uzUlice"></div>
+      <div class="form-group"><label>PSČ</label><input type="text" id="uzPsc"></div>
+    </div>
+    <div class="form-group" style="display:flex;align-items:center;gap:8px;margin-top:6px">
+      <input type="checkbox" id="uzNewsletter" style="width:auto">
+      <label for="uzNewsletter" style="margin:0">Přihlášen k newsletteru</label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modalUpravitZakaznik')">Zrušit</button>
+      <button class="btn btn-primary" onclick="ulozitUpravyZakaznika()">💾 Uložit změny</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modalNovyProdukt">
   <div class="modal">
     <h3>👟 Nový produkt</h3>
@@ -1426,13 +1455,76 @@ async function loadZakaznici() {
 function renderZakaznici(data) {
   if (!data.length) { document.getElementById('zakazniciTable').innerHTML = '<div class="empty">Žádní zákazníci</div>'; return; }
   document.getElementById('zakazniciTable').innerHTML = `
-    <table><thead><tr><th>ID</th><th>Jméno</th><th>Email</th><th>Telefon</th><th>Město</th><th>Newsletter</th><th>Registrace</th></tr></thead>
+    <table><thead><tr><th>ID</th><th>Jméno</th><th>Email</th><th>Telefon</th><th>Město</th><th>Newsletter</th><th>Registrace</th><th>Akce</th></tr></thead>
     <tbody>${data.map(z=>`<tr>
       <td>${z.id}</td><td><strong>${z.jmeno}</strong></td><td>${z.email}</td>
       <td>${z.telefon||'—'}</td><td>${z.mesto||'—'}</td>
       <td style="text-align:center">${newsletterSet.has((z.email || '').toLowerCase()) ? '✅' : '—'}</td>
       <td>${new Date(z.vytvoreno).toLocaleDateString('cs-CZ')}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-outline btn-sm" onclick="upravitZakaznika(${z.id})">✏️ Upravit</button>
+        <button class="btn btn-red btn-sm" onclick="smazatZakaznika(${z.id})">🗑️ Smazat</button>
+      </td>
     </tr>`).join('')}</tbody></table>`;
+}
+
+function upravitZakaznika(id) {
+  const z = vsechnyZakaznici.find(x => x.id === id);
+  if (!z) return;
+  document.getElementById('uzId').value = z.id;
+  document.getElementById('uzJmeno').value = z.jmeno || '';
+  document.getElementById('uzEmail').value = z.email || '';
+  document.getElementById('uzTelefon').value = z.telefon || '';
+  document.getElementById('uzMesto').value = z.mesto || '';
+  document.getElementById('uzUlice').value = z.ulice || '';
+  document.getElementById('uzPsc').value = z.psc || '';
+  document.getElementById('uzNewsletter').checked = newsletterSet.has((z.email || '').toLowerCase());
+  document.getElementById('upravitZakaznikMsg').innerHTML = '';
+  openModal('modalUpravitZakaznik');
+}
+
+async function ulozitUpravyZakaznika() {
+  const id = document.getElementById('uzId').value;
+  const jmeno = document.getElementById('uzJmeno').value.trim();
+  const email = document.getElementById('uzEmail').value.trim();
+  const msg = document.getElementById('upravitZakaznikMsg');
+  if (!jmeno || !email) { msg.innerHTML = '<div class="error-msg">Vyplňte prosím jméno a e-mail.</div>'; return; }
+  msg.innerHTML = '';
+  try {
+    const res = await adminFetch(API+'/auth/zakaznici/'+id, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        jmeno, email,
+        telefon: document.getElementById('uzTelefon').value.trim(),
+        ulice: document.getElementById('uzUlice').value.trim(),
+        mesto: document.getElementById('uzMesto').value.trim(),
+        psc: document.getElementById('uzPsc').value.trim(),
+        newsletter: document.getElementById('uzNewsletter').checked
+      })
+    });
+    if (res.ok) {
+      msg.innerHTML = '<div class="success-msg">✅ Uloženo!</div>';
+      setTimeout(()=>{ closeModal('modalUpravitZakaznik'); loadZakaznici(); }, 900);
+    } else {
+      const err = await res.json().catch(()=>({}));
+      msg.innerHTML = `<div class="error-msg">${err.chyba || 'Chyba při ukládání'}</div>`;
+    }
+  } catch(e) { msg.innerHTML = '<div class="error-msg">Chyba spojení</div>'; }
+}
+
+async function smazatZakaznika(id) {
+  const z = vsechnyZakaznici.find(x => x.id === id);
+  if (!confirm(`Opravdu smazat zákazníka ${z ? z.jmeno : ''}? Tuto akci nelze vrátit.`)) return;
+  try {
+    const res = await adminFetch(API+'/auth/zakaznici/'+id, { method: 'DELETE' });
+    if (res.ok) {
+      loadZakaznici();
+    } else {
+      const err = await res.json().catch(()=>({}));
+      alert(err.chyba || 'Nepodařilo se smazat zákazníka.');
+    }
+  } catch(e) { alert('Chyba spojení'); }
 }
 
 function hledatZakazniky(q) {

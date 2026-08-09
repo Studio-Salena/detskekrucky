@@ -128,5 +128,46 @@ router.post('/zakaznici', vyzadovatAdmina, async (req, res) => {
   }
 });
 
+// Upravit zákazníka
+router.put('/zakaznici/:id', vyzadovatAdmina, async (req, res) => {
+  const { jmeno, email, telefon, ulice, mesto, psc, newsletter } = req.body;
+  if (!jmeno || !email) return res.status(400).json({ chyba: 'Vyplňte prosím jméno a e-mail.' });
+  try {
+    const dup = await pool.query('SELECT id FROM zakaznici WHERE email = $1 AND id <> $2', [email, req.params.id]);
+    if (dup.rows.length > 0) return res.status(400).json({ chyba: 'Jiný zákazník s tímto e-mailem už existuje.' });
+
+    const result = await pool.query(
+      'UPDATE zakaznici SET jmeno=$1, email=$2, telefon=$3, ulice=$4, mesto=$5, psc=$6 WHERE id=$7 RETURNING id, jmeno, email, telefon, ulice, mesto, psc, vytvoreno',
+      [jmeno, email, telefon || null, ulice || null, mesto || null, psc || null, req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ chyba: 'Zákazník nenalezen.' });
+
+    // Newsletter – přihlásit / odhlásit podle checkboxu
+    if (newsletter === true) {
+      try { await pool.query('INSERT INTO newsletter (email) VALUES ($1) ON CONFLICT (email) DO NOTHING', [email]); } catch (e) {}
+    } else if (newsletter === false) {
+      try { await pool.query('DELETE FROM newsletter WHERE email = $1', [email]); } catch (e) {}
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ chyba: err.message });
+  }
+});
+
+// Smazat zákazníka
+router.delete('/zakaznici/:id', vyzadovatAdmina, async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM zakaznici WHERE id=$1 RETURNING id', [req.params.id]);
+    if (!result.rows.length) return res.status(404).json({ chyba: 'Zákazník nenalezen.' });
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code === '23503') {
+      return res.status(400).json({ chyba: 'Zákazníka nelze smazat – má navázané objednávky (historii je potřeba zachovat).' });
+    }
+    res.status(500).json({ chyba: err.message });
+  }
+});
+
 module.exports = router;
 
