@@ -1409,11 +1409,16 @@ async function ulozitZakaznika() {
   } catch(e) { msg.innerHTML = '<div class="error-msg">Chyba spojení</div>'; }
 }
 
+let newsletterSet = new Set();
 async function loadZakaznici() {
   document.getElementById('zakazniciTable').innerHTML = '<div class="loading">Načítám...</div>';
   try {
-    const data = await adminFetch(API+'/auth/zakaznici').then(r=>r.json());
+    const [data, nl] = await Promise.all([
+      adminFetch(API+'/auth/zakaznici').then(r=>r.json()),
+      adminFetch(API+'/newsletter').then(r=>r.json()).catch(()=>[])
+    ]);
     vsechnyZakaznici = Array.isArray(data) ? data : [];
+    newsletterSet = new Set((Array.isArray(nl) ? nl : []).map(n => (n.email || '').toLowerCase()));
     renderZakaznici(vsechnyZakaznici);
   } catch(e) { document.getElementById('zakazniciTable').innerHTML = '<div class="error-msg">Chyba</div>'; }
 }
@@ -1421,10 +1426,11 @@ async function loadZakaznici() {
 function renderZakaznici(data) {
   if (!data.length) { document.getElementById('zakazniciTable').innerHTML = '<div class="empty">Žádní zákazníci</div>'; return; }
   document.getElementById('zakazniciTable').innerHTML = `
-    <table><thead><tr><th>ID</th><th>Jméno</th><th>Email</th><th>Telefon</th><th>Město</th><th>Registrace</th></tr></thead>
+    <table><thead><tr><th>ID</th><th>Jméno</th><th>Email</th><th>Telefon</th><th>Město</th><th>Newsletter</th><th>Registrace</th></tr></thead>
     <tbody>${data.map(z=>`<tr>
       <td>${z.id}</td><td><strong>${z.jmeno}</strong></td><td>${z.email}</td>
       <td>${z.telefon||'—'}</td><td>${z.mesto||'—'}</td>
+      <td style="text-align:center">${newsletterSet.has((z.email || '').toLowerCase()) ? '✅' : '—'}</td>
       <td>${new Date(z.vytvoreno).toLocaleDateString('cs-CZ')}</td>
     </tr>`).join('')}</tbody></table>`;
 }
