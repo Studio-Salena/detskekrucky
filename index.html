@@ -2507,17 +2507,7 @@ window.addEventListener('scroll', function() {
   // Show cookie bar only if not already accepted
   (function() {
     const bar = document.getElementById('cookie-bar');
-    if (!bar) return;
-    // Přesun přímo pod <body> a vynucení fixní pozice za běhu (přebije jakékoli CSS)
-    document.body.appendChild(bar);
-    bar.style.setProperty('position', 'fixed', 'important');
-    bar.style.setProperty('left', '0', 'important');
-    bar.style.setProperty('right', '0', 'important');
-    bar.style.setProperty('bottom', '0', 'important');
-    bar.style.setProperty('top', 'auto', 'important');
-    bar.style.setProperty('transform', 'none', 'important');
-    bar.style.setProperty('z-index', '2147483647', 'important');
-    if (localStorage.getItem('cookieAccepted')) {
+    if (bar && localStorage.getItem('cookieAccepted')) {
       bar.style.display = 'none';
     }
   })();
