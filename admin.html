@@ -1234,12 +1234,16 @@ document.addEventListener('click', e => {
 // PŘEHLED
 async function loadPrehled() {
   try {
-    const [obj, sklad] = await Promise.all([
+    const [obj, sklad, prodejna] = await Promise.all([
       adminFetch(API+'/objednavky').then(r=>r.json()).catch(()=>[]),
-      adminFetch(API+'/sklad/nizky-stav').then(r=>r.json()).catch(()=>[])
+      adminFetch(API+'/sklad/nizky-stav').then(r=>r.json()).catch(()=>[]),
+      adminFetch(API+'/prodejna').then(r=>r.json()).catch(()=>[])
     ]);
     const platne = Array.isArray(obj) ? obj.filter(o=>o.stav!=='zruseno') : [];
-    const trzby = platne.reduce((s,o)=>s+o.celkem,0);
+    const prodejnaProdeje = Array.isArray(prodejna) ? prodejna : [];
+    const trzbyEshop = platne.reduce((s,o)=>s+o.celkem,0);
+    const trzbyProdejna = prodejnaProdeje.reduce((s,p)=>s+Number(p.celkem),0);
+    const trzby = trzbyEshop + trzbyProdejna;
     const nove = Array.isArray(obj) ? obj.filter(o=>o.stav==='nova').length : 0;
     document.getElementById('statTrzby').textContent = trzby.toLocaleString('cs-CZ')+' Kč';
     document.getElementById('statObjednavky').textContent = Array.isArray(obj)?obj.length:0;
@@ -1254,6 +1258,12 @@ async function loadPrehled() {
       const k = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
       if (!mesice[k]) mesice[k] = {label:mn[d.getMonth()]+' '+String(d.getFullYear()).slice(2), trzby:0};
       mesice[k].trzby += o.celkem;
+    });
+    prodejnaProdeje.forEach(p => {
+      const d = new Date(p.datum);
+      const k = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+      if (!mesice[k]) mesice[k] = {label:mn[d.getMonth()]+' '+String(d.getFullYear()).slice(2), trzby:0};
+      mesice[k].trzby += Number(p.celkem);
     });
     const mList = Object.entries(mesice).sort((a,b)=>a[0].localeCompare(b[0])).slice(-6);
     const maxTrz = Math.max(...mList.map(([,m])=>m.trzby), 1);
