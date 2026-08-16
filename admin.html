@@ -2731,23 +2731,23 @@ function tiskUctenkyData(prodej, cislo) {
     @page{ size:58mm auto; margin:0; }
     *{ box-sizing:border-box; }
     html,body{width:58mm}
-    body{font-family:'Courier New',Consolas,monospace;margin:0 auto;padding:2mm 2mm;font-size:11px;line-height:1.4;color:#000}
+    body{font-family:'Courier New',Consolas,monospace;margin:0 auto;padding:2mm 2mm;font-size:13px;line-height:1.4;color:#000;font-weight:bold}
     .center{text-align:center}
-    .logo{font-size:14px;font-weight:bold}
+    .logo{font-size:16px;font-weight:bold}
     .divider{border-top:1px dashed #000;margin:6px 0}
     .row{display:flex;justify-content:space-between;margin:2px 0}
-    .total{font-size:13px;font-weight:bold;border-top:1px solid #000;padding-top:4px;margin-top:4px}
-    .footer{text-align:center;font-size:10px;margin-top:10px}
+    .total{font-size:15px;font-weight:bold;border-top:1px solid #000;padding-top:4px;margin-top:4px}
+    .footer{text-align:center;font-size:12px;margin-top:10px}
     img{max-width:100%}
     @media print{body{padding:2mm 2mm}}
   </style>
   </head><body>
   <div class="center">
     <div class="logo">Dětské krůčky</div>
-    <div style="font-size:10px">Barefoot obuv</div>
-    <div style="font-size:10px">Monika Škarpichová | IČO: 24354635</div>
-    <div style="font-size:10px">Holešovská 752, Hulín 768 24</div>
-    <div style="font-size:9px;margin-top:4px">Fyzická osoba zapsaná v živnostenském rejstříku vedeném MÚ Kroměříž.</div>
+    <div style="font-size:12px">Barefoot obuv</div>
+    <div style="font-size:12px">Monika Škarpichová | IČO: 24354635</div>
+    <div style="font-size:12px">Holešovská 752, Hulín 768 24</div>
+    <div style="font-size:11px;margin-top:4px">Fyzická osoba zapsaná v živnostenském rejstříku vedeném MÚ Kroměříž.</div>
   </div>
   <div class="divider"></div>
   <div class="row"><span>Datum:</span><span>${datum.toLocaleDateString('cs-CZ')}</span></div>
@@ -2765,14 +2765,14 @@ function tiskUctenkyData(prodej, cislo) {
   <div class="row"><span>Mezisoučet:</span><span>${Number(prodej.mezisoucet).toLocaleString('cs-CZ')} Kč</span></div>
   <div class="row"><span>Sleva${prodej.sleva_popis?' ('+prodej.sleva_popis+')':''}:</span><span>−${Number(prodej.sleva).toLocaleString('cs-CZ')} Kč</span></div>`:''}
   <div class="row total"><span>CELKEM:</span><span>${Number(prodej.celkem).toLocaleString('cs-CZ')} Kč</span></div>
-  <div style="font-size:10px;margin-top:4px">Neplátce DPH</div>
+  <div style="font-size:12px;margin-top:4px">Neplátce DPH</div>
   <div class="row"><span>Platba:</span><span>${prodej.platba==='hotovost'?'Hotovost':prodej.platba==='karta'?'Karta':'QR platba'}</span></div>
   ${prodej.platba==='qr'?`
   <div class="center" style="margin-top:12px">
     <img src="${qrPlatbaUrl(prodej.celkem,'Ucet '+cislo)}" style="width:32mm;height:32mm" alt="QR platba">
-    <div style="font-size:10px;margin-top:4px">Účet: 2003533776/2010</div>
+    <div style="font-size:12px;margin-top:4px">Účet: 2003533776/2010</div>
   </div>`:''}
-  ${prodej.poznamka?`<div style="margin-top:8px;font-size:10px">Poznámka: ${prodej.poznamka}</div>`:''}
+  ${prodej.poznamka?`<div style="margin-top:8px;font-size:12px">Poznámka: ${prodej.poznamka}</div>`:''}
   <div class="footer">
     <div class="divider"></div>
     <div>Děkujeme za nákup! 🦔</div>
