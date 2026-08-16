@@ -21,7 +21,7 @@ const prodejnaRoutes = require('./routes/prodejna');
 const vratkyZadostiRoutes = require('./routes/vratkyZadosti');
 const poukazyRoutes = require('./routes/poukazy');
 const vyzadovatAdmina = require('./middleware/adminAuth');
-const { odeslat_test, odeslat_potvrzeni_rezervace, odeslat_upozorneni_rezervace } = require('./routes/emaily');
+const { odeslat_test, odeslat_potvrzeni_rezervace, odeslat_potvrzeni_terminu, odeslat_upozorneni_rezervace } = require('./routes/emaily');
 
 // Přihlášení do admin panelu – heslo se ověřuje tady na serveru,
 // nikdy není součástí kódu na frontendu.
@@ -333,7 +333,7 @@ app.post('/rezervace/zrusit/:token', express.urlencoded({ extended: false }), as
       await client.query('UPDATE rezervace_sloty SET obsazeno=FALSE WHERE id=$1', [rez.rows[0].slot_id]);
     }
     await client.query('COMMIT');
-    res.send(`<html><head><meta charset="UTF-8"><style>${styl}</style></head><body><div class="box"><h1>✅ Rezervace zrušena</h1><p>Vaše rezervace byla zrušena. Kdybyste to rozmysleli, klidně si udělejte novou na webu.</p><p style="margin-top:16px"><a href="https://www.detskekrucky.cz">← Zpět na web</a></p></div></body></html>`);
+    res.send(`<html><head><meta charset="UTF-8"><style>${styl}</style></head><body><div class="box"><h1>✅ Rezervace zrušena</h1><p>Vaše rezervace byla zrušena. Kdybyste si to rozmysleli, klidně si udělejte novou na webu.</p><p style="margin-top:16px"><a href="https://www.detskekrucky.cz">← Zpět na web</a></p></div></body></html>`);
     if (!jizZrusena) {
       odeslat_upozorneni_rezervace(rez.rows[0], rez.rows[0], 'zrusena').catch(e => console.error('Upozorneni majitelce se nepodarilo odeslat:', e.message));
     }
@@ -348,8 +348,14 @@ app.patch('/api/rezervace/:id/stav', vyzadovatAdmina, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const rez = await client.query('SELECT * FROM rezervace WHERE id=$1', [req.params.id]);
+    const rez = await client.query(
+      `SELECT r.*, s.datum, s.cas_od, s.cas_do FROM rezervace r
+       JOIN rezervace_sloty s ON r.slot_id = s.id
+       WHERE r.id = $1`,
+      [req.params.id]
+    );
     if (!rez.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ chyba: 'Rezervace nenalezena' }); }
+    const puvodniStav = rez.rows[0].stav;
     await client.query('UPDATE rezervace SET stav=$1 WHERE id=$2', [stav, req.params.id]);
     // Pokud zrušíme, uvolníme slot
     if (stav === 'zrusena') {
@@ -357,6 +363,10 @@ app.patch('/api/rezervace/:id/stav', vyzadovatAdmina, async (req, res) => {
     }
     await client.query('COMMIT');
     res.json({ ok: true });
+    // Zákazníkovi pošleme e-mail o potvrzení termínu, jen když se stav skutečně mění na potvrzena
+    if (stav === 'potvrzena' && puvodniStav !== 'potvrzena') {
+      odeslat_potvrzeni_terminu(rez.rows[0], rez.rows[0]).catch(e => console.error('Email o potvrzeni terminu se nepodarilo odeslat:', e.message));
+    }
   } catch(e) { await client.query('ROLLBACK'); res.status(500).json({ chyba: e.message }); }
   finally { client.release(); }
 });

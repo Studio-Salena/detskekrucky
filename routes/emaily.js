@@ -90,12 +90,12 @@ async function odeslat_potvrzeni_rezervace(rezervace, slot) {
 
   await odeslatEmail({
     to: rezervace.email,
-    subject: 'Potvrzení rezervace – Dětské krůčky',
+    subject: 'Rezervace přijata – čeká na potvrzení – Dětské krůčky',
     html: `
       <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
         <h1 style="color:#FF6B35">Rezervace přijata!</h1>
         <p>Ahoj ${rezervace.jmeno},</p>
-        <p>Vaši rezervaci na vyzkoušení bot jsme přijali. Těšíme se na vás!</p>
+        <p>Vaši rezervaci na vyzkoušení bot jsme přijali a zapsali. Vyčkejte prosím na e-mail s potvrzením termínu, ozveme se vám co nejdřív.</p>
         <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-top:12px">
           <p style="margin:0 0 6px 0"><strong>Termín:</strong> ${datum}, ${cas}</p>
           <p style="margin:0">Prodejna: Holešovská 752, Hulín 768 24</p>
@@ -110,6 +110,35 @@ async function odeslat_potvrzeni_rezervace(rezervace, slot) {
     `
   });
   console.log('Email o rezervaci odeslan na:', rezervace.email);
+}
+
+async function odeslat_potvrzeni_terminu(rezervace, slot) {
+  const datum = new Date(slot.datum).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'long', year: 'numeric' });
+  const cas = `${slot.cas_od.slice(0,5)} – ${slot.cas_do.slice(0,5)}`;
+  const zrusitUrl = `https://detskekrucky1.onrender.com/rezervace/zrusit/${rezervace.zrusovaci_token}`;
+
+  await odeslatEmail({
+    to: rezervace.email,
+    subject: 'Rezervace potvrzena – Dětské krůčky',
+    html: `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+        <h1 style="color:#FF6B35">✅ Rezervace potvrzena!</h1>
+        <p>Ahoj ${rezervace.jmeno},</p>
+        <p>Váš termín je potvrzený. Těšíme se na vás!</p>
+        <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-top:12px">
+          <p style="margin:0 0 6px 0"><strong>Termín:</strong> ${datum}, ${cas}</p>
+          <p style="margin:0">Prodejna: Holešovská 752, Hulín 768 24</p>
+        </div>
+        <p style="margin-top:16px">V případě zrušení rezervace, klikněte na odkaz a rezervace se zruší.</p>
+        <p><a href="${zrusitUrl}" style="color:#FF6B35">Zrušit rezervaci</a></p>
+        <hr>
+        <p style="color:#666;font-size:13px">
+          Dětské krůčky | 773 517 733 | info@detskekrucky.cz
+        </p>
+      </div>
+    `
+  });
+  console.log('Email o potvrzeni terminu odeslan na:', rezervace.email);
 }
 
 // Upozornění majitelce, že si někdo udělal (nebo sám zrušil) rezervaci
@@ -155,4 +184,4 @@ async function odeslat_test(komu) {
   });
 }
 
-module.exports = { odeslat_potvrzeni, odeslat_potvrzeni_rezervace, odeslat_upozorneni_rezervace, odeslat_test };
+module.exports = { odeslat_potvrzeni, odeslat_potvrzeni_rezervace, odeslat_potvrzeni_terminu, odeslat_upozorneni_rezervace, odeslat_test };
