@@ -5,6 +5,7 @@
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const ODESILATEL = 'Dětské krůčky <info@detskekrucky.cz>';
+const MAJITELKA_EMAIL = 'info@detskekrucky.cz';
 
 if (!RESEND_API_KEY) {
   console.error('CHYBA: RESEND_API_KEY neni nastaven v promennych prostredi! Odesilani emailu nebude fungovat.');
@@ -85,6 +86,7 @@ async function odeslat_potvrzeni(objednavka) {
 async function odeslat_potvrzeni_rezervace(rezervace, slot) {
   const datum = new Date(slot.datum).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'long', year: 'numeric' });
   const cas = `${slot.cas_od.slice(0,5)} – ${slot.cas_do.slice(0,5)}`;
+  const zrusitUrl = `https://detskekrucky1.onrender.com/rezervace/zrusit/${rezervace.zrusovaci_token}`;
 
   await odeslatEmail({
     to: rezervace.email,
@@ -98,7 +100,8 @@ async function odeslat_potvrzeni_rezervace(rezervace, slot) {
           <p style="margin:0 0 6px 0"><strong>Termín:</strong> ${datum}, ${cas}</p>
           <p style="margin:0">Prodejna: Holešovská 752, Hulín 768 24</p>
         </div>
-        <p style="margin-top:16px">Pokud se nemůžete dostavit, dejte nám prosím vědět na tento e-mail nebo telefonicky.</p>
+        <p style="margin-top:16px">V případě zrušení rezervace, klikněte na odkaz a rezervace se zruší.</p>
+        <p><a href="${zrusitUrl}" style="color:#FF6B35">Zrušit rezervaci</a></p>
         <hr>
         <p style="color:#666;font-size:13px">
           Dětské krůčky | 773 517 733 | info@detskekrucky.cz
@@ -107,6 +110,32 @@ async function odeslat_potvrzeni_rezervace(rezervace, slot) {
     `
   });
   console.log('Email o rezervaci odeslan na:', rezervace.email);
+}
+
+// Upozornění majitelce, že si někdo udělal (nebo sám zrušil) rezervaci
+async function odeslat_upozorneni_rezervace(rezervace, slot, typ = 'nova') {
+  const datum = new Date(slot.datum).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'long', year: 'numeric' });
+  const cas = `${slot.cas_od.slice(0,5)} – ${slot.cas_do.slice(0,5)}`;
+  const jeZruseni = typ === 'zrusena';
+
+  await odeslatEmail({
+    to: MAJITELKA_EMAIL,
+    subject: jeZruseni ? `Rezervace zrušena – ${rezervace.jmeno}` : `Nová rezervace – ${rezervace.jmeno}`,
+    html: `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+        <h2 style="color:#FF6B35">${jeZruseni ? '❌ Zákazník zrušil rezervaci' : '📅 Nová rezervace'}</h2>
+        <p><strong>Termín:</strong> ${datum}, ${cas}</p>
+        <p><strong>Jméno:</strong> ${rezervace.jmeno}</p>
+        <p><strong>Telefon:</strong> ${rezervace.telefon}</p>
+        <p><strong>E-mail:</strong> ${rezervace.email}</p>
+        ${rezervace.vek_dite ? `<p><strong>Věk dítěte:</strong> ${rezervace.vek_dite}</p>` : ''}
+        ${rezervace.poznamka ? `<p><strong>Poznámka:</strong> ${rezervace.poznamka}</p>` : ''}
+        <hr>
+        <p style="color:#666;font-size:13px">Přehled rezervací je v adminu.</p>
+      </div>
+    `
+  });
+  console.log('Upozorneni na rezervaci odeslano majitelce, typ:', typ);
 }
 
 // Zkušební e-mail – pro ověření, že server umí odesílat (RESEND_API_KEY + ověřená doména)
@@ -126,4 +155,4 @@ async function odeslat_test(komu) {
   });
 }
 
-module.exports = { odeslat_potvrzeni, odeslat_potvrzeni_rezervace, odeslat_test };
+module.exports = { odeslat_potvrzeni, odeslat_potvrzeni_rezervace, odeslat_upozorneni_rezervace, odeslat_test };

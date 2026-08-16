@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const crypto = require('crypto');
 const pool = require('./db/pool');
 const skladRoutes = require('./routes/sklad');
 const objednavkyRoutes = require('./routes/objednavky');
@@ -20,7 +21,7 @@ const prodejnaRoutes = require('./routes/prodejna');
 const vratkyZadostiRoutes = require('./routes/vratkyZadosti');
 const poukazyRoutes = require('./routes/poukazy');
 const vyzadovatAdmina = require('./middleware/adminAuth');
-const { odeslat_test, odeslat_potvrzeni_rezervace } = require('./routes/emaily');
+const { odeslat_test, odeslat_potvrzeni_rezervace, odeslat_upozorneni_rezervace } = require('./routes/emaily');
 
 // Přihlášení do admin panelu – heslo se ověřuje tady na serveru,
 // nikdy není součástí kódu na frontendu.
@@ -200,6 +201,7 @@ async function initRezervaceTabulky() {
         stav TEXT DEFAULT 'cekajici',
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
+      ALTER TABLE rezervace ADD COLUMN IF NOT EXISTS zrusovaci_token TEXT UNIQUE;
     `);
     console.log('Rezervace tabulky OK');
   } catch(e) {
@@ -257,18 +259,85 @@ app.post('/api/rezervace', async (req, res) => {
     if (!slot.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ chyba: 'Termín neexistuje' }); }
     if (slot.rows[0].obsazeno) { await client.query('ROLLBACK'); return res.status(409).json({ chyba: 'Termín je již obsazen' }); }
     // Vytvoř rezervaci
+    const zrusovaciToken = crypto.randomUUID();
     const rez = await client.query(
-      'INSERT INTO rezervace (slot_id, jmeno, telefon, email, vek_dite, poznamka) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
-      [slot_id, jmeno, telefon, email, vek_dite||null, poznamka||null]
+      'INSERT INTO rezervace (slot_id, jmeno, telefon, email, vek_dite, poznamka, zrusovaci_token) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
+      [slot_id, jmeno, telefon, email, vek_dite||null, poznamka||null, zrusovaciToken]
     );
     // Označ slot jako obsazený
     await client.query('UPDATE rezervace_sloty SET obsazeno=TRUE WHERE id=$1', [slot_id]);
     await client.query('COMMIT');
     res.json(rez.rows[0]);
-    // Potvrzovací e-mail se posílá až po odpovědi zákazníkovi, ať prodleva/chyba
-    // s e-mailem rezervaci nezablokuje
+    // E-maily se posílají až po odpovědi zákazníkovi, ať prodleva/chyba s odesláním
+    // rezervaci nezablokuje
     odeslat_potvrzeni_rezervace(rez.rows[0], slot.rows[0]).catch(e => console.error('Email o rezervaci se nepodařilo odeslat:', e.message));
+    odeslat_upozorneni_rezervace(rez.rows[0], slot.rows[0], 'nova').catch(e => console.error('Upozorneni majitelce se nepodarilo odeslat:', e.message));
   } catch(e) { await client.query('ROLLBACK'); res.status(500).json({ chyba: e.message }); }
+  finally { client.release(); }
+});
+
+// GET /rezervace/zrusit/:token – veřejná stránka, zákazník potvrdí zrušení své rezervace
+app.get('/rezervace/zrusit/:token', async (req, res) => {
+  const styl = `body{font-family:'Nunito',sans-serif;background:#fff8f0;color:#3d2b1f;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px}
+    .box{background:#fff;border-radius:16px;padding:32px;max-width:420px;text-align:center;box-shadow:0 8px 40px rgba(139,69,19,0.12)}
+    h1{color:#8B4513;font-size:1.3rem;margin-bottom:12px}
+    p{color:#7a5c42;font-size:0.95rem;line-height:1.5}
+    button{background:linear-gradient(135deg,#e74c3c,#c0392b);color:#fff;border:none;border-radius:10px;padding:12px 24px;font-size:1rem;font-weight:700;cursor:pointer;margin-top:16px;font-family:inherit}
+    a{color:#8B4513}`;
+  try {
+    const result = await pool.query(
+      `SELECT r.*, s.datum, s.cas_od, s.cas_do FROM rezervace r
+       JOIN rezervace_sloty s ON r.slot_id = s.id
+       WHERE r.zrusovaci_token = $1`,
+      [req.params.token]
+    );
+    if (!result.rows.length) {
+      return res.send(`<html><head><meta charset="UTF-8"><style>${styl}</style></head><body><div class="box"><h1>Odkaz nenalezen</h1><p>Tenhle odkaz na zrušení rezervace není platný.</p></div></body></html>`);
+    }
+    const rez = result.rows[0];
+    if (rez.stav === 'zrusena') {
+      return res.send(`<html><head><meta charset="UTF-8"><style>${styl}</style></head><body><div class="box"><h1>✅ Rezervace už je zrušená</h1><p>Tuhle rezervaci jste (nebo jsme) už dřív zrušili.</p></div></body></html>`);
+    }
+    const datum = new Date(rez.datum).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'long', year: 'numeric' });
+    res.send(`<html><head><meta charset="UTF-8"><style>${styl}</style></head><body><div class="box">
+      <h1>Zrušit rezervaci?</h1>
+      <p>${rez.jmeno}, termín <strong>${datum}, ${rez.cas_od.slice(0,5)}–${rez.cas_do.slice(0,5)}</strong>.</p>
+      <form method="POST" action="/rezervace/zrusit/${req.params.token}">
+        <button type="submit">Ano, zrušit rezervaci</button>
+      </form>
+      <p style="margin-top:16px"><a href="https://www.detskekrucky.cz">← Zpět na web</a></p>
+    </div></body></html>`);
+  } catch(e) { res.status(500).send('Chyba serveru.'); }
+});
+
+// POST /rezervace/zrusit/:token – skutečně zruší rezervaci (potvrzeno kliknutím na tlačítko)
+app.post('/rezervace/zrusit/:token', express.urlencoded({ extended: false }), async (req, res) => {
+  const styl = `body{font-family:'Nunito',sans-serif;background:#fff8f0;color:#3d2b1f;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px}
+    .box{background:#fff;border-radius:16px;padding:32px;max-width:420px;text-align:center;box-shadow:0 8px 40px rgba(139,69,19,0.12)}
+    h1{color:#8B4513;font-size:1.3rem;margin-bottom:12px}
+    p{color:#7a5c42;font-size:0.95rem;line-height:1.5}
+    a{color:#8B4513}`;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const rez = await client.query(
+      `SELECT r.*, s.datum, s.cas_od, s.cas_do FROM rezervace r
+       JOIN rezervace_sloty s ON r.slot_id = s.id
+       WHERE r.zrusovaci_token = $1 FOR UPDATE OF r`,
+      [req.params.token]
+    );
+    if (!rez.rows.length) { await client.query('ROLLBACK'); return res.status(404).send('Odkaz nenalezen.'); }
+    const jizZrusena = rez.rows[0].stav === 'zrusena';
+    if (!jizZrusena) {
+      await client.query('UPDATE rezervace SET stav=$1 WHERE id=$2', ['zrusena', rez.rows[0].id]);
+      await client.query('UPDATE rezervace_sloty SET obsazeno=FALSE WHERE id=$1', [rez.rows[0].slot_id]);
+    }
+    await client.query('COMMIT');
+    res.send(`<html><head><meta charset="UTF-8"><style>${styl}</style></head><body><div class="box"><h1>✅ Rezervace zrušena</h1><p>Vaše rezervace byla zrušena. Kdybyste to rozmysleli, klidně si udělejte novou na webu.</p><p style="margin-top:16px"><a href="https://www.detskekrucky.cz">← Zpět na web</a></p></div></body></html>`);
+    if (!jizZrusena) {
+      odeslat_upozorneni_rezervace(rez.rows[0], rez.rows[0], 'zrusena').catch(e => console.error('Upozorneni majitelce se nepodarilo odeslat:', e.message));
+    }
+  } catch(e) { await client.query('ROLLBACK'); res.status(500).send('Chyba serveru.'); }
   finally { client.release(); }
 });
 
