@@ -20,7 +20,7 @@ const prodejnaRoutes = require('./routes/prodejna');
 const vratkyZadostiRoutes = require('./routes/vratkyZadosti');
 const poukazyRoutes = require('./routes/poukazy');
 const vyzadovatAdmina = require('./middleware/adminAuth');
-const { odeslat_test } = require('./routes/emaily');
+const { odeslat_test, odeslat_potvrzeni_rezervace } = require('./routes/emaily');
 
 // Přihlášení do admin panelu – heslo se ověřuje tady na serveru,
 // nikdy není součástí kódu na frontendu.
@@ -265,6 +265,9 @@ app.post('/api/rezervace', async (req, res) => {
     await client.query('UPDATE rezervace_sloty SET obsazeno=TRUE WHERE id=$1', [slot_id]);
     await client.query('COMMIT');
     res.json(rez.rows[0]);
+    // Potvrzovací e-mail se posílá až po odpovědi zákazníkovi, ať prodleva/chyba
+    // s e-mailem rezervaci nezablokuje
+    odeslat_potvrzeni_rezervace(rez.rows[0], slot.rows[0]).catch(e => console.error('Email o rezervaci se nepodařilo odeslat:', e.message));
   } catch(e) { await client.query('ROLLBACK'); res.status(500).json({ chyba: e.message }); }
   finally { client.release(); }
 });

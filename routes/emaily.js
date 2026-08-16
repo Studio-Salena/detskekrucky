@@ -82,6 +82,33 @@ async function odeslat_potvrzeni(objednavka) {
   console.log('Email odoslan na:', objednavka.email);
 }
 
+async function odeslat_potvrzeni_rezervace(rezervace, slot) {
+  const datum = new Date(slot.datum).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'long', year: 'numeric' });
+  const cas = `${slot.cas_od.slice(0,5)} – ${slot.cas_do.slice(0,5)}`;
+
+  await odeslatEmail({
+    to: rezervace.email,
+    subject: 'Potvrzení rezervace – Dětské krůčky',
+    html: `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+        <h1 style="color:#FF6B35">Rezervace přijata!</h1>
+        <p>Ahoj ${rezervace.jmeno},</p>
+        <p>Vaši rezervaci na vyzkoušení bot jsme přijali. Těšíme se na vás!</p>
+        <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-top:12px">
+          <p style="margin:0 0 6px 0"><strong>Termín:</strong> ${datum}, ${cas}</p>
+          <p style="margin:0">Prodejna: Holešovská 752, Hulín 768 24</p>
+        </div>
+        <p style="margin-top:16px">Pokud se nemůžete dostavit, dejte nám prosím vědět na tento e-mail nebo telefonicky.</p>
+        <hr>
+        <p style="color:#666;font-size:13px">
+          Dětské krůčky | 773 517 733 | info@detskekrucky.cz
+        </p>
+      </div>
+    `
+  });
+  console.log('Email o rezervaci odeslan na:', rezervace.email);
+}
+
 // Zkušební e-mail – pro ověření, že server umí odesílat (RESEND_API_KEY + ověřená doména)
 async function odeslat_test(komu) {
   await odeslatEmail({
@@ -99,4 +126,4 @@ async function odeslat_test(komu) {
   });
 }
 
-module.exports = { odeslat_potvrzeni, odeslat_test };
+module.exports = { odeslat_potvrzeni, odeslat_potvrzeni_rezervace, odeslat_test };

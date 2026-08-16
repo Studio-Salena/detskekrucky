@@ -28,7 +28,7 @@ Web a e-shop pro obchod s barefoot obuví pro děti (majitelka: Monika Škarpich
 - Dynamické načítání obsahu na `index.html`
 - Upload obrázků do Supabase Storage
 - Rezervační systém pro zákazníky se správou slotů
-- Emailové potvrzení rezervací zatím **odloženo** (majitelka nemá nastavený email)
+- Emailové potvrzení rezervace zákazníkovi (přes Resend, `routes/emaily.js` → `odeslat_potvrzeni_rezervace`)
 
 ## Známé problémy a jejich řešení
 
