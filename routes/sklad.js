@@ -163,6 +163,29 @@ router.patch('/produkty/:id', async (req, res) => {
 // (POZNÁMKA: skutečně používané kategorie endpointy jsou v routes/kategorie.js,
 // tyhle duplicitní byly nepoužívané a byly odstraněny kvůli přehlednosti a bezpečnosti)
 
+// Upravit velikost a/nebo EAN existující položky skladu
+router.patch('/polozka/:produktId/:velikost', async (req, res) => {
+  const { velikost_nova, ean } = req.body;
+  if (!velikost_nova) {
+    return res.status(400).json({ chyba: 'Chybí nová velikost.' });
+  }
+  try {
+    const result = await pool.query(
+      'UPDATE sklad SET velikost=$1, ean=$2 WHERE produkt_id=$3 AND velikost=$4 RETURNING *',
+      [velikost_nova, ean || null, req.params.produktId, req.params.velikost]
+    );
+    if (!result.rows.length) {
+      return res.status(404).json({ chyba: 'Položka skladu nenalezena.' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(400).json({ chyba: 'Tato velikost už u produktu existuje.' });
+    }
+    res.status(500).json({ chyba: err.message });
+  }
+});
+
 // Smazat jednu položku skladu (konkrétní velikost produktu)
 router.delete('/polozka/:produktId/:velikost', async (req, res) => {
   try {
