@@ -1013,6 +1013,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <label for="zNewsletter" style="margin:0">Přihlásit i k newsletteru</label>
     </div>
     <div class="modal-footer">
+      <button class="btn btn-outline no-print" onclick="tisknoutFormularZakaznika()">🖨️ Tisk formuláře (2× na A4)</button>
       <button class="btn btn-outline" onclick="closeModal('modalNovyZakaznik')">Zrušit</button>
       <button class="btn btn-primary" onclick="ulozitZakaznika()">💾 Uložit</button>
     </div>
@@ -1434,6 +1435,54 @@ async function tiskObjednavkyId(id) {
 }
 
 // ZÁKAZNÍCI
+// Prázdný formulář pro ruční vyplnění na prodejně – 2× na jednu A4 stránku
+function tisknoutFormularZakaznika() {
+  const pw = window.open('','_blank');
+  const formular = () => `
+    <div class="formular">
+      <h2>Dětské krůčky</h2>
+      <div style="font-size:0.8rem;color:#7a5c42;margin-bottom:14px">Karta zákazníka</div>
+      <div class="radek">
+        <div class="pole"><label>Jméno a příjmení</label><div class="linka"></div></div>
+        <div class="pole"><label>E-mail</label><div class="linka"></div></div>
+      </div>
+      <div class="radek">
+        <div class="pole"><label>Telefon</label><div class="linka"></div></div>
+        <div class="pole"><label>Město</label><div class="linka"></div></div>
+      </div>
+      <div class="radek">
+        <div class="pole"><label>Ulice</label><div class="linka"></div></div>
+        <div class="pole"><label>PSČ</label><div class="linka"></div></div>
+      </div>
+      <div class="pole" style="display:flex;align-items:center;gap:8px;margin-top:16px">
+        <div class="checkbox"></div>
+        <span style="font-size:0.85rem">Chci dostávat novinky a slevy e-mailem (newsletter)</span>
+      </div>
+    </div>`;
+  pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Formulář zákazníka</title>
+  <style>
+    @page{ size:A4; margin:14mm; }
+    *{ box-sizing:border-box; }
+    body{font-family:'Nunito',Arial,sans-serif;color:#3d2b1f;margin:0}
+    .formular{border:2px solid #8B4513;border-radius:14px;padding:22px 26px;page-break-inside:avoid}
+    .formular h2{font-family:Georgia,serif;color:#8B4513;font-size:1.4rem;margin:0}
+    .radek{display:flex;gap:20px}
+    .pole{flex:1;margin:14px 0}
+    .pole label{display:block;font-size:0.78rem;color:#7a5c42;margin-bottom:5px}
+    .linka{border-bottom:1px solid #3d2b1f;height:24px}
+    .checkbox{width:16px;height:16px;border:1.5px solid #3d2b1f;flex-shrink:0}
+    .strih{text-align:center;color:#aaa;font-size:0.72rem;border-top:2px dashed #ccc;margin:10mm 0;position:relative}
+    .strih span{background:#fff;padding:0 10px;position:relative;top:-8px}
+  </style>
+  </head><body>
+  ${formular()}
+  <div class="strih"><span>✂ - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -</span></div>
+  ${formular()}
+  <script>window.onload=()=>{window.print();}<\/script>
+  </body></html>`);
+  pw.document.close();
+}
+
 async function ulozitZakaznika() {
   const jmeno = document.getElementById('zJmeno').value.trim();
   const email = document.getElementById('zEmail').value.trim();
