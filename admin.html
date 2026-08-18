@@ -740,7 +740,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <button onclick="zavritKameru()" style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.6);border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:0.85rem;">✕ Zavřít</button>
       <div style="position:absolute;bottom:10px;left:0;right:0;text-align:center;color:#fff;font-size:0.8rem;opacity:0.8;">Namiřte na čárový kód</div>
     </div>
-    <div id="prodejnaPolozky">
+    <div id="prodejnaPolozky" style="max-height:34vh;overflow-y:auto;padding-right:6px">
       <div class="polozka-row polozka-grid">
         <div class="form-group" style="margin:0"><label>Produkt</label><select class="prod-select" onchange="nacistVelikostiProdejna(this)"><option value="">Vyberte...</option></select></div>
         <div class="form-group" style="margin:0"><label>Velikost</label><select class="vel-select"><option value="">-</option></select></div>
