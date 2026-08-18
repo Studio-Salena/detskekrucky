@@ -1010,8 +1010,13 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     </div>
     <div class="form-group" style="display:flex;align-items:center;gap:8px;margin-top:6px">
       <input type="checkbox" id="zNewsletter" style="width:auto">
-      <label for="zNewsletter" style="margin:0">Přihlásit i k newsletteru</label>
+      <label for="zNewsletter" style="margin:0">Přihlásit i k newsletteru (souhlas lze kdykoli odvolat)</label>
     </div>
+    <p style="font-size:0.78rem;color:var(--text-light);margin-top:8px">
+      Osobní údaje zpracováváme za účelem evidence zákazníků a vyřizování objednávek/rezervací.
+      Zákazník byl/a informován/a o zpracování osobních údajů (GDPR) — viz
+      <a href="obchodni-podminky.html#gdpr" target="_blank" style="color:var(--brown)">obchodní podmínky, bod 7</a>.
+    </p>
     <div class="modal-footer">
       <button class="btn btn-outline no-print" onclick="tisknoutFormularZakaznika()">🖨️ Tisk formuláře (2× na A4)</button>
       <button class="btn btn-outline" onclick="closeModal('modalNovyZakaznik')">Zrušit</button>
@@ -1461,8 +1466,9 @@ function tisknoutFormularZakaznika() {
       </div>
       <div class="pole" style="display:flex;align-items:center;gap:8px;margin-top:16px">
         <div class="checkbox"></div>
-        <span style="font-size:0.85rem">Chci dostávat novinky a slevy e-mailem (newsletter)</span>
+        <span style="font-size:0.85rem">Chci dostávat novinky a slevy e-mailem (newsletter). Souhlas mohu kdykoli odvolat.</span>
       </div>
+      <p class="gdpr-info">Osobní údaje zpracováváme za účelem evidence zákazníků a vyřizování objednávek/rezervací. Správce: Monika Škarpichová, IČO 24354635. Podrobné informace a vaše práva: www.detskekrucky.cz/obchodni-podminky.html#gdpr</p>
       <div class="radek" style="margin-top:10px">
         <div class="pole"><label>Datum</label><div class="linka"></div></div>
         <div class="pole"><label>Podpis</label><div class="linka"></div></div>
@@ -1482,6 +1488,7 @@ function tisknoutFormularZakaznika() {
     .pole label{display:block;font-size:0.78rem;color:#7a5c42;margin-bottom:5px}
     .linka{border-bottom:1px solid #3d2b1f;height:24px}
     .checkbox{width:16px;height:16px;border:1.5px solid #3d2b1f;flex-shrink:0}
+    .gdpr-info{font-size:0.68rem;color:#8a7562;margin-top:10px;line-height:1.4}
     .strih{text-align:center;color:#aaa;font-size:0.72rem;border-top:2px dashed #ccc;margin:10mm 0;position:relative}
     .strih span{background:#fff;padding:0 10px;position:relative;top:-8px}
   </style>
