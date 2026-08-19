@@ -448,6 +448,12 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <div class="stat-card"><div class="stat-label">Vratky celkem</div><div class="stat-value" id="vratkyTrzby" style="color:var(--brown)">...</div></div>
       </div>
       <div class="table-wrap">
+        <div class="table-header"><h3>📅 Denní přehled</h3>
+          <button class="btn btn-print btn-sm no-print" onclick="tisknoutUzaverku(denniKlic(new Date()))">🖨️ Uzávěrka dnes</button>
+        </div>
+        <div id="denniPrehledTable"><div class="loading">Načítám...</div></div>
+      </div>
+      <div class="table-wrap">
         <div class="table-header"><h3>📋 Historie prodejů v prodejně</h3></div>
         <div id="prodejnaTable"><div class="loading">Načítám...</div></div>
       </div>
@@ -2416,8 +2422,125 @@ async function loadProdejna() {
       </tr>`).join('')}</tbody></table>`;
   }
 
+  renderDenniPrehled();
   naplnitVyberProdejVratka();
   loadVratky();
+}
+
+// Klíč dne ve formátu YYYY-MM-DD podle lokálního data (ne UTC), ať sedí i pozdě večer
+function denniKlic(datum) {
+  const d = new Date(datum);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function renderDenniPrehled() {
+  const el = document.getElementById('denniPrehledTable');
+  if (!el) return;
+  if (!prodejnaData.length) { el.innerHTML = '<div class="empty">Zatím žádné prodeje v prodejně</div>'; return; }
+
+  const dny = {};
+  prodejnaData.forEach(p => {
+    const k = denniKlic(p.datum);
+    if (!dny[k]) dny[k] = { pocet:0, celkem:0, hotovost:0, karta:0, qr:0, poukaz:0 };
+    dny[k].pocet++;
+    dny[k].celkem += Number(p.celkem);
+    if (dny[k][p.platba] != null) dny[k][p.platba] += Number(p.celkem);
+  });
+  const seznam = Object.entries(dny).sort((a,b)=>b[0].localeCompare(a[0]));
+
+  el.innerHTML = `
+    <table><thead><tr><th>Datum</th><th>Počet prodejů</th><th>Hotovost</th><th>Karta</th><th>QR</th><th>Poukaz</th><th>Tržby celkem</th><th>Akce</th></tr></thead>
+    <tbody>${seznam.map(([k,d])=>`<tr>
+      <td><strong>${new Date(k).toLocaleDateString('cs-CZ')}</strong></td>
+      <td>${d.pocet}</td>
+      <td>${d.hotovost.toLocaleString('cs-CZ')} Kč</td>
+      <td>${d.karta.toLocaleString('cs-CZ')} Kč</td>
+      <td>${d.qr.toLocaleString('cs-CZ')} Kč</td>
+      <td>${d.poukaz.toLocaleString('cs-CZ')} Kč</td>
+      <td><strong>${d.celkem.toLocaleString('cs-CZ')} Kč</strong></td>
+      <td><button class="btn btn-print btn-sm no-print" onclick="tisknoutUzaverku('${k}')">🖨️ Uzávěrka</button></td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+// Tisk denní uzávěrky pro daný den (klíč YYYY-MM-DD)
+async function tisknoutUzaverku(klicDne) {
+  const prodejeDne = prodejnaData.filter(p => denniKlic(p.datum) === klicDne);
+  if (!prodejeDne.length) { alert('Za tento den nejsou žádné prodeje.'); return; }
+
+  let vratkyDne = [];
+  try {
+    const v = await adminFetch(API+'/prodejna/vratky/vse').then(r=>r.json());
+    vratkyDne = Array.isArray(v) ? v.filter(x => denniKlic(x.vytvoreno) === klicDne) : [];
+  } catch(e) {}
+
+  const souhrn = { pocet:0, celkem:0, hotovost:0, karta:0, qr:0, poukaz:0 };
+  prodejeDne.forEach(p => {
+    souhrn.pocet++;
+    souhrn.celkem += Number(p.celkem);
+    if (souhrn[p.platba] != null) souhrn[p.platba] += Number(p.celkem);
+  });
+  const vratkyCelkem = vratkyDne.reduce((s,v)=>s+Number(v.castka),0);
+  const datumHezky = new Date(klicDne).toLocaleDateString('cs-CZ', { day:'numeric', month:'long', year:'numeric' });
+
+  const pw = window.open('','_blank');
+  pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Denní uzávěrka ${klicDne}</title>
+  <style>
+    @page{ size:A4; margin:16mm; }
+    *{ box-sizing:border-box; }
+    body{font-family:'Nunito',Arial,sans-serif;color:#3d2b1f;margin:0}
+    .hlavicka{display:flex;align-items:center;gap:14px;margin-bottom:18px}
+    .hlavicka img{width:48px;height:48px;object-fit:cover;border-radius:50%}
+    h1{font-family:Georgia,serif;color:#8B4513;font-size:1.3rem;margin:0}
+    .sub{color:#7a5c42;font-size:0.85rem}
+    table{width:100%;border-collapse:collapse;margin:14px 0}
+    th,td{padding:8px 10px;border:1px solid #e8d8c8;text-align:left;font-size:0.9rem}
+    th{background:#f5e6d3;text-align:left}
+    .total-row td{font-weight:700;background:#fff8f0}
+    .polozky-table td{font-size:0.82rem}
+    .podpis{margin-top:40px;display:flex;justify-content:space-between}
+    .linka{border-top:1px solid #3d2b1f;width:220px;text-align:center;padding-top:4px;font-size:0.78rem;color:#7a5c42}
+    @media print{body{padding:0}}
+  </style>
+  </head><body>
+  <div class="hlavicka">
+    <img src="logo.jpg" alt="Dětské krůčky">
+    <div>
+      <h1>Denní uzávěrka</h1>
+      <div class="sub">Dětské krůčky | ${datumHezky}</div>
+    </div>
+  </div>
+
+  <table>
+    <thead><tr><th>Způsob platby</th><th>Tržby</th></tr></thead>
+    <tbody>
+      <tr><td>💵 Hotovost</td><td>${souhrn.hotovost.toLocaleString('cs-CZ')} Kč</td></tr>
+      <tr><td>💳 Karta</td><td>${souhrn.karta.toLocaleString('cs-CZ')} Kč</td></tr>
+      <tr><td>📱 QR platba</td><td>${souhrn.qr.toLocaleString('cs-CZ')} Kč</td></tr>
+      <tr><td>🎁 Dárkový poukaz</td><td>${souhrn.poukaz.toLocaleString('cs-CZ')} Kč</td></tr>
+      <tr class="total-row"><td>Tržby celkem (${souhrn.pocet} prodejů)</td><td>${souhrn.celkem.toLocaleString('cs-CZ')} Kč</td></tr>
+      <tr><td>Vratky (${vratkyDne.length}×)</td><td>−${vratkyCelkem.toLocaleString('cs-CZ')} Kč</td></tr>
+      <tr class="total-row"><td>Čistý příjem</td><td>${(souhrn.celkem - vratkyCelkem).toLocaleString('cs-CZ')} Kč</td></tr>
+    </tbody>
+  </table>
+
+  <table class="polozky-table">
+    <thead><tr><th>Čas</th><th>Zákazník</th><th>Platba</th><th>Částka</th></tr></thead>
+    <tbody>${prodejeDne.map(p=>`<tr>
+      <td>${new Date(p.datum).toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})}</td>
+      <td>${p.zakaznik||'—'}</td>
+      <td>${p.platba==='hotovost'?'Hotovost':p.platba==='karta'?'Karta':p.platba==='qr'?'QR':'Poukaz'}</td>
+      <td>${Number(p.celkem).toLocaleString('cs-CZ')} Kč</td>
+    </tr>`).join('')}</tbody>
+  </table>
+
+  <div class="podpis">
+    <div class="linka">Hotovost v pokladně (skutečnost)</div>
+    <div class="linka">Podpis</div>
+  </div>
+
+  <script>window.onload=()=>{window.print();}<\/script>
+  </body></html>`);
+  pw.document.close();
 }
 
 async function nacistSkladProProdejna() {
