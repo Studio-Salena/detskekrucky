@@ -21,7 +21,12 @@ const prodejnaRoutes = require('./routes/prodejna');
 const vratkyZadostiRoutes = require('./routes/vratkyZadosti');
 const poukazyRoutes = require('./routes/poukazy');
 const vyzadovatAdmina = require('./middleware/adminAuth');
+const { jeZablokovana, zaznamenatNeuspech, resetovat } = require('./middleware/loginLimiter');
 const { odeslat_test, odeslat_potvrzeni_rezervace, odeslat_potvrzeni_terminu, odeslat_upozorneni_rezervace } = require('./routes/emaily');
+
+// Render běží za proxy - bez tohohle by req.ip byla vždy IP proxy, ne
+// skutečného klienta, a ochrana proti hádání hesla by nefungovala správně.
+app.set('trust proxy', 1);
 
 // Přihlášení do admin panelu – heslo se ověřuje tady na serveru,
 // nikdy není součástí kódu na frontendu.
@@ -31,9 +36,15 @@ app.post('/api/admin-prihlaseni', (req, res) => {
     console.error('ADMIN_HESLO není nastaveno v proměnných prostředí!');
     return res.status(500).json({ chyba: 'Server není správně nakonfigurován.' });
   }
+  const zbyvaSekund = jeZablokovana(req.ip);
+  if (zbyvaSekund > 0) {
+    return res.status(429).json({ chyba: `Příliš mnoho neúspěšných pokusů. Zkuste to znovu za ${Math.ceil(zbyvaSekund / 60)} min.` });
+  }
   if (heslo && heslo === process.env.ADMIN_HESLO) {
+    resetovat(req.ip);
     return res.json({ ok: true });
   }
+  zaznamenatNeuspech(req.ip);
   res.status(401).json({ chyba: 'Nesprávné heslo.' });
 });
 
@@ -54,15 +65,6 @@ app.post('/api/test-email', vyzadovatAdmina, async (req, res) => {
 
 app.get('/', (req, res) => {
   res.json({ zprava: 'DÄ›tskĂ© krĹŻÄŤky API funguje!' });
-});
-
-app.get('/test-db', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT 1 as ok');
-    res.json({ ok: true });
-  } catch (err) {
-    res.json({ ok: false, chyba: err.message });
-  }
 });
 
 app.use('/api/sklad', skladRoutes);
