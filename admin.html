@@ -2482,62 +2482,53 @@ async function tisknoutUzaverku(klicDne) {
   const vratkyCelkem = vratkyDne.reduce((s,v)=>s+Number(v.castka),0);
   const datumHezky = new Date(klicDne).toLocaleDateString('cs-CZ', { day:'numeric', month:'long', year:'numeric' });
 
-  const pw = window.open('','_blank');
-  pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Denní uzávěrka ${klicDne}</title>
+  const pw = window.open('','_blank','width=400,height=600');
+  pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>Denní uzávěrka ${klicDne}</title>
   <style>
-    @page{ size:A4; margin:16mm; }
+    @page{ size:58mm auto; margin:0; }
     *{ box-sizing:border-box; }
-    body{font-family:'Nunito',Arial,sans-serif;color:#3d2b1f;margin:0}
-    .hlavicka{display:flex;align-items:center;gap:14px;margin-bottom:18px}
-    .hlavicka img{width:48px;height:48px;object-fit:cover;border-radius:50%}
-    h1{font-family:Georgia,serif;color:#8B4513;font-size:1.3rem;margin:0}
-    .sub{color:#7a5c42;font-size:0.85rem}
-    table{width:100%;border-collapse:collapse;margin:14px 0}
-    th,td{padding:8px 10px;border:1px solid #e8d8c8;text-align:left;font-size:0.9rem}
-    th{background:#f5e6d3;text-align:left}
-    .total-row td{font-weight:700;background:#fff8f0}
-    .polozky-table td{font-size:0.82rem}
-    .podpis{margin-top:40px;display:flex;justify-content:space-between}
-    .linka{border-top:1px solid #3d2b1f;width:220px;text-align:center;padding-top:4px;font-size:0.78rem;color:#7a5c42}
-    @media print{body{padding:0}}
+    html,body{width:58mm}
+    body{font-family:'Courier New',Consolas,monospace;margin:0 auto;padding:2mm 2mm;font-size:13px;line-height:1.4;color:#000;font-weight:bold}
+    .center{text-align:center}
+    .logo{font-size:16px;font-weight:bold}
+    .divider{border-top:1px dashed #000;margin:6px 0}
+    .row{display:flex;justify-content:space-between;margin:2px 0}
+    .total{font-size:15px;font-weight:bold;border-top:1px solid #000;padding-top:4px;margin-top:4px}
+    .polozka{font-size:11px}
+    .linka{border-bottom:1px solid #000;height:20px;margin-top:14px}
+    .linka-popisek{font-size:11px;margin-top:2px}
+    .footer{text-align:center;font-size:12px;margin-top:10px}
+    @media print{body{padding:2mm 2mm}}
   </style>
   </head><body>
-  <div class="hlavicka">
-    <img src="logo.jpg" alt="Dětské krůčky">
-    <div>
-      <h1>Denní uzávěrka</h1>
-      <div class="sub">Dětské krůčky | ${datumHezky}</div>
-    </div>
+  <div class="center">
+    <div class="logo">Dětské krůčky</div>
+    <div style="font-size:12px">Denní uzávěrka</div>
+    <div style="font-size:12px">${datumHezky}</div>
   </div>
-
-  <table>
-    <thead><tr><th>Způsob platby</th><th>Tržby</th></tr></thead>
-    <tbody>
-      <tr><td>💵 Hotovost</td><td>${souhrn.hotovost.toLocaleString('cs-CZ')} Kč</td></tr>
-      <tr><td>💳 Karta</td><td>${souhrn.karta.toLocaleString('cs-CZ')} Kč</td></tr>
-      <tr><td>📱 QR platba</td><td>${souhrn.qr.toLocaleString('cs-CZ')} Kč</td></tr>
-      <tr><td>🎁 Dárkový poukaz</td><td>${souhrn.poukaz.toLocaleString('cs-CZ')} Kč</td></tr>
-      <tr class="total-row"><td>Tržby celkem (${souhrn.pocet} prodejů)</td><td>${souhrn.celkem.toLocaleString('cs-CZ')} Kč</td></tr>
-      <tr><td>Vratky (${vratkyDne.length}×)</td><td>−${vratkyCelkem.toLocaleString('cs-CZ')} Kč</td></tr>
-      <tr class="total-row"><td>Čistý příjem</td><td>${(souhrn.celkem - vratkyCelkem).toLocaleString('cs-CZ')} Kč</td></tr>
-    </tbody>
-  </table>
-
-  <table class="polozky-table">
-    <thead><tr><th>Čas</th><th>Zákazník</th><th>Platba</th><th>Částka</th></tr></thead>
-    <tbody>${prodejeDne.map(p=>`<tr>
-      <td>${new Date(p.datum).toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})}</td>
-      <td>${p.zakaznik||'—'}</td>
-      <td>${p.platba==='hotovost'?'Hotovost':p.platba==='karta'?'Karta':p.platba==='qr'?'QR':'Poukaz'}</td>
-      <td>${Number(p.celkem).toLocaleString('cs-CZ')} Kč</td>
-    </tr>`).join('')}</tbody>
-  </table>
-
-  <div class="podpis">
-    <div class="linka">Hotovost v pokladně (skutečnost)</div>
-    <div class="linka">Podpis</div>
+  <div class="divider"></div>
+  <div class="row"><span>Hotovost:</span><span>${souhrn.hotovost.toLocaleString('cs-CZ')} Kč</span></div>
+  <div class="row"><span>Karta:</span><span>${souhrn.karta.toLocaleString('cs-CZ')} Kč</span></div>
+  <div class="row"><span>QR platba:</span><span>${souhrn.qr.toLocaleString('cs-CZ')} Kč</span></div>
+  <div class="row"><span>Poukaz:</span><span>${souhrn.poukaz.toLocaleString('cs-CZ')} Kč</span></div>
+  <div class="divider"></div>
+  <div class="row total"><span>Celkem (${souhrn.pocet}×):</span><span>${souhrn.celkem.toLocaleString('cs-CZ')} Kč</span></div>
+  <div class="row"><span>Vratky (${vratkyDne.length}×):</span><span>−${vratkyCelkem.toLocaleString('cs-CZ')} Kč</span></div>
+  <div class="row total"><span>Čistý příjem:</span><span>${(souhrn.celkem - vratkyCelkem).toLocaleString('cs-CZ')} Kč</span></div>
+  <div class="divider"></div>
+  <div><strong>Prodeje:</strong></div>
+  ${prodejeDne.map(p=>`
+  <div class="row polozka"><span>${new Date(p.datum).toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})} ${p.platba==='hotovost'?'H':p.platba==='karta'?'K':p.platba==='qr'?'QR':'P'}</span><span>${Number(p.celkem).toLocaleString('cs-CZ')} Kč</span></div>`).join('')}
+  <div class="divider"></div>
+  <div class="linka-popisek">Hotovost v pokladně (skutečnost):</div>
+  <div class="linka"></div>
+  <div class="linka-popisek">Podpis:</div>
+  <div class="linka"></div>
+  <div class="footer">
+    <div class="divider"></div>
+    <div>www.detskekrucky.cz</div>
   </div>
-
   <script>window.onload=()=>{window.print();}<\/script>
   </body></html>`);
   pw.document.close();
