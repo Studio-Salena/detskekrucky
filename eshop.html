@@ -30,7 +30,7 @@ body{font-family:'Nunito',sans-serif;background:var(--cream);color:var(--text)}
 .back-bar a:hover{text-decoration:underline}
 
 /* HEADER */
-header{background:#fff;border-bottom:3px solid var(--tan-light);padding:0 32px;display:flex;align-items:center;justify-content:space-between;height:75px;position:sticky;top:0;z-index:100;box-shadow:0 4px 20px rgba(139,69,19,0.12)}
+header{background:linear-gradient(90deg,#fffbe8,#fff0f8,#e8f8ff);border-bottom:3px solid transparent;border-image:linear-gradient(90deg,var(--sage),var(--tan),var(--pink-soft)) 1;padding:0 32px;display:flex;align-items:center;justify-content:space-between;height:75px;position:sticky;top:0;z-index:100;box-shadow:0 4px 20px rgba(139,69,19,0.12)}
 .logo{display:flex;align-items:center;gap:12px;text-decoration:none}
 .logo img{height:58px;width:58px;object-fit:cover;border-radius:50%;border:2px solid var(--tan-light)}
 .logo-text{font-family:'Dancing Script',cursive;font-size:1.7rem;color:var(--brown);line-height:1}
@@ -174,12 +174,13 @@ nav{display:flex;align-items:center;gap:8px}
 .msg-success{background:#e8f7ee;color:#27ae60}
 
 /* FOOTER */
-footer{background:linear-gradient(135deg,#fff8f0,#f5e6d3);border-top:2px solid var(--tan-light);padding:32px;text-align:center}
-.footer-logo{font-family:'Dancing Script',cursive;font-size:1.8rem;color:var(--brown);margin-bottom:8px}
+footer{background:linear-gradient(135deg,#3d2b1f,#6b4c35);padding:32px;text-align:center}
+.footer-logo{font-family:'Dancing Script',cursive;font-size:1.8rem;color:#fff;margin-bottom:8px}
 .footer-links{display:flex;gap:24px;justify-content:center;flex-wrap:wrap;margin:16px 0;font-size:0.85rem}
-.footer-links a{color:var(--brown);font-weight:700;text-decoration:none}
-.footer-links a:hover{text-decoration:underline}
-.footer-copy{font-size:0.78rem;color:var(--text-light);margin-top:12px}
+.footer-links a{color:var(--tan-light);font-weight:700;text-decoration:none}
+.footer-links a:hover{color:#fff;text-decoration:underline}
+.footer-copy{font-size:0.78rem;color:rgba(255,255,255,0.55);margin-top:12px}
+.footer-copy a{color:rgba(255,255,255,0.75)}
 
 /* TOAST */
 .toast{position:fixed;bottom:24px;right:24px;background:var(--brown);color:#fff;padding:14px 20px;border-radius:12px;font-weight:700;font-size:0.9rem;z-index:400;transform:translateY(100px);opacity:0;transition:all 0.3s;box-shadow:0 4px 20px rgba(139,69,19,0.4)}
@@ -352,6 +353,110 @@ footer {
     top: env(safe-area-inset-top, 0);
     padding-bottom: max(20px, env(safe-area-inset-bottom));
   }
+  .float-contact { right: 10px; bottom: 70px; gap: 8px; }
+  .float-contact a { width: 40px; height: 40px; }
+  .float-contact a svg { width: 20px; height: 20px; }
+  #back-to-top { font-size: 0.75rem; padding: 7px 11px; left: 10px; bottom: 70px; }
+}
+
+/* ── FOOTPRINT TRAIL ── */
+.footprint {
+  position: fixed;
+  pointer-events: none;
+  font-size: 1.4rem;
+  opacity: 0;
+  z-index: 9998;
+  animation: footFade 1.8s ease forwards;
+  transform-origin: center;
+}
+@keyframes footFade {
+  0%   { opacity: 0;   transform: scale(0.5) rotate(var(--rot)); }
+  20%  { opacity: 0.7; transform: scale(1)   rotate(var(--rot)); }
+  80%  { opacity: 0.5; transform: scale(1)   rotate(var(--rot)); }
+  100% { opacity: 0;   transform: scale(0.9) rotate(var(--rot)); }
+}
+
+/* ── FLOATING CONTACT BUTTONS ── */
+.float-contact {
+  position: fixed;
+  right: 22px;
+  bottom: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 9997;
+}
+.float-contact a {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.2);
+  transition: transform 0.25s, box-shadow 0.25s;
+  position: relative;
+}
+.float-contact a:hover {
+  transform: scale(1.12);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.28);
+}
+.float-contact a.whatsapp { background: #25d366; }
+.float-contact a.messenger { background: linear-gradient(135deg, #0078ff, #a033ff); }
+.float-contact a svg { width: 26px; height: 26px; fill: white; }
+.float-contact a .tooltip {
+  position: absolute;
+  right: 62px;
+  background: rgba(40,40,40,0.85);
+  color: #fff;
+  font-size: 0.75rem;
+  padding: 5px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+.float-contact a:hover .tooltip { opacity: 1; }
+
+/* ── BACK TO TOP BUTTON ── */
+#back-to-top {
+  position: fixed;
+  bottom: 100px;
+  left: 22px;
+  width: auto;
+  max-width: 110px;
+  padding: 10px 16px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #A58B71, #AE6965);
+  color: #fff;
+  font-size: 1.4rem;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(176,94,42,0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.3s, transform 0.3s;
+  z-index: 9996;
+}
+#back-to-top.visible { opacity: 1; transform: translateY(0); }
+#back-to-top:hover { transform: translateY(-4px) scale(1.1); box-shadow: 0 8px 24px rgba(176,94,42,0.45); }
+
+/* ── JEŽEK BÉĎA FOLLOWER ── */
+#bedas-cursor {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9995;
+  font-size: 2rem;
+  transition: left 0.18s cubic-bezier(0.25,0.46,0.45,0.94),
+              top  0.18s cubic-bezier(0.25,0.46,0.45,0.94);
+  filter: drop-shadow(0 3px 8px rgba(0,0,0,0.15));
+  transform: translate(-50%, -50%);
+  display: none;
 }
 </style>
 </head>
@@ -1259,6 +1364,101 @@ async function nacistMojeObjednavky() {
     <button class="cookie-accept" onclick="cookieAccept()">Přijmout vše ✓</button>
   </div>
 </div>
+
+<!-- FLOATING CONTACT BUTTONS -->
+<div class="float-contact">
+  <a href="https://wa.me/420000000000" class="whatsapp" target="_blank" title="WhatsApp">
+    <span class="tooltip">Napište nám na WhatsApp</span>
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+      <path d="M12 0C5.373 0 0 5.373 0 12c0 2.117.549 4.107 1.51 5.833L.057 23.215a.75.75 0 0 0 .916.916l5.382-1.453A11.95 11.95 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75a9.712 9.712 0 0 1-4.953-1.355l-.355-.21-3.676.993.993-3.588-.228-.37A9.712 9.712 0 0 1 2.25 12C2.25 6.615 6.615 2.25 12 2.25S21.75 6.615 21.75 12 17.385 21.75 12 21.75z"/>
+    </svg>
+  </a>
+  <a href="https://m.me/detskekrucky" class="messenger" target="_blank" title="Messenger">
+    <span class="tooltip">Napište nám na Messenger</span>
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 0C5.373 0 0 4.975 0 11.111c0 3.497 1.745 6.616 4.472 8.652V24l4.086-2.242c1.09.301 2.246.464 3.442.464 6.627 0 12-4.975 12-11.111S18.627 0 12 0zm1.193 14.963l-3.056-3.259-5.963 3.259 6.559-6.963 3.13 3.259 5.889-3.259-6.559 6.963z"/>
+    </svg>
+  </a>
+</div>
+
+<!-- BACK TO TOP -->
+<button id="back-to-top" title="Zpět nahoru" onclick="window.scrollTo({top:0,behavior:'smooth'})">👣</button>
+
+<!-- JEŽEK BÉĎA FOLLOWER -->
+<div id="bedas-cursor">🦔</div>
+
+<!-- FOOTPRINT TRAIL SCRIPT -->
+<script>
+(function() {
+  let count = 0;
+  function spawnPrint(x, y) {
+    const el = document.createElement('div');
+    el.className = 'footprint';
+    el.textContent = '👣';
+    const rot = (Math.random() * 40 - 20);
+    el.style.setProperty('--rot', rot + 'deg');
+    el.style.left = (x - 14) + 'px';
+    el.style.top  = (y + window.scrollY - 14) + 'px';
+    document.body.appendChild(el);
+    count++;
+    setTimeout(() => el.remove(), 1900);
+  }
+
+  let throttle = false;
+  window.addEventListener('scroll', () => {
+    if (throttle) return;
+    throttle = true;
+    setTimeout(() => { throttle = false; }, 180);
+
+    const scrollX = window.innerWidth * 0.15 + Math.sin(Date.now() / 400) * 60;
+    const scrollY = window.scrollY + window.innerHeight * 0.5;
+    spawnPrint(scrollX, scrollY - window.scrollY);
+  });
+})();
+
+// Back to top visibility
+window.addEventListener('scroll', () => {
+  const btn = document.getElementById('back-to-top');
+  if (window.scrollY > 400) btn.classList.add('visible');
+  else btn.classList.remove('visible');
+});
+
+// Ježek Béďa follows mouse with lag
+(function() {
+  const bedas = document.getElementById('bedas-cursor');
+  let mouseX = 0, mouseY = 0;
+  let currX = 0, currY = 0;
+  let lastX = 0;
+  let visible = false;
+
+  document.addEventListener('mousemove', (e) => {
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+    if (!visible) {
+      bedas.style.display = 'block';
+      visible = true;
+    }
+  });
+
+  document.addEventListener('mouseleave', () => {
+    bedas.style.display = 'none';
+    visible = false;
+  });
+
+  function animate() {
+    currX += (mouseX - currX) * 0.12;
+    currY += (mouseY - currY) * 0.12;
+    const dir = currX < lastX ? 'scaleX(-1)' : 'scaleX(1)';
+    bedas.style.transform = `translate(-50%, -50%) ${dir}`;
+    bedas.style.left = currX + 'px';
+    bedas.style.top  = currY + 'px';
+    lastX = currX;
+    requestAnimationFrame(animate);
+  }
+  animate();
+})();
+</script>
 
 </body>
 </html>
