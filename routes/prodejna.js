@@ -72,6 +72,21 @@ router.post('/', async (req, res) => {
   }
 });
 
+// PUT /api/prodejna/:id – upravit záznam prodeje (např. špatně zvolená platba, překlep ve jméně)
+router.put('/:id', async (req, res) => {
+  const { zakaznik, platba, poznamka } = req.body;
+  try {
+    const result = await pool.query(
+      'UPDATE prodejna_prodeje SET zakaznik=$1, platba=$2, poznamka=$3 WHERE id=$4 RETURNING *',
+      [zakaznik || null, platba || null, poznamka || null, req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ chyba: 'Prodej nenalezen.' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ chyba: err.message });
+  }
+});
+
 // DELETE /api/prodejna/:id – smazat záznam prodeje (oprava chyby)
 router.delete('/:id', async (req, res) => {
   try {

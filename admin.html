@@ -997,6 +997,30 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
   </div>
 </div>
 
+<!-- MODAL UPRAVIT PRODEJ -->
+<div class="modal-overlay" id="modalUpravitProdej">
+  <div class="modal" style="max-width:420px">
+    <h3>✏️ Upravit prodej</h3>
+    <div id="upravitProdejMsg"></div>
+    <input type="hidden" id="upProdejId">
+    <div class="form-group"><label>Způsob platby</label>
+      <select id="upProdejPlatba">
+        <option value="hotovost">💵 Hotovost</option>
+        <option value="karta">💳 Karta</option>
+        <option value="qr">📱 QR platba</option>
+        <option value="poukaz">🎁 Dárkový poukaz</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Jméno zákazníka (volitelné)</label><input type="text" id="upProdejZakaznik" placeholder="Jana Nováková"></div>
+    <div class="form-group"><label>Poznámka</label><input type="text" id="upProdejPoznamka" placeholder="Volitelná poznámka..."></div>
+    <p style="font-size:0.78rem;color:var(--text-light);margin-top:0">Položky a částku prodeje takto změnit nejde – u chyby v položkách prodej raději smažte a zadejte znovu.</p>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modalUpravitProdej')">Zrušit</button>
+      <button class="btn btn-primary" onclick="ulozitUpravuProdeje()">💾 Uložit</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL NOVÝ PRODUKT -->
 <div class="modal-overlay" id="modalNovyZakaznik">
   <div class="modal">
@@ -2417,6 +2441,7 @@ async function loadProdejna() {
         <td>${p.platba==='hotovost'?'💵 Hotovost':p.platba==='karta'?'💳 Karta':'📱 QR'}</td>
         <td style="display:flex;gap:4px">
           <button class="btn btn-print btn-sm" onclick="tiskUctenky(${i})">🖨️ Účtenka</button>
+          <button class="btn btn-outline btn-sm" onclick="otevritUpravitProdej(${p.id})">✎</button>
           <button class="btn btn-red btn-sm" onclick="smazatProdej(${p.id})">✕</button>
         </td>
       </tr>`).join('')}</tbody></table>`;
@@ -3004,6 +3029,39 @@ function tiskUctenkyData(prodej, cislo) {
   <script>window.onload=()=>{window.print();}<\/script>
   </body></html>`);
   pw.document.close();
+}
+
+function otevritUpravitProdej(id) {
+  const prodej = prodejnaData.find(p => p.id === id);
+  if (!prodej) return;
+  document.getElementById('upravitProdejMsg').innerHTML = '';
+  document.getElementById('upProdejId').value = prodej.id;
+  document.getElementById('upProdejPlatba').value = prodej.platba || 'hotovost';
+  document.getElementById('upProdejZakaznik').value = prodej.zakaznik || '';
+  document.getElementById('upProdejPoznamka').value = prodej.poznamka || '';
+  openModal('modalUpravitProdej');
+}
+
+async function ulozitUpravuProdeje() {
+  const id = document.getElementById('upProdejId').value;
+  const msg = document.getElementById('upravitProdejMsg');
+  try {
+    const res = await adminFetch(API+'/prodejna/'+id, {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        platba: document.getElementById('upProdejPlatba').value,
+        zakaznik: document.getElementById('upProdejZakaznik').value.trim(),
+        poznamka: document.getElementById('upProdejPoznamka').value.trim()
+      })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      msg.innerHTML = '<div class="success-msg">✅ Uloženo!</div>';
+      setTimeout(()=>{closeModal('modalUpravitProdej');loadProdejna();},800);
+    } else {
+      msg.innerHTML = `<div class="error-msg">${data.chyba||'Chyba při ukládání'}</div>`;
+    }
+  } catch(e) { msg.innerHTML = '<div class="error-msg">Chyba při ukládání</div>'; }
 }
 
 async function smazatProdej(id) {
