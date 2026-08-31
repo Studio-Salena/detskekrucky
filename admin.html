@@ -454,6 +454,12 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <div id="denniPrehledTable"><div class="loading">Načítám...</div></div>
       </div>
       <div class="table-wrap">
+        <div class="table-header"><h3>📆 Měsíční přehled</h3>
+          <button class="btn btn-print btn-sm no-print" onclick="tisknoutMesicniUzaverku(mesicniKlic(new Date()))">🖨️ Uzávěrka tento měsíc</button>
+        </div>
+        <div id="mesicniPrehledTable"><div class="loading">Načítám...</div></div>
+      </div>
+      <div class="table-wrap">
         <div class="table-header"><h3>📋 Historie prodejů v prodejně</h3></div>
         <div id="prodejnaTable"><div class="loading">Načítám...</div></div>
       </div>
@@ -2448,6 +2454,7 @@ async function loadProdejna() {
   }
 
   renderDenniPrehled();
+  renderMesicniPrehled();
   naplnitVyberProdejVratka();
   loadVratky();
 }
@@ -2456,6 +2463,12 @@ async function loadProdejna() {
 function denniKlic(datum) {
   const d = new Date(datum);
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+// Klíč měsíce ve formátu YYYY-MM
+function mesicniKlic(datum) {
+  const d = new Date(datum);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
 }
 
 function renderDenniPrehled() {
@@ -2485,6 +2498,123 @@ function renderDenniPrehled() {
       <td><strong>${d.celkem.toLocaleString('cs-CZ')} Kč</strong></td>
       <td><button class="btn btn-print btn-sm no-print" onclick="tisknoutUzaverku('${k}')">🖨️ Uzávěrka</button></td>
     </tr>`).join('')}</tbody></table>`;
+}
+
+const MESICE_NAZVY = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
+
+function renderMesicniPrehled() {
+  const el = document.getElementById('mesicniPrehledTable');
+  if (!el) return;
+  if (!prodejnaData.length) { el.innerHTML = '<div class="empty">Zatím žádné prodeje v prodejně</div>'; return; }
+
+  const mesice = {};
+  prodejnaData.forEach(p => {
+    const k = mesicniKlic(p.datum);
+    if (!mesice[k]) mesice[k] = { pocet:0, celkem:0, hotovost:0, karta:0, qr:0, poukaz:0 };
+    mesice[k].pocet++;
+    mesice[k].celkem += Number(p.celkem);
+    if (mesice[k][p.platba] != null) mesice[k][p.platba] += Number(p.celkem);
+  });
+  const seznam = Object.entries(mesice).sort((a,b)=>b[0].localeCompare(a[0]));
+
+  el.innerHTML = `
+    <table><thead><tr><th>Měsíc</th><th>Počet prodejů</th><th>Hotovost</th><th>Karta</th><th>QR</th><th>Poukaz</th><th>Tržby celkem</th><th>Akce</th></tr></thead>
+    <tbody>${seznam.map(([k,m])=>{
+      const [rok,mesic] = k.split('-');
+      return `<tr>
+      <td><strong>${MESICE_NAZVY[Number(mesic)-1]} ${rok}</strong></td>
+      <td>${m.pocet}</td>
+      <td>${m.hotovost.toLocaleString('cs-CZ')} Kč</td>
+      <td>${m.karta.toLocaleString('cs-CZ')} Kč</td>
+      <td>${m.qr.toLocaleString('cs-CZ')} Kč</td>
+      <td>${m.poukaz.toLocaleString('cs-CZ')} Kč</td>
+      <td><strong>${m.celkem.toLocaleString('cs-CZ')} Kč</strong></td>
+      <td><button class="btn btn-print btn-sm no-print" onclick="tisknoutMesicniUzaverku('${k}')">🖨️ Uzávěrka</button></td>
+    </tr>`;}).join('')}</tbody></table>`;
+}
+
+// Tisk měsíční uzávěrky pro daný měsíc (klíč YYYY-MM). Jen souhrnný tisk k archivaci,
+// data zůstávají volně editovatelná i zpětně - žádné uzamykání.
+async function tisknoutMesicniUzaverku(klicMesice) {
+  const prodejeMesice = prodejnaData.filter(p => mesicniKlic(p.datum) === klicMesice);
+  if (!prodejeMesice.length) { alert('Za tento měsíc nejsou žádné prodeje.'); return; }
+
+  let vratkyMesice = [];
+  try {
+    const v = await adminFetch(API+'/prodejna/vratky/vse').then(r=>r.json());
+    vratkyMesice = Array.isArray(v) ? v.filter(x => mesicniKlic(x.vytvoreno) === klicMesice) : [];
+  } catch(e) {}
+
+  const souhrn = { pocet:0, celkem:0, hotovost:0, karta:0, qr:0, poukaz:0 };
+  prodejeMesice.forEach(p => {
+    souhrn.pocet++;
+    souhrn.celkem += Number(p.celkem);
+    if (souhrn[p.platba] != null) souhrn[p.platba] += Number(p.celkem);
+  });
+  const vratkyCelkem = vratkyMesice.reduce((s,v)=>s+Number(v.castka),0);
+
+  const dny = {};
+  prodejeMesice.forEach(p => {
+    const k = denniKlic(p.datum);
+    if (!dny[k]) dny[k] = { pocet:0, celkem:0 };
+    dny[k].pocet++;
+    dny[k].celkem += Number(p.celkem);
+  });
+  const dnySeznam = Object.entries(dny).sort((a,b)=>a[0].localeCompare(b[0]));
+
+  const [rok,mesic] = klicMesice.split('-');
+  const mesicHezky = MESICE_NAZVY[Number(mesic)-1] + ' ' + rok;
+
+  const pw = window.open('','_blank','width=400,height=600');
+  pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>Měsíční uzávěrka ${klicMesice}</title>
+  <style>
+    @page{ size:58mm auto; margin:0; }
+    *{ box-sizing:border-box; }
+    html,body{width:58mm}
+    body{font-family:'Courier New',Consolas,monospace;margin:0 auto;padding:0 1mm;width:48mm;font-size:13px;line-height:1.4;color:#000;font-weight:bold}
+    .center{text-align:center}
+    .logo{font-size:16px;font-weight:bold}
+    .divider{border-top:1px dashed #000;margin:6px 0}
+    .row{display:flex;justify-content:space-between;margin:2px 0}
+    .total{font-size:15px;font-weight:bold;border-top:1px solid #000;padding-top:4px;margin-top:4px}
+    .polozka{font-size:11px}
+    .linka{border-bottom:1px solid #000;height:20px;margin-top:14px}
+    .linka-popisek{font-size:11px;margin-top:2px}
+    .footer{text-align:center;font-size:12px;margin-top:10px}
+    @media print{body{padding:2mm 2mm}}
+  </style>
+  </head><body>
+  <div class="center">
+    <div class="logo">Dětské krůčky</div>
+    <div style="font-size:12px">Měsíční uzávěrka</div>
+    <div style="font-size:12px">${mesicHezky}</div>
+  </div>
+  <div class="divider"></div>
+  <div class="row"><span>Hotovost:</span><span>${souhrn.hotovost.toLocaleString('cs-CZ')} Kč</span></div>
+  <div class="row"><span>Karta:</span><span>${souhrn.karta.toLocaleString('cs-CZ')} Kč</span></div>
+  <div class="row"><span>QR platba:</span><span>${souhrn.qr.toLocaleString('cs-CZ')} Kč</span></div>
+  <div class="row"><span>Poukaz:</span><span>${souhrn.poukaz.toLocaleString('cs-CZ')} Kč</span></div>
+  <div class="divider"></div>
+  <div class="row total"><span>Celkem (${souhrn.pocet}×):</span><span>${souhrn.celkem.toLocaleString('cs-CZ')} Kč</span></div>
+  <div class="row"><span>Vratky (${vratkyMesice.length}×):</span><span>−${vratkyCelkem.toLocaleString('cs-CZ')} Kč</span></div>
+  <div class="row total"><span>Čistý příjem:</span><span>${(souhrn.celkem - vratkyCelkem).toLocaleString('cs-CZ')} Kč</span></div>
+  <div class="divider"></div>
+  <div><strong>Po dnech:</strong></div>
+  ${dnySeznam.map(([k,d])=>`
+  <div class="row polozka"><span>${new Date(k).toLocaleDateString('cs-CZ',{day:'numeric',month:'numeric'})} (${d.pocet}×)</span><span>${d.celkem.toLocaleString('cs-CZ')} Kč</span></div>`).join('')}
+  <div class="divider"></div>
+  <div class="linka-popisek">Poznámka / kontrola:</div>
+  <div class="linka"></div>
+  <div class="linka-popisek">Podpis:</div>
+  <div class="linka"></div>
+  <div class="footer">
+    <div class="divider"></div>
+    <div>www.detskekrucky.cz</div>
+  </div>
+  <script>window.onload=()=>{window.print();}<\/script>
+  </body></html>`);
+  pw.document.close();
 }
 
 // Tisk denní uzávěrky pro daný den (klíč YYYY-MM-DD)
