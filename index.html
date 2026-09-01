@@ -1496,8 +1496,8 @@
     nav { display: none; }
     nav.open { display: flex; }
 
-    /* Otevírací doba fixed - na mobilu schovat */
-    div[style*="position: fixed"][style*="top: 80px"] {
+    /* Otevírací doba fixed - na mobilu schovat (přesahovala by do obsahu), zůstává v patičce */
+    #oteviraci-box {
       display: none !important;
     }
 
@@ -1683,7 +1683,7 @@ fetch('https://detskekrucky1.onrender.com/api/nastaveni/banner')
   .catch(() => {});
 </script>
 <!-- OPENING BANNER -->
-<div style="background:linear-gradient(90deg,#f7a8b8,#A58B71,#7A816C,#5ba8d4,#c3a6e8);background-size:300% 100%;animation:bannerShift 4s ease infinite;text-align:center;padding:10px 20px;font-weight:800;font-size:0.95rem;color:#fff;letter-spacing:0.08em;text-shadow:0 1px 3px rgba(0,0,0,0.2);">
+<div id="promo-banner" style="background:linear-gradient(90deg,#f7a8b8,#A58B71,#7A816C,#5ba8d4,#c3a6e8);background-size:300% 100%;animation:bannerShift 4s ease infinite;text-align:center;padding:10px 20px;font-weight:800;font-size:0.95rem;color:#fff;letter-spacing:0.08em;text-shadow:0 1px 3px rgba(0,0,0,0.2);">
   🦔 Potřebujete botičky či papučky pro své dětičky? 🦔👣 Přijďte vyzkoušet ty nejlepší kousky pro zdravé obouvání! 🦔
 </div>
 <style>
@@ -2141,7 +2141,7 @@ async function newsletterOdeslat(e) {
   });
 </script>
 
-<div style="
+<div id="oteviraci-box" style="
   position: fixed;
   top: 80px;
   right: 20px;
@@ -2154,6 +2154,20 @@ async function newsletterOdeslat(e) {
   font-size: 0.8rem;
 ">
   <div style="font-family:'Dancing Script',cursive; font-size:1.1rem; color:var(--brown); margin-bottom:8px;">🕐 Otevírací doba</div>
+  <script>
+    (function() {
+      function pozicovatOteviraciBox() {
+        var banner = document.getElementById('promo-banner');
+        var box = document.getElementById('oteviraci-box');
+        if (!banner || !box) return;
+        var rect = banner.getBoundingClientRect();
+        box.style.top = Math.round(rect.bottom + window.scrollY + 12) + 'px';
+      }
+      window.addEventListener('load', pozicovatOteviraciBox);
+      window.addEventListener('resize', pozicovatOteviraciBox);
+      pozicovatOteviraciBox();
+    })();
+  </script>
   <table id="oh-table" style="border-collapse:collapse;">
     <tr id="oh-0"><td style="padding:3px 10px 3px 0; font-weight:700; color:var(--brown-dark);">Pondělí</td><td style="color:var(--text-light);">—</td></tr>
     <tr id="oh-1"><td style="padding:3px 10px 3px 0; font-weight:700; color:var(--brown-dark);">Úterý</td><td style="color:var(--text-light);">—</td></tr>
