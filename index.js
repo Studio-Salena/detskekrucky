@@ -22,6 +22,7 @@ const vratkyZadostiRoutes = require('./routes/vratkyZadosti');
 const poukazyRoutes = require('./routes/poukazy');
 const vyzadovatAdmina = require('./middleware/adminAuth');
 const { jeZablokovana, zaznamenatNeuspech, resetovat } = require('./middleware/loginLimiter');
+const { jeZablokovana: jeZablokovanaRezervace, zaznamenatRezervaci } = require('./middleware/rezervaceLimiter');
 const { odeslat_test, odeslat_potvrzeni_rezervace, odeslat_potvrzeni_terminu, odeslat_upozorneni_rezervace } = require('./routes/emaily');
 
 // Render běží za proxy - bez tohohle by req.ip byla vždy IP proxy, ne
@@ -250,9 +251,33 @@ app.get('/api/rezervace', vyzadovatAdmina, async (req, res) => {
 });
 
 // POST /api/rezervace – zákazník vytvoří rezervaci
+const REZ_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const REZ_TELEFON_RE = /^(\+420\s?)?\d{3}\s?\d{3}\s?\d{3}$/;
+
 app.post('/api/rezervace', async (req, res) => {
-  const { slot_id, jmeno, telefon, email, vek_dite, poznamka } = req.body;
-  if (!slot_id || !jmeno || !telefon || !email) return res.status(400).json({ chyba: 'Chybí povinná pole' });
+  const { slot_id, jmeno, telefon, email, vek_dite, poznamka, webova_stranka } = req.body;
+
+  // Honeypot - skryté pole, které reální uživatelé nikdy nevyplní, ale
+  // formulářoví boti ano. Předstíráme úspěch, aby se bot nenaučil rozpoznat blokaci.
+  if (webova_stranka) {
+    return res.json({ id: 0, slot_id, jmeno, telefon, email });
+  }
+
+  const zbyvaSekund = jeZablokovanaRezervace(req.ip);
+  if (zbyvaSekund > 0) {
+    return res.status(429).json({ chyba: `Příliš mnoho rezervací z tohoto místa. Zkuste to znovu za ${Math.ceil(zbyvaSekund / 60)} min.` });
+  }
+
+  if (!slot_id || !jmeno || jmeno.trim().split(/\s+/).length < 2) {
+    return res.status(400).json({ chyba: 'Zadejte prosím jméno a příjmení.' });
+  }
+  if (!telefon || !REZ_TELEFON_RE.test(telefon.trim())) {
+    return res.status(400).json({ chyba: 'Zadejte prosím platné telefonní číslo (např. 777 123 456).' });
+  }
+  if (!email || !REZ_EMAIL_RE.test(email.trim())) {
+    return res.status(400).json({ chyba: 'Zadejte prosím platnou e-mailovou adresu.' });
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -269,6 +294,7 @@ app.post('/api/rezervace', async (req, res) => {
     // Označ slot jako obsazený
     await client.query('UPDATE rezervace_sloty SET obsazeno=TRUE WHERE id=$1', [slot_id]);
     await client.query('COMMIT');
+    zaznamenatRezervaci(req.ip);
     res.json(rez.rows[0]);
     // E-maily se posílají až po odpovědi zákazníkovi, ať prodleva/chyba s odesláním
     // rezervaci nezablokuje

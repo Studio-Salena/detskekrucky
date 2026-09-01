@@ -72,6 +72,8 @@ nav{display:flex;align-items:center;gap:8px}
 .kategorie-dlazdice.active .nazev{color:#fff}
 .kategorie-dlazdice .ikona{font-size:2.2rem;margin-bottom:8px;display:block}
 .kategorie-dlazdice .nazev{font-weight:700;font-size:0.85rem;color:var(--brown)}
+.kategorie-skeleton{background:linear-gradient(90deg,#f0ebe3 25%,#f8f5f0 50%,#f0ebe3 75%);background-size:200% 100%;animation:kategorieSkeletonPulz 1.4s ease-in-out infinite;border-radius:18px;height:112px}
+@keyframes kategorieSkeletonPulz{0%{background-position:200% 0}100%{background-position:-200% 0}}
 
 /* BENEFITS */
 .benefits{display:flex;justify-content:center;gap:0;background:linear-gradient(135deg,#fff8f0,#f0fce8);border-bottom:1px solid var(--tan-light)}
@@ -517,7 +519,9 @@ footer {
 
 <!-- KATEGORIE ROZCESTNÍK -->
 <div class="kategorie-grid-wrap">
-  <div class="kategorie-grid" id="kategorieGrid"></div>
+  <div class="kategorie-grid" id="kategorieGrid">
+    <div class="kategorie-skeleton"></div><div class="kategorie-skeleton"></div><div class="kategorie-skeleton"></div><div class="kategorie-skeleton"></div><div class="kategorie-skeleton"></div>
+  </div>
 </div>
 
 <!-- BENEFITS -->
@@ -559,6 +563,7 @@ footer {
     <a href="mailto:info@detskekrucky.cz">&#9993; info@detskekrucky.cz</a>
     <a href="https://hasalovaalena-glitch.github.io/detskekrucky/obchodni-podminky.html">Obchodní podmínky</a>
     <a href="reklamacni-rad.html">Reklamační řád</a>
+    <a href="odstoupeni-od-smlouvy.html">Odstoupení od smlouvy</a>
     <a href="#" onclick="openModal('modalVratky');return false;">↩️ Vrátit zboží</a>
     <a href="#" onclick="openModal('modalPoukazy');return false;">🎁 Dárkový poukaz</a>
   </div>
@@ -794,16 +799,35 @@ function ziskatPozadiKategorie(slug) {
   return { trida: 'product-img-default', styl: `background:${gradient}` };
 }
 
+const KATEGORIE_CACHE_KEY = 'kategorie_cache_v1';
+const KATEGORIE_CACHE_TTL_MS = 3 * 60 * 1000;
+
+function vykreslitKategorieGrid(seznam) {
+  document.getElementById('kategorieGrid').innerHTML = seznam.map(k => `
+    <div class="kategorie-dlazdice" data-slug="${k.slug}" onclick="vybratKategoriiZGridu('${k.slug}')">
+      <span class="ikona">${k.ikona || '&#128095;'}</span>
+      <div class="nazev">${k.nazev}</div>
+    </div>`).join('');
+}
+
 async function nacistKategorieFiltru() {
+  // Cache v sessionStorage jen pro e-shop (adminu do dat nezasahuje - ten čte
+  // ze stejného API vlastními požadavky) - při návratu na stránku ve stejné
+  // relaci se dlaždice zobrazí okamžitě, aniž by se čekalo na síť/cold start.
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(KATEGORIE_CACHE_KEY) || 'null');
+    if (cached && Array.isArray(cached.data) && Date.now() - cached.cas < KATEGORIE_CACHE_TTL_MS) {
+      vsechnyKategorie = cached.data;
+      vykreslitKategorieGrid(vsechnyKategorie);
+    }
+  } catch(e) { /* poškozená cache - ignorovat, načte se ze sítě */ }
+
   try {
     const data = await fetch(API + '/kategorie').then(r => r.json());
     vsechnyKategorie = Array.isArray(data) ? data : [];
-    document.getElementById('kategorieGrid').innerHTML = vsechnyKategorie.map(k => `
-      <div class="kategorie-dlazdice" data-slug="${k.slug}" onclick="vybratKategoriiZGridu('${k.slug}')">
-        <span class="ikona">${k.ikona || '&#128095;'}</span>
-        <div class="nazev">${k.nazev}</div>
-      </div>`).join('');
-  } catch(e) { /* pokud se nepodaří načíst, dlaždice zůstanou prázdné */ }
+    vykreslitKategorieGrid(vsechnyKategorie);
+    try { sessionStorage.setItem(KATEGORIE_CACHE_KEY, JSON.stringify({ cas: Date.now(), data: vsechnyKategorie })); } catch(e) {}
+  } catch(e) { /* pokud se nepodaří načíst a nebyla ani cache, zůstanou jen skeleton dlaždice */ }
 }
 
 // Klik na dlaždici kategorie v rozcestníku - stejný filtr jako by šlo o pill
@@ -1172,6 +1196,11 @@ function showToast(msg) {
 ulozitKosik();
 nacistKategorieFiltru();
 nacistProdukty();
+
+// Odkaz z právních stránek (?vratky=1) rovnou otevře formulář pro vrácení/odstoupení od smlouvy
+if (new URLSearchParams(location.search).get('vratky') === '1') {
+  openModal('modalVratky');
+}
 
 // COOKIE LIŠTA
 function cookieAccept() {

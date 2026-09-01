@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Odstoupení od smlouvy – Dětské krůčky</title>
+<meta name="robots" content="noindex">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant:wght@600;700&family=Dancing+Script:wght@700&family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream:#E5DFD6;
+    --brown:#AE6965;
+    --brown-dark:#8a4a46;
+    --tan:#A58B71;
+    --tan-light:#d4c4b0;
+    --sage:#7A816C;
+    --text:#3d2b1f;
+    --text-light:#6b5548;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Nunito', sans-serif;
+    background: var(--cream);
+    color: var(--text);
+    margin: 0;
+    line-height: 1.6;
+  }
+  .container { max-width: 800px; margin: 0 auto; padding: 50px 24px 80px; }
+  .logo-link {
+    display: inline-block; margin-bottom: 24px;
+    font-family: 'Dancing Script', cursive; font-size: 1.6rem;
+    color: var(--brown); text-decoration: none;
+  }
+  h1 {
+    font-family: 'Dancing Script', cursive; color: var(--brown);
+    font-size: 2.6rem; margin: 0 0 4px; text-align: center;
+  }
+  .subtitle { text-align: center; color: var(--sage); font-style: italic; margin-bottom: 8px; }
+  h2.page-title {
+    font-family: 'Cormorant', serif; font-weight: 700; text-align: center;
+    font-size: 1.9rem; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--text); margin: 20px 0 40px;
+  }
+  h3 {
+    font-family: 'Cormorant', serif; font-weight: 700; color: var(--brown);
+    font-size: 1.4rem; margin-top: 40px; border-bottom: 2px solid var(--tan-light); padding-bottom: 8px;
+  }
+  p { margin: 12px 0; }
+  ul { margin: 12px 0; padding-left: 24px; }
+  li { margin: 6px 0; }
+  .highlight {
+    background: #fff; border: 2px solid var(--tan-light); border-radius: 12px;
+    padding: 16px 20px; font-weight: 700; margin: 16px 0;
+  }
+  .italic-note { font-style: italic; color: var(--text-light); }
+  footer {
+    text-align: center; margin-top: 60px; padding-top: 24px;
+    border-top: 1px solid var(--tan-light); font-size: 0.85rem; color: var(--text-light);
+  }
+  .back-link { display: inline-block; margin-top: 24px; color: var(--brown); font-weight: 700; text-decoration: none; }
+  .back-link:hover { text-decoration: underline; }
+
+  .cta-row { display:flex; gap:12px; flex-wrap:wrap; margin:24px 0; }
+  .btn {
+    display:inline-block; text-decoration:none; border-radius:30px; padding:13px 26px;
+    font-weight:700; font-size:0.92rem; cursor:pointer; transition:transform 0.15s; text-align:center;
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn-primary { background: linear-gradient(135deg, var(--brown), var(--brown-dark)); color:#fff; }
+  .btn-outline { background: none; border: 2px solid var(--brown); color: var(--brown); }
+
+  .form-doc {
+    background:#fff; border:2px solid var(--tan-light); border-radius:16px;
+    padding:28px 32px; margin:24px 0;
+  }
+  .form-doc p { margin: 6px 0; }
+  .form-row { display:grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 14px 0; }
+  .form-row label { display:block; font-size:0.8rem; font-weight:700; color:var(--text-light); margin-bottom:5px; }
+  .form-row input, .form-row textarea {
+    width:100%; padding:10px 14px; border:2px solid var(--tan-light); border-radius:10px;
+    font-family:'Nunito',sans-serif; font-size:0.95rem; outline:none;
+  }
+  .signature-line { margin-top: 40px; border-top: 1px solid var(--text-light); padding-top: 6px; max-width: 280px; font-size: 0.8rem; color: var(--text-light); }
+
+  @media print {
+    body { background: #fff; }
+    .logo-link, .back-link, .cta-row, .no-print { display: none; }
+    .form-doc { border: none; padding: 0; }
+    h3.no-print-heading { display: none; }
+  }
+  @media (max-width: 560px) {
+    .form-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div style="text-align:center" class="no-print">
+    <a href="index.html" class="logo-link">🦔 Dětské krůčky</a>
+  </div>
+  <h1>Dětské krůčky</h1>
+  <p class="subtitle">Barefoot obuv pro zdravé krůčky</p>
+  <h2 class="page-title">Odstoupení od smlouvy</h2>
+
+  <p>Jako spotřebitel máte právo odstoupit od smlouvy uzavřené na dálku (nákup v e-shopu) bez udání důvodu, a to ve lhůtě popsané níže. Nemusíte k tomu použít žádný konkrétní formulář — stačí nám poslat jednoznačné oznámení. Pro usnadnění ale nabízíme dvě možnosti:</p>
+
+  <div class="cta-row no-print">
+    <a href="eshop.html?vratky=1" class="btn btn-primary">↩️ Vyplnit online rovnou v e-shopu</a>
+    <a href="#formular" class="btn btn-outline">🖨️ Vytisknout formulář</a>
+  </div>
+
+  <div class="highlight">
+    Lhůta pro odstoupení od smlouvy je <strong>14 dnů</strong> od převzetí zboží ze zákona,
+    u nás ale díky delší firemní politice <strong>30 dnů</strong> od převzetí zboží
+    (viz <a href="obchodni-podminky.html" style="color:var(--brown)">obchodní podmínky</a>, čl. 5).
+  </div>
+
+  <h3>Jak postupovat</h3>
+  <ul>
+    <li>Nejrychlejší cesta je <a href="eshop.html?vratky=1" style="color:var(--brown)">online formulář „Vrátit zboží"</a> přímo v e-shopu — zadáte číslo objednávky a e-mail, vyberete položky k vrácení a napíšete důvod (nepovinné). Potvrzení o přijetí žádosti vám hned pošleme e-mailem.</li>
+    <li>Nebo nám pošlete oznámení e-mailem na <a href="mailto:info@detskekrucky.cz" style="color:var(--brown)">info@detskekrucky.cz</a>, případně vyplňte a zašlete vzorový formulář níže poštou na adresu prodejny.</li>
+  </ul>
+  <p class="italic-note">Zboží prosím zašlete nepoužité, nepoškozené a pokud možno v původním obalu na adresu prodejny: Holešovská 752, 768 24 Hulín, a to do 14 dnů od odeslání oznámení o odstoupení. Peníze vrátíme do 14 dnů od obdržení vráceného zboží.</p>
+
+  <h3 id="formular">Vzorový formulář pro odstoupení od smlouvy</h3>
+  <p class="italic-note">(vyplňte a zašlete tento formulář zpět pouze v případě, že chcete odstoupit od smlouvy — pro tisk použijte tlačítko níže)</p>
+
+  <div class="cta-row no-print">
+    <button class="btn btn-outline" onclick="window.print()">🖨️ Vytisknout formulář</button>
+  </div>
+
+  <div class="form-doc">
+    <p><strong>Adresátovi:</strong></p>
+    <p>Monika Škarpichová, IČO: 24354635<br>
+    Provozovna: Holešovská 752, 768 24 Hulín<br>
+    Sídlo: Včelín 1164, 768 24 Hulín<br>
+    E-mail: info@detskekrucky.cz | Telefon: 773 517 733</p>
+
+    <p style="margin-top:20px">Oznamuji/oznamujeme<sup>*</sup>, že tímto odstupuji/odstupujeme<sup>*</sup> od smlouvy o nákupu tohoto zboží:</p>
+
+    <div class="form-row">
+      <div><label>Číslo objednávky</label><input type="text" placeholder="např. 128"></div>
+      <div><label>Datum objednání</label><input type="text" placeholder="dd. mm. rrrr"></div>
+    </div>
+    <div class="form-row">
+      <div><label>Datum obdržení zboží</label><input type="text" placeholder="dd. mm. rrrr"></div>
+      <div><label>Číslo účtu pro vrácení peněz</label><input type="text" placeholder="volitelné"></div>
+    </div>
+    <div class="form-row" style="grid-template-columns:1fr">
+      <div><label>Jméno a příjmení spotřebitele/spotřebitelů</label><input type="text" placeholder="Jana Nováková"></div>
+    </div>
+    <div class="form-row" style="grid-template-columns:1fr">
+      <div><label>Adresa spotřebitele/spotřebitelů</label><input type="text" placeholder="Ulice a číslo popisné, město, PSČ"></div>
+    </div>
+    <div class="form-row" style="grid-template-columns:1fr">
+      <div><label>Popis vraceného zboží (název, velikost)</label><textarea rows="2" placeholder="např. Beda Trucks BF, vel. 26"></textarea></div>
+    </div>
+
+    <div class="signature-line">Podpis spotřebitele/spotřebitelů (pouze pokud je tento formulář zasílán v listinné podobě)</div>
+    <div class="form-row" style="grid-template-columns:1fr;margin-top:24px">
+      <div><label>Datum</label><input type="text" placeholder="dd. mm. rrrr"></div>
+    </div>
+
+    <p class="italic-note" style="margin-top:20px;font-size:0.8rem">* Nehodící se škrtněte nebo údaje doplňte.</p>
+  </div>
+
+  <p class="italic-note">Vyplněný a podepsaný formulář nám zašlete poštou na adresu prodejny, naskenovaný e-mailem na info@detskekrucky.cz, nebo použijte rovnou <a href="eshop.html?vratky=1" style="color:var(--brown)">online formulář v e-shopu</a> — je to nejrychlejší a potvrzení o přijetí dostanete obratem.</p>
+
+  <div style="text-align:center" class="no-print">
+    <a href="reklamacni-rad.html" class="back-link">Reklamační řád</a> &nbsp;|&nbsp;
+    <a href="obchodni-podminky.html" class="back-link">Obchodní podmínky</a> &nbsp;|&nbsp;
+    <a href="eshop.html" class="back-link">← Zpět do obchodu</a>
+  </div>
+
+  <footer>
+    Dětské krůčky | Monika Škarpichová | IČO: 24354635<br>
+    Holešovská 752, Hulín 768 24 | 773 517 733 | info@detskekrucky.cz
+  </footer>
+</div>
+</body>
+</html>

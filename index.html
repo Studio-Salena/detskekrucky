@@ -1962,6 +1962,10 @@ Z" fill="#f7f0e6" stroke="#6b5a48" stroke-width="3.5" stroke-linejoin="round"/><
         <label style="display:block;font-size:0.8rem;font-weight:700;color:var(--text-light);margin-bottom:5px;">Poznámka / typ obuvi</label>
         <textarea id="rez-poznamka" rows="3" placeholder="Co vás zajímá? Papučky, celoroční, zimní…" style="width:100%;padding:10px 14px;border:2px solid var(--tan-light);border-radius:10px;font-family:'Nunito',sans-serif;font-size:0.95rem;outline:none;resize:vertical;"></textarea>
       </div>
+      <div style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden" aria-hidden="true">
+        <label for="rez-web">Nevyplňujte toto pole</label>
+        <input type="text" id="rez-web" tabindex="-1" autocomplete="off">
+      </div>
       <button onclick="rezOdeslat()" class="btn-primary" style="width:100%;text-align:center;border:none;cursor:pointer;">Odeslat rezervaci 🐾</button>
     </div>
 
@@ -2691,16 +2695,28 @@ function rezVybratSlot(id) {
   document.getElementById('rez-form-wrap').scrollIntoView({behavior:'smooth', block:'center'});
 }
 
+const REZ_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const REZ_TELEFON_RE = /^(\+420\s?)?\d{3}\s?\d{3}\s?\d{3}$/;
+
 async function rezOdeslat() {
   const jmeno = document.getElementById('rez-jmeno').value.trim();
   const telefon = document.getElementById('rez-telefon').value.trim();
   const email = document.getElementById('rez-email').value.trim();
   const vek_dite = document.getElementById('rez-vek').value.trim();
   const poznamka = document.getElementById('rez-poznamka').value.trim();
+  const webova_stranka = document.getElementById('rez-web').value;
   const msg = document.getElementById('rez-msg');
 
-  if (!jmeno || !telefon || !email) {
-    msg.innerHTML = '<div style="background:#fde8e8;color:#c0392b;padding:12px 16px;border-radius:10px;margin-bottom:16px;">Vyplňte prosím jméno, telefon a e-mail.</div>';
+  if (!jmeno || jmeno.split(/\s+/).length < 2) {
+    msg.innerHTML = '<div style="background:#fde8e8;color:#c0392b;padding:12px 16px;border-radius:10px;margin-bottom:16px;">Zadejte prosím jméno a příjmení.</div>';
+    return;
+  }
+  if (!telefon || !REZ_TELEFON_RE.test(telefon)) {
+    msg.innerHTML = '<div style="background:#fde8e8;color:#c0392b;padding:12px 16px;border-radius:10px;margin-bottom:16px;">Zadejte prosím platné telefonní číslo (např. 777 123 456).</div>';
+    return;
+  }
+  if (!email || !REZ_EMAIL_RE.test(email)) {
+    msg.innerHTML = '<div style="background:#fde8e8;color:#c0392b;padding:12px 16px;border-radius:10px;margin-bottom:16px;">Zadejte prosím platnou e-mailovou adresu.</div>';
     return;
   }
   if (!rezVybranySlot) {
@@ -2712,7 +2728,7 @@ async function rezOdeslat() {
     const res = await fetch(REZ_API + '/rezervace', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slot_id: rezVybranySlot, jmeno, telefon, email, vek_dite, poznamka })
+      body: JSON.stringify({ slot_id: rezVybranySlot, jmeno, telefon, email, vek_dite, poznamka, webova_stranka })
     });
     if (res.ok) {
       msg.innerHTML = '';

@@ -211,6 +211,76 @@ async function odeslat_upozorneni_rezervace(rezervace, slot, typ = 'nova') {
   console.log('Upozorneni na rezervaci odeslano majitelce, typ:', typ);
 }
 
+// Potvrzení přijetí žádosti o vrácení/odstoupení od smlouvy zákazníkovi.
+// Zákon (§1824a odst. 2 obč. zák.) vyžaduje, aby prodávající přijetí odstoupení
+// od smlouvy bez zbytečného odkladu potvrdil v textové podobě.
+async function odeslat_potvrzeni_vratky(zadost) {
+  const polozky_html = zadost.polozky.map(p => `
+    <tr>
+      <td style="padding:8px;border-bottom:1px solid #eee">${p.nazev || ('produkt #' + p.produkt_id)} - vel. ${p.velikost}</td>
+      <td style="padding:8px;border-bottom:1px solid #eee">${p.pocet} ks</td>
+    </tr>
+  `).join('');
+
+  await odeslatEmail({
+    to: zadost.email,
+    subject: `Přijali jsme vaši žádost o vrácení – objednávka #${zadost.objednavka_id}`,
+    html: `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+        <h1 style="color:#FF6B35">Žádost o vrácení přijata</h1>
+        <p>Ahoj${zadost.jmeno ? ' ' + zadost.jmeno : ''},</p>
+        <p>potvrzujeme, že jsme přijali vaši žádost o vrácení zboží / odstoupení od smlouvy k objednávce <strong>#${zadost.objednavka_id}</strong>. Ozveme se vám co nejdřív s dalším postupem.</p>
+        <h3>Položky k vrácení</h3>
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:#f5f5f5"><th style="padding:8px;text-align:left">Produkt</th><th style="padding:8px;text-align:left">Počet</th></tr></thead>
+          <tbody>${polozky_html}</tbody>
+        </table>
+        ${zadost.duvod ? `<p style="margin-top:12px"><strong>Uvedený důvod:</strong> ${zadost.duvod}</p>` : ''}
+        <p style="margin-top:16px">Zboží prosím zašlete nepoužité, nepoškozené a pokud možno v původním obalu na adresu prodejny (Holešovská 752, 768 24 Hulín).</p>
+        <hr>
+        <p style="color:#666;font-size:13px">
+          Dětské krůčky | 773 517 733 | info@detskekrucky.cz
+        </p>
+      </div>
+    `
+  });
+  console.log('Potvrzeni zadosti o vratku odeslano na:', zadost.email);
+}
+
+// Upozornění majitelce o nové žádosti o vrácení/odstoupení
+async function odeslat_upozorneni_vratky(zadost) {
+  const polozky_html = zadost.polozky.map(p => `
+    <tr>
+      <td style="padding:8px;border-bottom:1px solid #eee">${p.nazev || ('produkt #' + p.produkt_id)} - vel. ${p.velikost}</td>
+      <td style="padding:8px;border-bottom:1px solid #eee">${p.pocet} ks</td>
+    </tr>
+  `).join('');
+
+  await odeslatEmail({
+    to: MAJITELKA_EMAIL,
+    subject: `↩️ Žádost o vrácení – objednávka #${zadost.objednavka_id}`,
+    html: `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+        <h2 style="color:#FF6B35">↩️ Nová žádost o vrácení / odstoupení</h2>
+        <p><strong>Objednávka:</strong> #${zadost.objednavka_id}</p>
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:#f5f5f5"><th style="padding:8px;text-align:left">Produkt</th><th style="padding:8px;text-align:left">Počet</th></tr></thead>
+          <tbody>${polozky_html}</tbody>
+        </table>
+        ${zadost.duvod ? `<p style="margin-top:12px"><strong>Důvod:</strong> ${zadost.duvod}</p>` : ''}
+        <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-top:12px">
+          <p style="margin:0 0 6px 0"><strong>Zákazník:</strong> ${zadost.jmeno || '—'}</p>
+          <p style="margin:0 0 6px 0"><strong>E-mail:</strong> ${zadost.email}</p>
+          <p style="margin:0"><strong>Telefon:</strong> ${zadost.telefon || '—'}</p>
+        </div>
+        <hr>
+        <p style="color:#666;font-size:13px">Přehled žádostí o vrácení je v adminu.</p>
+      </div>
+    `
+  });
+  console.log('Upozorneni na zadost o vratku odeslano majitelce, objednavka #', zadost.objednavka_id);
+}
+
 // Zkušební e-mail – pro ověření, že server umí odesílat (RESEND_API_KEY + ověřená doména)
 async function odeslat_test(komu) {
   await odeslatEmail({
@@ -228,4 +298,4 @@ async function odeslat_test(komu) {
   });
 }
 
-module.exports = { odeslat_potvrzeni, odeslat_upozorneni_objednavky, odeslat_potvrzeni_rezervace, odeslat_potvrzeni_terminu, odeslat_upozorneni_rezervace, odeslat_test };
+module.exports = { odeslat_potvrzeni, odeslat_upozorneni_objednavky, odeslat_potvrzeni_rezervace, odeslat_potvrzeni_terminu, odeslat_upozorneni_rezervace, odeslat_potvrzeni_vratky, odeslat_upozorneni_vratky, odeslat_test };

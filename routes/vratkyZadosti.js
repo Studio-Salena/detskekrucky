@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
 const vyzadovatAdmina = require('../middleware/adminAuth');
+const { odeslat_potvrzeni_vratky, odeslat_upozorneni_vratky } = require('./emaily');
 
 async function initTabulka() {
   try {
@@ -86,6 +87,12 @@ router.post('/', async (req, res) => {
     );
 
     res.json(result.rows[0]);
+
+    // Potvrzení zákazníkovi (zákonná povinnost) i upozornění majitelce se posílají
+    // až po odpovědi, ať prodleva/chyba s odesláním žádost o vrácení nezablokuje.
+    const zadost = { objednavka_id, jmeno, email, telefon, polozky, duvod };
+    odeslat_potvrzeni_vratky(zadost).catch(e => console.error('Potvrzeni zadosti o vratku se nepodarilo odeslat:', e.message));
+    odeslat_upozorneni_vratky(zadost).catch(e => console.error('Upozorneni majitelce o vratce se nepodarilo odeslat:', e.message));
   } catch (err) {
     res.status(500).json({ chyba: err.message });
   }
