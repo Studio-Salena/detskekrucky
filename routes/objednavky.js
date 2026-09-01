@@ -5,6 +5,20 @@ const pool = require('../db/pool');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const { jeZablokovana, zaznamenatObjednavku } = require('../middleware/objednavkyLimiter');
 
+// Idempotentní migrace - vazba objednávky na uplatněný dárkový poukaz.
+async function initObjednavkySloupce() {
+  try {
+    await pool.query(`
+      ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS poukaz_id INTEGER;
+      ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS sleva NUMERIC NOT NULL DEFAULT 0;
+    `);
+    console.log('Objednavky sloupce OK');
+  } catch (e) {
+    console.log('Objednavky sloupce chyba:', e.message);
+  }
+}
+initObjednavkySloupce();
+
 const DOPRAVA_CENY = { zasilkovna: 79, ceska_posta: 89, osobni_odber: 0 };
 const DOPRAVA_ZDARMA_OD = 800;
 
@@ -30,7 +44,7 @@ function validovatObjednavku({ jmeno, email, telefon, ulice, mesto, psc }) {
 
 // Vytvorit novou objednavku
 router.post('/', async (req, res) => {
-  const { jmeno, email, telefon, ulice, mesto, psc, doprava, platba, poznamka, polozky, webova_stranka } = req.body;
+  const { jmeno, email, telefon, ulice, mesto, psc, doprava, platba, poznamka, polozky, webova_stranka, poukaz_kod } = req.body;
 
   // Honeypot - skryté pole, které reální uživatelé nikdy nevyplní, ale
   // formulářoví boti ano. Předstíráme úspěch, aby se bot nenaučil rozpoznat blokaci.
@@ -85,16 +99,57 @@ router.post('/', async (req, res) => {
       celkem += p.cena * p.pocet;
     }
 
-    // Doprava - podle zvoleného způsobu, osobní odběr je vždy zdarma
-    const dopravaCena = vypocitatDopravu(doprava, celkem);
-    celkem += dopravaCena;
+    const mezisoucet = celkem;
+
+    // Uplatnit dárkový poukaz (pokud je zadaný) - stejná transakce jako sklad,
+    // ať se poukaz odečte, jen když se objednávka opravdu založí (a naopak).
+    // FOR UPDATE zamkne řádek poukazu, aby ho nešlo dvakrát souběžně přečerpat.
+    let poukaz_id = null, sleva = 0;
+    if (poukaz_kod) {
+      const kodNorm = String(poukaz_kod).trim().toUpperCase();
+      const poukazRes = await client.query(
+        'SELECT * FROM darkove_poukazy WHERE (UPPER(kod) = $1 OR ean = $1) FOR UPDATE',
+        [kodNorm]
+      );
+      if (poukazRes.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ chyba: 'Poukaz nebyl nalezen.' });
+      }
+      const poukaz = poukazRes.rows[0];
+      if (poukaz.stav !== 'aktivni' || Number(poukaz.zustatek) <= 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ chyba: 'Tento poukaz je již plně vyčerpaný nebo zrušený.' });
+      }
+      if (new Date(poukaz.platnost_do) < new Date()) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ chyba: 'Platnost poukazu vypršela.' });
+      }
+      poukaz_id = poukaz.id;
+      sleva = Math.min(Number(poukaz.zustatek), mezisoucet);
+    }
+
+    // Doprava - podle zvoleného způsobu (po odečtení poukazu), osobní odběr je vždy zdarma
+    const dopravaCena = vypocitatDopravu(doprava, mezisoucet - sleva);
+    celkem = mezisoucet - sleva + dopravaCena;
 
     // Vytvorit objednavku
     const objednavka = await client.query(
-      'INSERT INTO objednavky (zakaznik_id, doprava, platba, celkem, poznamka) VALUES ($1,$2,$3,$4,$5) RETURNING id',
-      [zakaznik_id, doprava, platba, celkem, poznamka]
+      'INSERT INTO objednavky (zakaznik_id, doprava, platba, celkem, poznamka, poukaz_id, sleva) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
+      [zakaznik_id, doprava, platba, celkem, poznamka, poukaz_id, sleva]
     );
     const objednavka_id = objednavka.rows[0].id;
+
+    // Pokud byl uplatněn poukaz, teď skutečně odečíst zůstatek
+    if (poukaz_id) {
+      await client.query(
+        'UPDATE darkove_poukazy SET zustatek = zustatek - $1, stav = CASE WHEN zustatek - $1 <= 0 THEN \'pouzity\' ELSE stav END WHERE id = $2',
+        [sleva, poukaz_id]
+      );
+      await client.query(
+        'INSERT INTO poukazy_pouziti (poukaz_id, castka, objednavka_id) VALUES ($1,$2,$3)',
+        [poukaz_id, sleva, objednavka_id]
+      );
+    }
 
     // Vlozit polozky a odecist ze skladu
     for (const p of polozky) {
@@ -123,7 +178,8 @@ try {
     email,
     doprava,
     platba,
-    polozky
+    polozky,
+    sleva
   });
 } catch (emailErr) {
   console.error('Chyba pri odesilani emailu:', emailErr.message);
@@ -134,7 +190,7 @@ res.json({ zprava: 'Objednavka uspesne vytvorena', objednavka_id, celkem });
 // Upozornění majitelce se posílá až po odpovědi zákazníkovi, ať prodleva/chyba
 // s odesláním objednávku nezablokuje (stejný vzor jako u rezervací).
 odeslat_upozorneni_objednavky({
-  objednavka_id, celkem, jmeno, email, telefon, ulice, mesto, psc, doprava, platba, polozky
+  objednavka_id, celkem, jmeno, email, telefon, ulice, mesto, psc, doprava, platba, polozky, sleva
 }).catch(e => console.error('Upozorneni majitelce o objednavce se nepodarilo odeslat:', e.message));
 
   } catch (err) {
@@ -165,9 +221,10 @@ router.get('/', vyzadovatAdmina, async (req, res) => {
 router.get('/:id', vyzadovatAdmina, async (req, res) => {
   try {
     const objednavka = await pool.query(`
-      SELECT o.*, z.jmeno, z.email, z.telefon, z.ulice, z.mesto, z.psc
+      SELECT o.*, z.jmeno, z.email, z.telefon, z.ulice, z.mesto, z.psc, dp.kod AS poukaz_kod
       FROM objednavky o
       JOIN zakaznici z ON o.zakaznik_id = z.id
+      LEFT JOIN darkove_poukazy dp ON o.poukaz_id = dp.id
       WHERE o.id = $1
     `, [req.params.id]);
 

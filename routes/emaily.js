@@ -61,6 +61,7 @@ async function odeslat_potvrzeni(objednavka) {
           </thead>
           <tbody>${polozky_html}</tbody>
         </table>
+        ${objednavka.sleva > 0 ? `<p style="color:#27ae60">Sleva (dárkový poukaz): −${objednavka.sleva} Kc</p>` : ''}
         <p style="font-size:18px;font-weight:bold;margin-top:16px">
           Celkem: ${objednavka.celkem} Kc
         </p>
@@ -109,6 +110,7 @@ async function odeslat_upozorneni_objednavky(objednavka) {
           </thead>
           <tbody>${polozky_html}</tbody>
         </table>
+        ${objednavka.sleva > 0 ? `<p style="color:#27ae60">🎁 Uplatněný dárkový poukaz: −${objednavka.sleva} Kč</p>` : ''}
         <p style="font-size:18px;font-weight:bold;margin-top:16px">Celkem: ${objednavka.celkem} Kč</p>
         <p><strong>Doprava:</strong> ${objednavka.doprava} &nbsp; <strong>Platba:</strong> ${objednavka.platba}</p>
         <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-top:12px">
