@@ -22,6 +22,8 @@ async function initTabulky() {
       ALTER TABLE prodejna_prodeje ADD COLUMN IF NOT EXISTS mezisoucet NUMERIC;
       ALTER TABLE prodejna_prodeje ADD COLUMN IF NOT EXISTS sleva NUMERIC DEFAULT 0;
       ALTER TABLE prodejna_prodeje ADD COLUMN IF NOT EXISTS sleva_popis TEXT;
+      ALTER TABLE prodejna_prodeje ADD COLUMN IF NOT EXISTS hotovost_prijato NUMERIC;
+      ALTER TABLE prodejna_prodeje ADD COLUMN IF NOT EXISTS hotovost_vraceno NUMERIC;
       CREATE TABLE IF NOT EXISTS vratky (
         id SERIAL PRIMARY KEY,
         prodej_id INTEGER REFERENCES prodejna_prodeje(id) ON DELETE SET NULL,
@@ -56,15 +58,16 @@ router.get('/', async (req, res) => {
 
 // POST /api/prodejna – vytvořit nový prodej
 router.post('/', async (req, res) => {
-  const { zakaznik, platba, poznamka, polozky, celkem, mezisoucet, sleva, sleva_popis } = req.body;
+  const { zakaznik, platba, poznamka, polozky, celkem, mezisoucet, sleva, sleva_popis, hotovost_prijato, hotovost_vraceno } = req.body;
   if (!Array.isArray(polozky) || !polozky.length) {
     return res.status(400).json({ chyba: 'Chybí položky prodeje.' });
   }
   try {
     const result = await pool.query(
-      'INSERT INTO prodejna_prodeje (zakaznik, platba, poznamka, polozky, celkem, mezisoucet, sleva, sleva_popis) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
+      'INSERT INTO prodejna_prodeje (zakaznik, platba, poznamka, polozky, celkem, mezisoucet, sleva, sleva_popis, hotovost_prijato, hotovost_vraceno) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *',
       [zakaznik || null, platba || null, poznamka || null, JSON.stringify(polozky), celkem,
-       mezisoucet != null ? mezisoucet : celkem, sleva || 0, sleva_popis || null]
+       mezisoucet != null ? mezisoucet : celkem, sleva || 0, sleva_popis || null,
+       hotovost_prijato != null ? hotovost_prijato : null, hotovost_vraceno != null ? hotovost_vraceno : null]
     );
     res.json(result.rows[0]);
   } catch (err) {

@@ -799,6 +799,14 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       </div>
       <div class="form-group"><label>Jméno zákazníka (volitelné)</label><input type="text" id="prodejnaZakaznik" placeholder="Jana Nováková"></div>
     </div>
+    <div class="form-group" id="hotovostWrap" style="display:none;background:var(--cream);border-radius:10px;padding:14px">
+      <label>Přijatá hotovost</label>
+      <input type="number" id="prodejnaHotovostPrijato" min="0" placeholder="0" oninput="prepocitatVraceno()">
+      <div class="row" style="display:flex;justify-content:space-between;margin-top:8px;font-weight:600">
+        <span>Vrátit zákazníkovi:</span>
+        <span id="prodejnaVraceno">0 Kč</span>
+      </div>
+    </div>
     <div class="form-group" id="qrPlatbaWrap" style="display:none;text-align:center;background:var(--cream);border-radius:10px;padding:14px">
       <label>Naskenujte QR kód v bankovní aplikaci</label>
       <div><img id="qrPlatbaObrazek" style="width:200px;height:200px;border-radius:8px;margin-top:8px" alt="QR platba"></div>
@@ -2737,6 +2745,7 @@ function pridatPolozku() {
 
 function otevritNovyProdejProdejna() {
   openModal('modalProdejnaProdat');
+  prepnoutPoukazPole();
   // Kurzor rovnou do EAN pole, aby šlo skenovat fyzickou čtečkou hned bez klikání
   setTimeout(() => {
     const ean = document.getElementById('eanInput');
@@ -2941,6 +2950,7 @@ function prepocitatCelkem() {
   document.getElementById('prodejnaSlevaCastka').textContent = '−'+s.sleva.toLocaleString('cs-CZ')+' Kč';
   document.getElementById('prodejnaCelkem').textContent = s.celkem.toLocaleString('cs-CZ')+' Kč';
   if (document.getElementById('prodejnaPlatba').value === 'qr') aktualizovatQrPlatbu();
+  if (document.getElementById('prodejnaPlatba').value === 'hotovost') prepocitatVraceno();
 }
 
 // Platebni QR kod (format SPAYD pouzivany ceskymi bankovnimi aplikacemi)
@@ -2992,12 +3002,22 @@ async function ulozitProdejnaProdat() {
     } catch(e) { document.getElementById('prodejnaMsg').innerHTML = '<div class="error-msg">Chyba při ověřování poukazu</div>'; return; }
   }
 
+  let hotovost_prijato = null, hotovost_vraceno = null;
+  if (platba === 'hotovost') {
+    const prijato = parseInt(document.getElementById('prodejnaHotovostPrijato').value) || 0;
+    if (prijato > 0) {
+      hotovost_prijato = prijato;
+      hotovost_vraceno = Math.max(0, prijato - celkem);
+    }
+  }
+
   const prodej = {
     zakaznik: document.getElementById('prodejnaZakaznik').value,
     platba: platba,
     poznamka: document.getElementById('prodejnaPoznamka').value,
     polozky, celkem,
-    mezisoucet, sleva, sleva_popis: sleva_popis || null
+    mezisoucet, sleva, sleva_popis: sleva_popis || null,
+    hotovost_prijato, hotovost_vraceno
   };
 
   // Odečíst ze skladu
@@ -3045,6 +3065,7 @@ async function ulozitProdejnaProdat() {
   document.getElementById('prodejnaPlatba').value = 'hotovost';
   document.getElementById('prodejnaSlevaTyp').value = 'zadna';
   document.getElementById('prodejnaSlevaHodnota').value = '0';
+  document.getElementById('prodejnaHotovostPrijato').value = '';
   prepnoutPoukazPole();
   document.getElementById('prodejnaMsg').innerHTML = '';
   document.getElementById('prodejnaPolozky').innerHTML = `
@@ -3063,7 +3084,16 @@ function prepnoutPoukazPole() {
   const platba = document.getElementById('prodejnaPlatba').value;
   document.getElementById('poukazKodWrap').style.display = platba === 'poukaz' ? 'block' : 'none';
   document.getElementById('qrPlatbaWrap').style.display = platba === 'qr' ? 'block' : 'none';
+  document.getElementById('hotovostWrap').style.display = platba === 'hotovost' ? 'block' : 'none';
   if (platba === 'qr') aktualizovatQrPlatbu();
+  if (platba === 'hotovost') prepocitatVraceno();
+}
+
+function prepocitatVraceno() {
+  const celkem = parseInt(document.getElementById('prodejnaCelkem').textContent.replace(/\D/g,'')) || 0;
+  const prijato = parseInt(document.getElementById('prodejnaHotovostPrijato').value) || 0;
+  const vraceno = Math.max(0, prijato - celkem);
+  document.getElementById('prodejnaVraceno').textContent = vraceno.toLocaleString('cs-CZ')+' Kč';
 }
 
 async function overitPoukazProdejna() {
@@ -3145,6 +3175,9 @@ function tiskUctenkyData(prodej, cislo) {
   <div class="row total"><span>CELKEM:</span><span>${Number(prodej.celkem).toLocaleString('cs-CZ')} Kč</span></div>
   <div style="font-size:12px;margin-top:4px">Neplátce DPH</div>
   <div class="row"><span>Platba:</span><span>${prodej.platba==='hotovost'?'Hotovost':prodej.platba==='karta'?'Karta':'QR platba'}</span></div>
+  ${prodej.platba==='hotovost'&&Number(prodej.hotovost_prijato)>0?`
+  <div class="row"><span>Přijato:</span><span>${Number(prodej.hotovost_prijato).toLocaleString('cs-CZ')} Kč</span></div>
+  <div class="row"><span>Vráceno:</span><span>${Number(prodej.hotovost_vraceno||0).toLocaleString('cs-CZ')} Kč</span></div>`:''}
   ${prodej.platba==='qr'?`
   <div class="center" style="margin-top:12px">
     <img src="${qrPlatbaUrl(prodej.celkem,'Ucet '+cislo)}" style="width:32mm;height:32mm" alt="QR platba">
