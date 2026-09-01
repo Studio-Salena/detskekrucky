@@ -68,6 +68,8 @@ nav{display:flex;align-items:center;gap:8px}
 .kategorie-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;max-width:900px;margin:0 auto}
 .kategorie-dlazdice{background:#fff;border:2px solid var(--tan-light);border-radius:18px;padding:20px 12px;text-align:center;cursor:pointer;transition:all 0.2s}
 .kategorie-dlazdice:hover{transform:translateY(-4px);box-shadow:0 12px 32px rgba(139,69,19,0.18);border-color:var(--brown)}
+.kategorie-dlazdice.active{border-color:var(--brown);background:linear-gradient(135deg,var(--brown),var(--brown-dark))}
+.kategorie-dlazdice.active .nazev{color:#fff}
 .kategorie-dlazdice .ikona{font-size:2.2rem;margin-bottom:8px;display:block}
 .kategorie-dlazdice .nazev{font-weight:700;font-size:0.85rem;color:var(--brown)}
 
@@ -530,9 +532,7 @@ footer {
 <div class="filters-wrap">
   <div>
     <span class="filters-title">Procházet kolekci</span>
-    <div class="filters" id="filtersContainer">
-      <button class="filter-btn active" onclick="filterBy('vse',this)">Vše</button>
-    </div>
+    <button class="filter-btn active" id="aktivniKategorieChip" onclick="filterBy('vse')" style="display:none">&#10005; <span id="aktivniKategorieNazev"></span></button>
   </div>
   <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
     <select id="filterVelikost" onchange="filterByVelikost(this.value)" style="padding:10px 14px;border:2px solid var(--tan-light);border-radius:20px;font-family:'Nunito',sans-serif;font-size:0.85rem;background:#fff;color:var(--text-light)">
@@ -798,25 +798,18 @@ async function nacistKategorieFiltru() {
   try {
     const data = await fetch(API + '/kategorie').then(r => r.json());
     vsechnyKategorie = Array.isArray(data) ? data : [];
-    const container = document.getElementById('filtersContainer');
-    const tlacitkaHtml = vsechnyKategorie.map(k =>
-      `<button class="filter-btn" onclick="filterBy('${k.slug}',this)">${k.nazev}</button>`
-    ).join('');
-    container.insertAdjacentHTML('beforeend', tlacitkaHtml);
-
     document.getElementById('kategorieGrid').innerHTML = vsechnyKategorie.map(k => `
-      <div class="kategorie-dlazdice" onclick="vybratKategoriiZGridu('${k.slug}')">
+      <div class="kategorie-dlazdice" data-slug="${k.slug}" onclick="vybratKategoriiZGridu('${k.slug}')">
         <span class="ikona">${k.ikona || '&#128095;'}</span>
         <div class="nazev">${k.nazev}</div>
       </div>`).join('');
-  } catch(e) { /* pokud se nepodaří načíst, zůstane jen tlačítko "Vše" */ }
+  } catch(e) { /* pokud se nepodaří načíst, dlaždice zůstanou prázdné */ }
 }
 
-// Klik na dlaždici kategorie v rozcestníku - přepne stejný filtr jako pill
-// tlačítko nahoře a odscrolluje na produkty.
+// Klik na dlaždici kategorie v rozcestníku - stejný filtr jako by šlo o pill
+// tlačítko, jen bez duplicitního seznamu kategorií ve filtrech níž.
 function vybratKategoriiZGridu(slug) {
-  const btn = Array.from(document.querySelectorAll('#filtersContainer .filter-btn')).find(b => b.getAttribute('onclick').includes(`'${slug}'`));
-  if (btn) filterBy(slug, btn);
+  filterBy(slug);
   scrollToProducts();
 }
 
@@ -892,10 +885,20 @@ function aplikovatFiltry() {
   zobrazitProdukty(base);
 }
 
-function filterBy(kategorie, btn) {
+function filterBy(kategorie) {
   aktualniFiltr = kategorie;
-  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+
+  document.querySelectorAll('.kategorie-dlazdice').forEach(d => d.classList.toggle('active', d.dataset.slug === kategorie));
+
+  const chip = document.getElementById('aktivniKategorieChip');
+  if (kategorie === 'vse') {
+    chip.style.display = 'none';
+  } else {
+    const k = vsechnyKategorie.find(k => k.slug === kategorie);
+    document.getElementById('aktivniKategorieNazev').textContent = k ? k.nazev : kategorie;
+    chip.style.display = 'inline-flex';
+  }
+
   aplikovatFiltry();
 }
 
