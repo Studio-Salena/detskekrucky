@@ -83,6 +83,48 @@ async function odeslat_potvrzeni(objednavka) {
   console.log('Email odoslan na:', objednavka.email);
 }
 
+// Upozornění majitelce o nové objednávce z e-shopu
+async function odeslat_upozorneni_objednavky(objednavka) {
+  const polozky_html = objednavka.polozky.map(p => `
+    <tr>
+      <td style="padding:8px;border-bottom:1px solid #eee">${p.nazev || ('produkt #' + p.produkt_id)} - vel. ${p.velikost}</td>
+      <td style="padding:8px;border-bottom:1px solid #eee">${p.pocet} ks</td>
+      <td style="padding:8px;border-bottom:1px solid #eee">${p.cena * p.pocet} Kč</td>
+    </tr>
+  `).join('');
+
+  await odeslatEmail({
+    to: MAJITELKA_EMAIL,
+    subject: `🛒 Nová objednávka #${objednavka.objednavka_id} – ${objednavka.jmeno}`,
+    html: `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+        <h2 style="color:#FF6B35">🛒 Nová objednávka #${objednavka.objednavka_id}</h2>
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr style="background:#f5f5f5">
+              <th style="padding:8px;text-align:left">Produkt</th>
+              <th style="padding:8px;text-align:left">Počet</th>
+              <th style="padding:8px;text-align:left">Cena</th>
+            </tr>
+          </thead>
+          <tbody>${polozky_html}</tbody>
+        </table>
+        <p style="font-size:18px;font-weight:bold;margin-top:16px">Celkem: ${objednavka.celkem} Kč</p>
+        <p><strong>Doprava:</strong> ${objednavka.doprava} &nbsp; <strong>Platba:</strong> ${objednavka.platba}</p>
+        <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-top:12px">
+          <p style="margin:0 0 6px 0"><strong>Zákazník:</strong> ${objednavka.jmeno}</p>
+          <p style="margin:0 0 6px 0"><strong>E-mail:</strong> ${objednavka.email}</p>
+          <p style="margin:0 0 6px 0"><strong>Telefon:</strong> ${objednavka.telefon}</p>
+          <p style="margin:0">${objednavka.ulice}, ${objednavka.psc} ${objednavka.mesto}</p>
+        </div>
+        <hr>
+        <p style="color:#666;font-size:13px">Detail objednávky je v adminu.</p>
+      </div>
+    `
+  });
+  console.log('Upozorneni na objednavku odeslano majitelce, #', objednavka.objednavka_id);
+}
+
 async function odeslat_potvrzeni_rezervace(rezervace, slot) {
   const datum = new Date(slot.datum).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'long', year: 'numeric' });
   const cas = `${slot.cas_od.slice(0,5)} – ${slot.cas_do.slice(0,5)}`;
@@ -184,4 +226,4 @@ async function odeslat_test(komu) {
   });
 }
 
-module.exports = { odeslat_potvrzeni, odeslat_potvrzeni_rezervace, odeslat_potvrzeni_terminu, odeslat_upozorneni_rezervace, odeslat_test };
+module.exports = { odeslat_potvrzeni, odeslat_upozorneni_objednavky, odeslat_potvrzeni_rezervace, odeslat_potvrzeni_terminu, odeslat_upozorneni_rezervace, odeslat_test };

@@ -3,6 +3,17 @@ const router = express.Router();
 const pool = require('../db/pool');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 
+// Idempotentní migrace - emoji ikona pro dlaždici kategorie v rozcestníku e-shopu.
+async function initKategorieSloupce() {
+  try {
+    await pool.query(`ALTER TABLE kategorie ADD COLUMN IF NOT EXISTS ikona TEXT`);
+    console.log('Kategorie sloupce OK');
+  } catch (e) {
+    console.log('Kategorie sloupce chyba:', e.message);
+  }
+}
+initKategorieSloupce();
+
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM kategorie ORDER BY poradi');
@@ -16,11 +27,11 @@ router.get('/', async (req, res) => {
 router.use(vyzadovatAdmina);
 
 router.post('/', async (req, res) => {
-  const { nazev, slug, poradi, popis, znacky } = req.body;
+  const { nazev, slug, poradi, popis, znacky, ikona } = req.body;
   try {
     const result = await pool.query(
-      'INSERT INTO kategorie (nazev, slug, poradi, popis, znacky) VALUES ($1,$2,$3,$4,$5) RETURNING *',
-      [nazev, slug, poradi||0, popis||'', znacky||'']
+      'INSERT INTO kategorie (nazev, slug, poradi, popis, znacky, ikona) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+      [nazev, slug, poradi||0, popis||'', znacky||'', ikona || null]
     );
     res.json(result.rows[0]);
   } catch (err) {
@@ -29,11 +40,11 @@ router.post('/', async (req, res) => {
 });
 
 router.patch('/:id', async (req, res) => {
-  const { nazev, slug, poradi, popis, znacky } = req.body;
+  const { nazev, slug, poradi, popis, znacky, ikona } = req.body;
   try {
     const result = await pool.query(
-      'UPDATE kategorie SET nazev=$1, slug=$2, poradi=$3, popis=$4, znacky=$5 WHERE id=$6 RETURNING *',
-      [nazev, slug, poradi||0, popis||'', znacky||'', req.params.id]
+      'UPDATE kategorie SET nazev=$1, slug=$2, poradi=$3, popis=$4, znacky=$5, ikona=$6 WHERE id=$7 RETURNING *',
+      [nazev, slug, poradi||0, popis||'', znacky||'', ikona || null, req.params.id]
     );
     res.json(result.rows[0]);
   } catch (err) {

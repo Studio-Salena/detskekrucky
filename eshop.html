@@ -63,6 +63,14 @@ nav{display:flex;align-items:center;gap:8px}
 .btn-outline{padding:14px 32px;background:#fff;color:var(--brown);border:2px solid var(--brown);border-radius:30px;font-family:'Nunito',sans-serif;font-weight:700;font-size:0.95rem;cursor:pointer;text-transform:uppercase;letter-spacing:1px;transition:all 0.2s}
 .btn-outline:hover{background:var(--tan-light)}
 
+/* KATEGORIE ROZCESTNÍK */
+.kategorie-grid-wrap{padding:32px 32px 8px;background:var(--cream)}
+.kategorie-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;max-width:900px;margin:0 auto}
+.kategorie-dlazdice{background:#fff;border:2px solid var(--tan-light);border-radius:18px;padding:20px 12px;text-align:center;cursor:pointer;transition:all 0.2s}
+.kategorie-dlazdice:hover{transform:translateY(-4px);box-shadow:0 12px 32px rgba(139,69,19,0.18);border-color:var(--brown)}
+.kategorie-dlazdice .ikona{font-size:2.2rem;margin-bottom:8px;display:block}
+.kategorie-dlazdice .nazev{font-weight:700;font-size:0.85rem;color:var(--brown)}
+
 /* BENEFITS */
 .benefits{display:flex;justify-content:center;gap:0;background:linear-gradient(135deg,#fff8f0,#f0fce8);border-bottom:1px solid var(--tan-light)}
 .benefit{flex:1;max-width:200px;text-align:center;padding:24px 16px;border-right:1px solid var(--tan-light);transition:all 0.2s}.benefit:hover{background:rgba(255,255,255,0.7)}
@@ -165,6 +173,9 @@ nav{display:flex;align-items:center;gap:8px}
 .order-summary{background:var(--cream);border-radius:12px;padding:16px;margin-bottom:20px;border:1px solid var(--tan-light)}
 .order-summary-item{display:flex;justify-content:space-between;font-size:0.85rem;padding:4px 0;color:var(--text-light)}
 .order-summary-total{display:flex;justify-content:space-between;font-weight:700;font-size:1rem;color:var(--brown);border-top:1px solid var(--tan);padding-top:10px;margin-top:8px}
+.doprava-nudge{font-size:0.8rem;text-align:center;padding:8px 12px;border-radius:10px;background:var(--sage-light);color:var(--brown-dark);font-weight:700;margin-bottom:12px}
+.vyzkouseni-info{background:var(--cream);border:1px solid var(--tan-light);border-radius:12px;padding:14px;font-size:0.85rem;color:var(--text-light);margin:-4px 0 14px;line-height:1.5}
+.honeypot-pole{position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden}
 .submit-btn{width:100%;padding:16px;background:var(--brown);color:#fff;border:none;border-radius:12px;font-family:'Nunito',sans-serif;font-weight:700;font-size:1rem;cursor:pointer;margin-bottom:10px;box-shadow:0 4px 15px rgba(139,69,19,0.3)}
 .submit-btn:hover{background:var(--brown-dark)}
 .submit-btn:disabled{opacity:0.6;cursor:not-allowed}
@@ -502,6 +513,11 @@ footer {
   </div>
 </section>
 
+<!-- KATEGORIE ROZCESTNÍK -->
+<div class="kategorie-grid-wrap">
+  <div class="kategorie-grid" id="kategorieGrid"></div>
+</div>
+
 <!-- BENEFITS -->
 <div class="benefits">
   <div class="benefit"><div class="benefit-icon">🌿</div><div class="benefit-text">Barefoot filozofie</div></div>
@@ -518,9 +534,14 @@ footer {
       <button class="filter-btn active" onclick="filterBy('vse',this)">Vše</button>
     </div>
   </div>
-  <div class="search-wrap">
-    <span class="search-icon">&#128269;</span>
-    <input type="text" placeholder="Hledat boty..." oninput="searchProducts(this.value)" id="searchInput">
+  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+    <select id="filterVelikost" onchange="filterByVelikost(this.value)" style="padding:10px 14px;border:2px solid var(--tan-light);border-radius:20px;font-family:'Nunito',sans-serif;font-size:0.85rem;background:#fff;color:var(--text-light)">
+      <option value="">Velikost nožičky</option>
+    </select>
+    <div class="search-wrap">
+      <span class="search-icon">&#128269;</span>
+      <input type="text" placeholder="Hledat boty..." oninput="searchProducts(this.value)" id="searchInput">
+    </div>
   </div>
 </div>
 
@@ -553,6 +574,7 @@ footer {
   </div>
   <div class="cart-items" id="cartItems"></div>
   <div class="cart-footer" id="cartFooter" style="display:none">
+    <div class="doprava-nudge" id="dopravaNudge"></div>
     <div class="cart-total"><span>Celkem:</span><span id="cartTotal">0 Kč</span></div>
     <button class="checkout-btn" onclick="openCheckout()">Objednat &#128230;</button>
   </div>
@@ -565,9 +587,11 @@ footer {
     <div class="modal-brand" id="detailBrand"></div>
     <div class="modal-name" id="detailName"></div>
     <div class="modal-popis" id="detailPopis"></div>
+    <div id="detailTypNohy" style="display:none;font-size:0.82rem;color:var(--text-light);background:var(--cream);border-radius:10px;padding:8px 12px;margin-bottom:12px">&#128094; <span id="detailTypNohyText"></span></div>
     <div class="modal-price" id="detailPrice"></div>
     <div class="size-label">Vyberte velikost:</div>
     <div class="sizes-grid" id="detailSizes"></div>
+    <div id="detailRozmery" style="display:none;font-size:0.8rem;color:var(--text-light);margin:-10px 0 16px"></div>
     <button class="modal-add-btn" onclick="addToCartFromModal()">&#128722; Přidat do košíku</button>
     <button class="modal-close" onclick="closeModal()">Zavřít</button>
   </div>
@@ -604,11 +628,14 @@ footer {
     </div>
     <div class="section-divider">Způsob dopravy</div>
     <div class="form-group">
-      <select id="chDoprava">
+      <select id="chDoprava" onchange="vykreslitSouhrnObjednavky()">
         <option value="zasilkovna">Zásilkovna - 79 Kč</option>
         <option value="ceska_posta">Česká pošta - 89 Kč</option>
         <option value="osobni_odber">Osobní odběr - zdarma</option>
       </select>
+    </div>
+    <div class="vyzkouseni-info" id="vyzkouseniInfo" style="display:none">
+      &#128094; Při osobním odběru si boty rovnou vyzkoušíte přímo na prodejně: <strong>Holešovská 752, Hulín 768 24</strong>. Ozveme se, jakmile bude objednávka připravená k vyzvednutí.
     </div>
     <div class="section-divider">Způsob platby</div>
     <div class="form-group">
@@ -621,6 +648,10 @@ footer {
     <div class="form-group" id="chPrevodInfo" style="display:none;background:var(--cream);border-radius:12px;padding:14px;text-align:center">
       <div style="font-size:0.85rem;margin-bottom:8px">Zaplaťte prosím na účet <strong>2003533776/2010</strong>, případně naskenujte QR kód v bankovní aplikaci:</div>
       <img id="chPrevodQr" style="width:180px;height:180px;border-radius:8px" alt="QR platba">
+    </div>
+    <div class="honeypot-pole" aria-hidden="true">
+      <label for="chWebovaStranka">Nevyplňujte toto pole</label>
+      <input type="text" id="chWebovaStranka" name="webova_stranka" tabindex="-1" autocomplete="off">
     </div>
     <button class="submit-btn" id="submitBtn" onclick="odeslatObjednavku()">Odeslat objednávku &#128230;</button>
     <button class="cancel-btn" onclick="closeCheckout()">Zpět do košíku</button>
@@ -725,9 +756,18 @@ footer {
 const API = 'https://detskekrucky1.onrender.com/api';
 let vsechnyProdukty = [];
 let aktualniFiltr = 'vse';
+let aktualniVelikost = '';
 let kosik = JSON.parse(localStorage.getItem('kosik') || '[]');
 let aktivniProdukt = null;
 let vybranaVelikost = null;
+
+const DOPRAVA_CENY = { zasilkovna: 79, ceska_posta: 89, osobni_odber: 0 };
+const DOPRAVA_ZDARMA_OD = 800;
+function vypocitatDopravu(doprava, mezisoucet) {
+  if (doprava === 'osobni_odber') return 0;
+  if (mezisoucet >= DOPRAVA_ZDARMA_OD) return 0;
+  return DOPRAVA_CENY[doprava] ?? 79;
+}
 
 const kategorieBg = {
   toddler: 'product-img-toddler',
@@ -763,7 +803,21 @@ async function nacistKategorieFiltru() {
       `<button class="filter-btn" onclick="filterBy('${k.slug}',this)">${k.nazev}</button>`
     ).join('');
     container.insertAdjacentHTML('beforeend', tlacitkaHtml);
+
+    document.getElementById('kategorieGrid').innerHTML = vsechnyKategorie.map(k => `
+      <div class="kategorie-dlazdice" onclick="vybratKategoriiZGridu('${k.slug}')">
+        <span class="ikona">${k.ikona || '&#128095;'}</span>
+        <div class="nazev">${k.nazev}</div>
+      </div>`).join('');
   } catch(e) { /* pokud se nepodaří načíst, zůstane jen tlačítko "Vše" */ }
+}
+
+// Klik na dlaždici kategorie v rozcestníku - přepne stejný filtr jako pill
+// tlačítko nahoře a odscrolluje na produkty.
+function vybratKategoriiZGridu(slug) {
+  const btn = Array.from(document.querySelectorAll('#filtersContainer .filter-btn')).find(b => b.getAttribute('onclick').includes(`'${slug}'`));
+  if (btn) filterBy(slug, btn);
+  scrollToProducts();
 }
 
 async function nacistProdukty() {
@@ -775,17 +829,24 @@ async function nacistProdukty() {
         map[s.id] = {
           id: s.id, nazev: s.nazev, znacka: s.znacka,
           emoji: s.emoji || '&#128098;', popis: s.popis || '',
-          kategorie: s.kategorie, cena: s.cena,
+          kategorie: s.kategorie, cena: s.cena, typ_nohy: s.typ_nohy || '',
           cena_puvodni: s.cena_puvodni, velikosti: []
         };
       }
-      if (s.pocet_kusu > 0) map[s.id].velikosti.push({velikost: s.velikost, pocet: s.pocet_kusu});
+      if (s.pocet_kusu > 0) map[s.id].velikosti.push({velikost: s.velikost, pocet: s.pocet_kusu, delka_mm: s.delka_mm, sirka_mm: s.sirka_mm});
     });
     vsechnyProdukty = Object.values(map).filter(p => p.velikosti.length > 0);
+    naplnitFiltrVelikosti();
     zobrazitProdukty(vsechnyProdukty);
   } catch(e) {
     document.getElementById('productsGrid').innerHTML = '<div class="empty">Nepodařilo se načíst produkty. Zkuste to prosím znovu.</div>';
   }
+}
+
+function naplnitFiltrVelikosti() {
+  const velikosti = [...new Set(vsechnyProdukty.flatMap(p => p.velikosti.map(v => v.velikost)))].sort((a, b) => a - b);
+  const sel = document.getElementById('filterVelikost');
+  sel.innerHTML = '<option value="">Velikost nožičky</option>' + velikosti.map(v => `<option value="${v}">${v}</option>`).join('');
 }
 
 function zobrazitProdukty(produkty) {
@@ -811,25 +872,40 @@ function zobrazitProdukty(produkty) {
             <span class="product-price">${p.cena} Kč</span>
             ${p.cena_puvodni ? `<span class="product-price-old">${p.cena_puvodni} Kč</span>` : ''}
           </div>
-          <button class="add-btn" onclick="event.stopPropagation();openDetail(${p.id})">+</button>
+          <button class="add-btn" title="Přidat do košíku" onclick="event.stopPropagation();openDetail(${p.id})">+</button>
         </div>
       </div>
     </div>`;
   }).join('');
 }
 
+// Sdílená funkce - kombinuje filtr kategorie + velikosti + hledaný text.
+// Volá se z filterBy/filterByVelikost/searchProducts, ať se logika nekopíruje na třech místech.
+function aplikovatFiltry() {
+  let base = aktualniFiltr === 'vse' ? vsechnyProdukty : vsechnyProdukty.filter(p => p.kategorie === aktualniFiltr);
+  if (aktualniVelikost) {
+    const vel = parseInt(aktualniVelikost);
+    base = base.filter(p => p.velikosti.some(v => v.velikost === vel));
+  }
+  const hledani = document.getElementById('searchInput').value.toLowerCase();
+  if (hledani) base = base.filter(p => p.nazev.toLowerCase().includes(hledani) || p.znacka.toLowerCase().includes(hledani));
+  zobrazitProdukty(base);
+}
+
 function filterBy(kategorie, btn) {
   aktualniFiltr = kategorie;
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  const filtered = kategorie === 'vse' ? vsechnyProdukty : vsechnyProdukty.filter(p => p.kategorie === kategorie);
-  const hledani = document.getElementById('searchInput').value.toLowerCase();
-  zobrazitProdukty(hledani ? filtered.filter(p => p.nazev.toLowerCase().includes(hledani) || p.znacka.toLowerCase().includes(hledani)) : filtered);
+  aplikovatFiltry();
+}
+
+function filterByVelikost(vel) {
+  aktualniVelikost = vel;
+  aplikovatFiltry();
 }
 
 function searchProducts(query) {
-  const base = aktualniFiltr === 'vse' ? vsechnyProdukty : vsechnyProdukty.filter(p => p.kategorie === aktualniFiltr);
-  zobrazitProdukty(query ? base.filter(p => p.nazev.toLowerCase().includes(query.toLowerCase()) || p.znacka.toLowerCase().includes(query.toLowerCase())) : base);
+  aplikovatFiltry();
 }
 
 function scrollToProducts() {
@@ -848,9 +924,13 @@ function openDetail(id) {
   document.getElementById('detailName').textContent = aktivniProdukt.nazev;
   document.getElementById('detailPopis').textContent = aktivniProdukt.popis || 'Kvalitní barefoot obuv pro zdravý vývoj dětských nožiček.';
   document.getElementById('detailPrice').textContent = aktivniProdukt.cena + ' Kč';
+  const typNohyEl = document.getElementById('detailTypNohy');
+  if (aktivniProdukt.typ_nohy) { document.getElementById('detailTypNohyText').textContent = aktivniProdukt.typ_nohy; typNohyEl.style.display = 'block'; }
+  else { typNohyEl.style.display = 'none'; }
   document.getElementById('detailSizes').innerHTML = aktivniProdukt.velikosti.map(v =>
     `<button class="size-btn" onclick="vybrVelikost(${v.velikost},this)">${v.velikost}</button>`
   ).join('');
+  document.getElementById('detailRozmery').style.display = 'none';
   document.getElementById('modalDetail').classList.add('open');
 }
 
@@ -858,6 +938,14 @@ function vybrVelikost(vel, btn) {
   vybranaVelikost = vel;
   document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
+  const rozmeryEl = document.getElementById('detailRozmery');
+  const velData = aktivniProdukt.velikosti.find(v => v.velikost === vel);
+  if (velData && (velData.delka_mm || velData.sirka_mm)) {
+    rozmeryEl.textContent = `📏 Vnitřní rozměry (vel. ${vel}): ${velData.delka_mm || '?'} × ${velData.sirka_mm || '?'} mm (délka × šířka)`;
+    rozmeryEl.style.display = 'block';
+  } else {
+    rozmeryEl.style.display = 'none';
+  }
 }
 
 function addToCartFromModal() {
@@ -901,6 +989,12 @@ function renderKosik() {
   footer.style.display = 'block';
   const total = kosik.reduce((s, i) => s + i.cena * i.pocet, 0);
   document.getElementById('cartTotal').textContent = total + ' Kč';
+  const nudge = document.getElementById('dopravaNudge');
+  if (total >= DOPRAVA_ZDARMA_OD) {
+    nudge.textContent = '🎉 Máte dopravu zdarma!';
+  } else {
+    nudge.textContent = `🚚 Ještě ${DOPRAVA_ZDARMA_OD - total} Kč do dopravy zdarma`;
+  }
   el.innerHTML = kosik.map((item, idx) => `
     <div class="cart-item">
       <div class="cart-item-icon">${item.emoji}</div>
@@ -943,10 +1037,15 @@ function openCheckout() {
 function vykreslitSouhrnObjednavky() {
   const total = kosik.reduce((s, i) => s + i.cena * i.pocet, 0);
   const sleva = uplatnenyPoukaz ? Math.min(uplatnenyPoukaz.zustatek, total) : 0;
+  const doprava = document.getElementById('chDoprava').value;
+  const dopravaCena = vypocitatDopravu(doprava, total - sleva);
+  const dopravaLabel = doprava === 'osobni_odber' ? 'Osobní odběr' : doprava === 'ceska_posta' ? 'Česká pošta' : 'Zásilkovna';
   document.getElementById('orderSummary').innerHTML = `
     ${kosik.map(i => `<div class="order-summary-item"><span>${i.nazev} vel.${i.velikost} x${i.pocet}</span><span>${i.cena * i.pocet} Kč</span></div>`).join('')}
     ${sleva > 0 ? `<div class="order-summary-item" style="color:var(--sage);font-weight:700"><span>🎁 Poukaz ${uplatnenyPoukaz.kod}</span><span>−${sleva} Kč</span></div>` : ''}
-    <div class="order-summary-total"><span>Celkem</span><span>${total - sleva} Kč</span></div>`;
+    <div class="order-summary-item"><span>🚚 Doprava (${dopravaLabel})</span><span>${dopravaCena === 0 ? 'Zdarma' : dopravaCena + ' Kč'}</span></div>
+    <div class="order-summary-total"><span>Celkem</span><span>${total - sleva + dopravaCena} Kč</span></div>`;
+  document.getElementById('vyzkouseniInfo').style.display = doprava === 'osobni_odber' ? 'block' : 'none';
   aktualizovatPlatbuInfo();
 }
 
@@ -962,7 +1061,8 @@ function aktualizovatPlatbuInfo() {
   if (platba === 'prevod') {
     const total = kosik.reduce((s, i) => s + i.cena * i.pocet, 0);
     const sleva = uplatnenyPoukaz ? Math.min(uplatnenyPoukaz.zustatek, total) : 0;
-    document.getElementById('chPrevodQr').src = qrPlatbaUrl(total - sleva, 'Eshop Detske krucky');
+    const dopravaCena = vypocitatDopravu(document.getElementById('chDoprava').value, total - sleva);
+    document.getElementById('chPrevodQr').src = qrPlatbaUrl(total - sleva + dopravaCena, 'Eshop Detske krucky');
   }
 }
 
@@ -985,6 +1085,20 @@ function closeCheckout() {
   openCart();
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const TELEFON_RE = /^(\+420\s?)?\d{3}\s?\d{3}\s?\d{3}$/;
+const PSC_RE = /^\d{3}\s?\d{2}$/;
+
+function validovatCheckoutFormular({ jmeno, email, telefon, ulice, mesto, psc }) {
+  if (!jmeno || jmeno.split(/\s+/).length < 2) return 'Zadejte prosím jméno a příjmení.';
+  if (!email || !EMAIL_RE.test(email)) return 'Zadejte prosím platnou e-mailovou adresu.';
+  if (!telefon || !TELEFON_RE.test(telefon)) return 'Zadejte prosím platné telefonní číslo (např. 777 123 456).';
+  if (!ulice || ulice.length < 3) return 'Zadejte prosím ulici a číslo popisné.';
+  if (!mesto || mesto.length < 2) return 'Zadejte prosím město.';
+  if (!psc || !PSC_RE.test(psc)) return 'Zadejte prosím platné PSČ (např. 768 24).';
+  return null;
+}
+
 async function odeslatObjednavku() {
   const jmeno = document.getElementById('chJmeno').value.trim();
   const email = document.getElementById('chEmail').value.trim();
@@ -994,9 +1108,11 @@ async function odeslatObjednavku() {
   const doprava = document.getElementById('chDoprava').value;
   const platba = document.getElementById('chPlatba').value;
   const telefon = document.getElementById('chTelefon').value.trim();
+  const webova_stranka = document.getElementById('chWebovaStranka').value;
 
-  if (!jmeno || !email || !ulice || !mesto || !psc) {
-    document.getElementById('checkoutMsg').innerHTML = '<div class="msg msg-error">Vyplňte prosím všechna povinná pole.</div>';
+  const chybaValidace = validovatCheckoutFormular({ jmeno, email, telefon, ulice, mesto, psc });
+  if (chybaValidace) {
+    document.getElementById('checkoutMsg').innerHTML = `<div class="msg msg-error">${chybaValidace}</div>`;
     return;
   }
 
@@ -1012,11 +1128,12 @@ async function odeslatObjednavku() {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         jmeno, email, telefon, ulice, mesto, psc,
-        doprava, platba, celkem: total,
+        doprava, platba, celkem: total, webova_stranka,
         polozky: kosik.map(i => ({produkt_id: i.id, velikost: i.velikost, pocet: i.pocet, cena: i.cena})),
         poukaz_kod: uplatnenyPoukaz ? uplatnenyPoukaz.kod : null
       })
     });
+    const data = await res.json();
 
     if (res.ok) {
       document.getElementById('checkoutMsg').innerHTML = '<div class="msg msg-success">&#127881; Objednávka odeslána! Brzy vás zkontaktujeme.</div>';
@@ -1031,7 +1148,9 @@ async function odeslatObjednavku() {
         document.getElementById('checkoutMsg').innerHTML = '';
       }, 3000);
     } else {
-      throw new Error('Chyba serveru');
+      document.getElementById('checkoutMsg').innerHTML = `<div class="msg msg-error">${data.chyba || 'Chyba serveru. Zkuste to prosím znovu.'}</div>`;
+      btn.disabled = false;
+      btn.textContent = 'Odeslat objednávku &#128230;';
     }
   } catch(e) {
     document.getElementById('checkoutMsg').innerHTML = '<div class="msg msg-error">Chyba při odesílání. Zkuste to prosím znovu.</div>';
@@ -1087,10 +1206,6 @@ function openUcet() {
   } else {
     document.getElementById('modalLogin').classList.add('open');
   }
-}
-
-function closeModal(id) {
-  document.getElementById(id).classList.remove('open');
 }
 
 function openModal(id) {

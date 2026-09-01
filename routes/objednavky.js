@@ -1,12 +1,56 @@
-const { odeslat_potvrzeni } = require('./emaily');
+const { odeslat_potvrzeni, odeslat_upozorneni_objednavky } = require('./emaily');
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
 const vyzadovatAdmina = require('../middleware/adminAuth');
+const { jeZablokovana, zaznamenatObjednavku } = require('../middleware/objednavkyLimiter');
+
+const DOPRAVA_CENY = { zasilkovna: 79, ceska_posta: 89, osobni_odber: 0 };
+const DOPRAVA_ZDARMA_OD = 800;
+
+function vypocitatDopravu(doprava, mezisoucet) {
+  if (doprava === 'osobni_odber') return 0;
+  if (mezisoucet >= DOPRAVA_ZDARMA_OD) return 0;
+  return DOPRAVA_CENY[doprava] ?? 79;
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const TELEFON_RE = /^(\+420\s?)?\d{3}\s?\d{3}\s?\d{3}$/;
+const PSC_RE = /^\d{3}\s?\d{2}$/;
+
+function validovatObjednavku({ jmeno, email, telefon, ulice, mesto, psc }) {
+  if (!jmeno || jmeno.trim().split(/\s+/).length < 2) return 'Zadejte prosím jméno a příjmení.';
+  if (!email || !EMAIL_RE.test(email.trim())) return 'Zadejte prosím platnou e-mailovou adresu.';
+  if (!telefon || !TELEFON_RE.test(telefon.trim())) return 'Zadejte prosím platné telefonní číslo (např. 777 123 456).';
+  if (!ulice || ulice.trim().length < 3) return 'Zadejte prosím ulici a číslo popisné.';
+  if (!mesto || mesto.trim().length < 2) return 'Zadejte prosím město.';
+  if (!psc || !PSC_RE.test(psc.trim())) return 'Zadejte prosím platné PSČ (např. 768 24).';
+  return null;
+}
 
 // Vytvorit novou objednavku
 router.post('/', async (req, res) => {
-  const { jmeno, email, telefon, ulice, mesto, psc, doprava, platba, poznamka, polozky } = req.body;
+  const { jmeno, email, telefon, ulice, mesto, psc, doprava, platba, poznamka, polozky, webova_stranka } = req.body;
+
+  // Honeypot - skryté pole, které reální uživatelé nikdy nevyplní, ale
+  // formulářoví boti ano. Předstíráme úspěch, aby se bot nenaučil rozpoznat blokaci.
+  if (webova_stranka) {
+    return res.json({ zprava: 'Objednavka uspesne vytvorena', objednavka_id: 0, celkem: 0 });
+  }
+
+  const zbyvaSekund = jeZablokovana(req.ip);
+  if (zbyvaSekund > 0) {
+    return res.status(429).json({ chyba: `Příliš mnoho objednávek z tohoto místa. Zkuste to znovu za ${Math.ceil(zbyvaSekund / 60)} min.` });
+  }
+
+  if (!Array.isArray(polozky) || !polozky.length) {
+    return res.status(400).json({ chyba: 'Košík je prázdný.' });
+  }
+  const chybaValidace = validovatObjednavku({ jmeno, email, telefon, ulice, mesto, psc });
+  if (chybaValidace) {
+    return res.status(400).json({ chyba: chybaValidace });
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -26,11 +70,12 @@ router.post('/', async (req, res) => {
       zakaznik_id = zakaznik.rows[0].id;
     }
 
-    // Zkontrolovat sklad a spocitat celkem
+    // Zkontrolovat sklad (FOR UPDATE - zamkne řádky do konce transakce, aby dvě
+    // souběžné objednávky na poslední kus nemohly obě projít kontrolou) a spocitat celkem
     let celkem = 0;
     for (const p of polozky) {
       const sklad = await client.query(
-        'SELECT pocet_kusu FROM sklad WHERE produkt_id = $1 AND velikost = $2',
+        'SELECT pocet_kusu FROM sklad WHERE produkt_id = $1 AND velikost = $2 FOR UPDATE',
         [p.produkt_id, p.velikost]
       );
       if (sklad.rows.length === 0 || sklad.rows[0].pocet_kusu < p.pocet) {
@@ -40,8 +85,9 @@ router.post('/', async (req, res) => {
       celkem += p.cena * p.pocet;
     }
 
-    // Doprava
-    if (celkem < 800) celkem += 79;
+    // Doprava - podle zvoleného způsobu, osobní odběr je vždy zdarma
+    const dopravaCena = vypocitatDopravu(doprava, celkem);
+    celkem += dopravaCena;
 
     // Vytvorit objednavku
     const objednavka = await client.query(
@@ -67,6 +113,7 @@ router.post('/', async (req, res) => {
     }
 
     await client.query('COMMIT');
+    zaznamenatObjednavku(req.ip);
     // Odeslat potvrzovaci email
 try {
   await odeslat_potvrzeni({
@@ -83,6 +130,12 @@ try {
 }
 
 res.json({ zprava: 'Objednavka uspesne vytvorena', objednavka_id, celkem });
+
+// Upozornění majitelce se posílá až po odpovědi zákazníkovi, ať prodleva/chyba
+// s odesláním objednávku nezablokuje (stejný vzor jako u rezervací).
+odeslat_upozorneni_objednavky({
+  objednavka_id, celkem, jmeno, email, telefon, ulice, mesto, psc, doprava, platba, polozky
+}).catch(e => console.error('Upozorneni majitelce o objednavce se nepodarilo odeslat:', e.message));
 
   } catch (err) {
     await client.query('ROLLBACK');
