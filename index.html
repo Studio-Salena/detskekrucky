@@ -1496,11 +1496,6 @@
     nav { display: none; }
     nav.open { display: flex; }
 
-    /* Otevírací doba fixed - na mobilu schovat (přesahovala by do obsahu), zůstává v patičce */
-    #oteviraci-box {
-      display: none !important;
-    }
-
     /* Ticker text menší */
     .ticker-track { font-size: 0.7rem; gap: 20px; }
 
@@ -2156,13 +2151,33 @@ async function newsletterOdeslat(e) {
   <div style="font-family:'Dancing Script',cursive; font-size:1.1rem; color:var(--brown); margin-bottom:8px;">🕐 Otevírací doba</div>
   <script>
     (function() {
+      var banner = document.getElementById('promo-banner');
+      var box = document.getElementById('oteviraci-box');
+      if (!banner || !box) return;
+      // Box zůstává hned za bannerem v DOM - na mobilu se tak vykreslí jako pruh
+      // hned pod ním, na tabletu/desktopu je position:fixed a DOM pořadí je jedno.
+      banner.insertAdjacentElement('afterend', box);
+
+      var mq = window.matchMedia('(max-width: 480px)');
       function pozicovatOteviraciBox() {
-        var banner = document.getElementById('promo-banner');
-        var box = document.getElementById('oteviraci-box');
-        if (!banner || !box) return;
-        var rect = banner.getBoundingClientRect();
-        box.style.top = Math.round(rect.bottom + window.scrollY + 12) + 'px';
+        if (mq.matches) {
+          box.style.position = 'static';
+          box.style.top = 'auto';
+          box.style.left = 'auto';
+          box.style.right = 'auto';
+          box.style.width = 'fit-content';
+          box.style.margin = '12px auto 0';
+        } else {
+          box.style.position = 'fixed';
+          box.style.left = 'auto';
+          box.style.right = '20px';
+          box.style.width = 'auto';
+          box.style.margin = '0';
+          var rect = banner.getBoundingClientRect();
+          box.style.top = Math.round(rect.bottom + window.scrollY + 12) + 'px';
+        }
       }
+      mq.addEventListener('change', pozicovatOteviraciBox);
       window.addEventListener('load', pozicovatOteviraciBox);
       window.addEventListener('resize', pozicovatOteviraciBox);
       pozicovatOteviraciBox();
