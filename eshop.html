@@ -493,14 +493,13 @@ footer {
       <div class="logo-sub">Barefoot obuv</div>
     </div>
   </a>
-  <nav>
-    <button class="nav-btn active" onclick="scrollToProducts()">Obchod</button>
-    <button class="nav-btn" onclick="openUcet()" id="navUcet">&#128100;</button>
-  </nav>
-  <button class="cart-btn" onclick="openCart()">
-    &#128722;
-    <span class="cart-count" id="cartCount">0</span>
-  </button>
+  <div style="display:flex;align-items:center;gap:4px">
+    <button class="cart-btn" onclick="openUcet()" id="navUcet" title="Můj účet">&#128100;</button>
+    <button class="cart-btn" onclick="openCart()">
+      &#128722;
+      <span class="cart-count" id="cartCount">0</span>
+    </button>
+  </div>
 </header>
 
 <!-- HERO -->
