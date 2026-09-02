@@ -58,6 +58,9 @@ nav{display:flex;align-items:center;gap:8px}
 .hero h1 span{color:var(--sage)}
 .hero p{color:var(--text-light);font-size:1.05rem;max-width:600px;margin:0 auto 32px;line-height:1.7}
 .hero-btns{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+.hero-whatsapp{display:inline-flex;align-items:center;gap:8px;margin-top:18px;color:#128c4a;font-family:'Nunito',sans-serif;font-weight:700;font-size:0.9rem;text-decoration:none}
+.hero-whatsapp:hover{text-decoration:underline}
+.hero-whatsapp svg{width:20px;height:20px;fill:#25d366;flex-shrink:0}
 .btn-primary{padding:14px 32px;background:linear-gradient(135deg,var(--brown),var(--brown-dark));color:#fff;border:none;border-radius:30px;font-family:'Nunito',sans-serif;font-weight:700;font-size:0.95rem;cursor:pointer;text-transform:uppercase;letter-spacing:1px;transition:all 0.2s;box-shadow:0 6px 20px rgba(139,69,19,0.35)}
 .btn-primary:hover{background:var(--brown-dark);transform:translateY(-2px)}
 .btn-outline{padding:14px 32px;background:#fff;color:var(--brown);border:2px solid var(--brown);border-radius:30px;font-family:'Nunito',sans-serif;font-weight:700;font-size:0.95rem;cursor:pointer;text-transform:uppercase;letter-spacing:1px;transition:all 0.2s}
@@ -513,6 +516,15 @@ footer {
   <div class="hero-btns">
     <button class="btn-primary" onclick="scrollToProducts()">Prohlédnout kolekci</button>
     <button class="btn-outline">Poradna velikostí</button>
+  </div>
+  <div style="text-align:center">
+    <a href="https://wa.me/420773517733?text=Dobr%C3%BD%20den%2C%20pot%C5%99ebovala%20bych%20poradit%20s%20v%C3%BDb%C4%9Brem%20velikosti%20boti%C4%8Dek." class="hero-whatsapp" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+        <path d="M12 0C5.373 0 0 5.373 0 12c0 2.117.549 4.107 1.51 5.833L.057 23.215a.75.75 0 0 0 .916.916l5.382-1.453A11.95 11.95 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75a9.712 9.712 0 0 1-4.953-1.355l-.355-.21-3.676.993.993-3.588-.228-.37A9.712 9.712 0 0 1 2.25 12C2.25 6.615 6.615 2.25 12 2.25S21.75 6.615 21.75 12 17.385 21.75 12 21.75z"/>
+      </svg>
+      Nevíte si rady s velikostí? Napište nám na WhatsApp
+    </a>
   </div>
 </section>
 
@@ -1513,7 +1525,7 @@ async function nacistMojeObjednavky() {
 
 <!-- FLOATING CONTACT BUTTONS -->
 <div class="float-contact">
-  <a href="https://wa.me/420000000000" class="whatsapp" target="_blank" title="WhatsApp">
+  <a href="https://wa.me/420773517733" class="whatsapp" target="_blank" title="WhatsApp">
     <span class="tooltip">Napište nám na WhatsApp</span>
     <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
       <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
