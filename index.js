@@ -19,6 +19,7 @@ const newsletterRoutes = require('./routes/newsletter');
 const mobilniSkenRoutes = require('./routes/mobilnisken');
 const prodejnaRoutes = require('./routes/prodejna');
 const vratkyZadostiRoutes = require('./routes/vratkyZadosti');
+const poradnaZadostiRoutes = require('./routes/poradnaZadosti');
 const poukazyRoutes = require('./routes/poukazy');
 const vyzadovatAdmina = require('./middleware/adminAuth');
 const { jeZablokovana, zaznamenatNeuspech, resetovat } = require('./middleware/loginLimiter');
@@ -79,6 +80,7 @@ app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/mobilni-sken', mobilniSkenRoutes);
 app.use('/api/prodejna', prodejnaRoutes);
 app.use('/api/vratky-zadosti', vratkyZadostiRoutes);
+app.use('/api/poradna-zadosti', poradnaZadostiRoutes);
 app.use('/api/poukazy', poukazyRoutes);
 
 // Texty webu (výchozí hodnoty, přepíšou se z DB)

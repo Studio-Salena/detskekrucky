@@ -61,6 +61,13 @@ nav{display:flex;align-items:center;gap:8px}
 .hero-whatsapp{display:inline-flex;align-items:center;gap:8px;margin-top:18px;color:#128c4a;font-family:'Nunito',sans-serif;font-weight:700;font-size:0.9rem;text-decoration:none}
 .hero-whatsapp:hover{text-decoration:underline}
 .hero-whatsapp svg{width:20px;height:20px;fill:#25d366;flex-shrink:0}
+.poradna-panel{background:#fff;border-radius:20px;border:2px solid var(--tan-light);padding:24px;max-width:460px;margin:24px auto 0;text-align:left;box-shadow:0 8px 30px rgba(139,69,19,0.15)}
+.poradna-panel h3{font-family:'Dancing Script',cursive;color:var(--brown);font-size:1.3rem;margin-bottom:4px;text-align:center}
+.poradna-panel p.poradna-sub{color:var(--text-light);font-size:0.85rem;text-align:center;margin-bottom:16px}
+.poradna-panel textarea{width:100%;padding:11px 14px;border:2px solid var(--tan-light);border-radius:10px;font-family:'Nunito',sans-serif;font-size:16px;outline:none;background:#fff;resize:vertical}
+.poradna-panel textarea:focus{border-color:var(--brown)}
+.poradna-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:480px){.poradna-row{grid-template-columns:1fr}}
 .btn-primary{padding:14px 32px;background:linear-gradient(135deg,var(--brown),var(--brown-dark));color:#fff;border:none;border-radius:30px;font-family:'Nunito',sans-serif;font-weight:700;font-size:0.95rem;cursor:pointer;text-transform:uppercase;letter-spacing:1px;transition:all 0.2s;box-shadow:0 6px 20px rgba(139,69,19,0.35)}
 .btn-primary:hover{background:var(--brown-dark);transform:translateY(-2px)}
 .btn-outline{padding:14px 32px;background:#fff;color:var(--brown);border:2px solid var(--brown);border-radius:30px;font-family:'Nunito',sans-serif;font-weight:700;font-size:0.95rem;cursor:pointer;text-transform:uppercase;letter-spacing:1px;transition:all 0.2s}
@@ -514,7 +521,7 @@ footer {
   <p>Zdravá a stylová barefoot obuv pro každý věk – od prvních krůčků až po školní výlety. Nechte nožičky růst přirozeně.</p>
   <div class="hero-btns">
     <button class="btn-primary" onclick="scrollToProducts()">Prohlédnout kolekci</button>
-    <button class="btn-outline">Poradna velikostí</button>
+    <button class="btn-outline" onclick="togglePoradnaForm()">Poradna velikostí</button>
   </div>
   <div style="text-align:center">
     <a href="https://wa.me/420773517733?text=Dobr%C3%BD%20den%2C%20pot%C5%99ebovala%20bych%20poradit%20s%20v%C3%BDb%C4%9Brem%20velikosti%20boti%C4%8Dek." class="hero-whatsapp" target="_blank" rel="noopener">
@@ -524,6 +531,27 @@ footer {
       </svg>
       Nevíte si rady s velikostí? Napište nám na WhatsApp
     </a>
+  </div>
+
+  <div class="poradna-panel" id="poradnaPanel" style="display:none">
+    <h3>👣 Poradna velikostí</h3>
+    <p class="poradna-sub">Napište nám pár údajů o nožičce a ozveme se s doporučením.</p>
+    <div id="poradnaMsg"></div>
+    <div class="poradna-row">
+      <div class="form-group"><label>Věk dítěte</label><input type="text" id="poradnaVek" placeholder="např. 3 roky"></div>
+      <div class="form-group"><label>Délka nožičky (mm)</label><input type="number" id="poradnaMm" placeholder="150"></div>
+    </div>
+    <div class="form-group"><label>Poznámka k nožičce (nepovinné)</label><textarea id="poradnaPoznamka" rows="2" placeholder="např. má širší nožku a vysoký nárt"></textarea></div>
+    <div class="poradna-row">
+      <div class="form-group"><label>E-mail</label><input type="email" id="poradnaEmail" placeholder="jana@email.cz"></div>
+      <div class="form-group"><label>Telefon</label><input type="tel" id="poradnaTelefon" placeholder="777 123 456"></div>
+    </div>
+    <p style="font-size:0.78rem;color:var(--text-light);margin:-6px 0 14px">Stačí vyplnit jeden kontakt, ale klidně oba.</p>
+    <div class="honeypot-pole" aria-hidden="true">
+      <label for="poradnaWeb">Nevyplňujte toto pole</label>
+      <input type="text" id="poradnaWeb" tabindex="-1" autocomplete="off">
+    </div>
+    <button class="modal-add-btn" id="poradnaSubmitBtn" onclick="odeslatPoradnu()" style="margin-bottom:0">Odeslat dotaz 💌</button>
   </div>
 </section>
 
@@ -571,7 +599,7 @@ footer {
   <div class="footer-links">
     <a href="tel:773517733">&#128222; 773 517 733</a>
     <a href="mailto:info@detskekrucky.cz">&#9993; info@detskekrucky.cz</a>
-    <a href="https://hasalovaalena-glitch.github.io/detskekrucky/obchodni-podminky.html">Obchodní podmínky</a>
+    <a href="obchodni-podminky.html">Obchodní podmínky</a>
     <a href="reklamacni-rad.html">Reklamační řád</a>
     <a href="odstoupeni-od-smlouvy.html">Odstoupení od smlouvy</a>
     <a href="#" onclick="openModal('modalVratky');return false;">↩️ Vrátit zboží</a>
@@ -947,6 +975,72 @@ function searchProducts(query) {
 
 function scrollToProducts() {
   document.getElementById('produkty').scrollIntoView({behavior:'smooth'});
+}
+
+function togglePoradnaForm() {
+  const panel = document.getElementById('poradnaPanel');
+  const otevrena = panel.style.display === 'block';
+  panel.style.display = otevrena ? 'none' : 'block';
+  if (!otevrena) panel.scrollIntoView({behavior:'smooth', block:'center'});
+}
+
+const PORADNA_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PORADNA_TELEFON_RE = /^(\+420\s?)?\d{3}\s?\d{3}\s?\d{3}$/;
+
+async function odeslatPoradnu() {
+  const vek_dite = document.getElementById('poradnaVek').value.trim();
+  const delka_mm = document.getElementById('poradnaMm').value.trim();
+  const poznamka = document.getElementById('poradnaPoznamka').value.trim();
+  const email = document.getElementById('poradnaEmail').value.trim();
+  const telefon = document.getElementById('poradnaTelefon').value.trim();
+  const webova_stranka = document.getElementById('poradnaWeb').value;
+  const msg = document.getElementById('poradnaMsg');
+
+  if (!vek_dite && !delka_mm) {
+    msg.innerHTML = '<div class="msg msg-error">Napište prosím aspoň věk dítěte nebo naměřenou délku nožičky.</div>';
+    return;
+  }
+  const emailOk = email && PORADNA_EMAIL_RE.test(email);
+  const telefonOk = telefon && PORADNA_TELEFON_RE.test(telefon);
+  if (!emailOk && !telefonOk) {
+    msg.innerHTML = '<div class="msg msg-error">Zadejte prosím platný e-mail nebo telefon, ať se vám můžeme ozvat.</div>';
+    return;
+  }
+  if (email && !emailOk) {
+    msg.innerHTML = '<div class="msg msg-error">Zadaný e-mail nevypadá platně, zkontrolujte ho prosím.</div>';
+    return;
+  }
+  if (telefon && !telefonOk) {
+    msg.innerHTML = '<div class="msg msg-error">Zadejte prosím platné telefonní číslo (např. 777 123 456).</div>';
+    return;
+  }
+
+  const btn = document.getElementById('poradnaSubmitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Odesílám...';
+
+  try {
+    const res = await fetch(API + '/poradna-zadosti', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ vek_dite, delka_mm: delka_mm || null, poznamka, email, telefon, webova_stranka })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      msg.innerHTML = '<div class="msg msg-success">💌 Dotaz odeslán! Ozveme se vám co nejdřív.</div>';
+      ['poradnaVek','poradnaMm','poradnaPoznamka','poradnaEmail','poradnaTelefon'].forEach(id => document.getElementById(id).value = '');
+      btn.textContent = 'Odesláno! ✓';
+      setTimeout(() => { btn.disabled = false; btn.textContent = 'Odeslat dotaz 💌'; msg.innerHTML = ''; }, 4000);
+    } else {
+      msg.innerHTML = `<div class="msg msg-error">${data.chyba || 'Chyba serveru, zkuste to prosím znovu.'}</div>`;
+      btn.disabled = false;
+      btn.textContent = 'Odeslat dotaz 💌';
+    }
+  } catch(e) {
+    msg.innerHTML = '<div class="msg msg-error">Chyba při odesílání. Zkuste to prosím znovu.</div>';
+    btn.disabled = false;
+    btn.textContent = 'Odeslat dotaz 💌';
+  }
 }
 
 function openDetail(id) {
@@ -1515,7 +1609,7 @@ async function nacistMojeObjednavky() {
 
 <!-- COOKIE LIŠTA -->
 <div class="cookie-bar" id="cookieBar" style="display:none">
-  <p>🍪 Tento web používá cookies pro zlepšení vašeho zážitku. Více informací v <a href="https://hasalovaalena-glitch.github.io/detskekrucky/obchodni-podminky.html">obchodních podmínkách</a>.</p>
+  <p>🍪 Tento web používá cookies pro zlepšení vašeho zážitku. Více informací v <a href="obchodni-podminky.html">obchodních podmínkách</a>.</p>
   <div class="cookie-btns">
     <button class="cookie-decline" onclick="cookieDecline()">Odmítnout</button>
     <button class="cookie-accept" onclick="cookieAccept()">Přijmout vše ✓</button>

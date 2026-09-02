@@ -281,6 +281,54 @@ async function odeslat_upozorneni_vratky(zadost) {
   console.log('Upozorneni na zadost o vratku odeslano majitelce, objednavka #', zadost.objednavka_id);
 }
 
+// Potvrzení přijetí krátkého dotazu z "Poradny velikostí" zákaznici
+async function odeslat_potvrzeni_poradna(zadost) {
+  await odeslatEmail({
+    to: zadost.email,
+    subject: 'Přijali jsme váš dotaz na velikost – Dětské krůčky',
+    html: `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+        <h1 style="color:#FF6B35">Děkujeme za dotaz! 👣</h1>
+        <p>Ahoj,</p>
+        <p>přijali jsme váš dotaz z poradny velikostí a brzy se vám ozveme s doporučením.</p>
+        <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-top:12px">
+          ${zadost.vek_dite ? `<p style="margin:0 0 6px 0"><strong>Věk dítěte:</strong> ${zadost.vek_dite}</p>` : ''}
+          ${zadost.delka_mm ? `<p style="margin:0 0 6px 0"><strong>Naměřená délka nožičky:</strong> ${zadost.delka_mm} mm</p>` : ''}
+          ${zadost.poznamka ? `<p style="margin:0"><strong>Poznámka:</strong> ${zadost.poznamka}</p>` : ''}
+        </div>
+        <hr>
+        <p style="color:#666;font-size:13px">
+          Dětské krůčky | 773 517 733 | info@detskekrucky.cz
+        </p>
+      </div>
+    `
+  });
+  console.log('Potvrzeni dotazu na poradnu odeslano na:', zadost.email);
+}
+
+// Upozornění majitelce o novém dotazu z "Poradny velikostí"
+async function odeslat_upozorneni_poradna(zadost) {
+  await odeslatEmail({
+    to: MAJITELKA_EMAIL,
+    subject: '👣 Nový dotaz z poradny velikostí',
+    html: `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+        <h2 style="color:#FF6B35">👣 Nový dotaz na velikost</h2>
+        ${zadost.vek_dite ? `<p><strong>Věk dítěte:</strong> ${zadost.vek_dite}</p>` : ''}
+        ${zadost.delka_mm ? `<p><strong>Naměřená délka nožičky:</strong> ${zadost.delka_mm} mm</p>` : ''}
+        ${zadost.poznamka ? `<p><strong>Poznámka k nožičce:</strong> ${zadost.poznamka}</p>` : ''}
+        <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-top:12px">
+          <p style="margin:0 0 6px 0"><strong>E-mail:</strong> ${zadost.email || '—'}</p>
+          <p style="margin:0"><strong>Telefon:</strong> ${zadost.telefon || '—'}</p>
+        </div>
+        <hr>
+        <p style="color:#666;font-size:13px">Přehled dotazů je v adminu.</p>
+      </div>
+    `
+  });
+  console.log('Upozorneni na dotaz z poradny odeslano majitelce, #', zadost.id);
+}
+
 // Zkušební e-mail – pro ověření, že server umí odesílat (RESEND_API_KEY + ověřená doména)
 async function odeslat_test(komu) {
   await odeslatEmail({
@@ -298,4 +346,4 @@ async function odeslat_test(komu) {
   });
 }
 
-module.exports = { odeslat_potvrzeni, odeslat_upozorneni_objednavky, odeslat_potvrzeni_rezervace, odeslat_potvrzeni_terminu, odeslat_upozorneni_rezervace, odeslat_potvrzeni_vratky, odeslat_upozorneni_vratky, odeslat_test };
+module.exports = { odeslat_potvrzeni, odeslat_upozorneni_objednavky, odeslat_potvrzeni_rezervace, odeslat_potvrzeni_terminu, odeslat_upozorneni_rezervace, odeslat_potvrzeni_vratky, odeslat_upozorneni_vratky, odeslat_potvrzeni_poradna, odeslat_upozorneni_poradna, odeslat_test };
