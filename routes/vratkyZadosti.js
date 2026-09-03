@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
 const vyzadovatAdmina = require('../middleware/adminAuth');
+const { jeZablokovana, zaznamenatZadost } = require('../middleware/vratkyLimiter');
 const { odeslat_potvrzeni_vratky, odeslat_upozorneni_vratky } = require('./emaily');
 
 async function initTabulka() {
@@ -33,9 +34,18 @@ initTabulka();
 // POST /api/vratky-zadosti/overit – najít objednávku podle čísla + e-mailu
 router.post('/overit', async (req, res) => {
   const { objednavka_id, email } = req.body;
+
+  // Rate limit i tady - endpoint jen ověřuje shodu čísla objednávky a e-mailu,
+  // bez něj by šlo hádat platné kombinace hrubou silou.
+  const zbyvaSekund = jeZablokovana(req.ip);
+  if (zbyvaSekund > 0) {
+    return res.status(429).json({ chyba: `Příliš mnoho pokusů z tohoto místa. Zkuste to znovu za ${Math.ceil(zbyvaSekund / 60)} min.` });
+  }
+
   if (!objednavka_id || !email) {
     return res.status(400).json({ chyba: 'Zadejte prosím číslo objednávky a e-mail.' });
   }
+  zaznamenatZadost(req.ip);
   try {
     const objednavka = await pool.query(`
       SELECT o.id, o.stav, o.celkem, o.vytvoreno, z.email
@@ -63,7 +73,17 @@ router.post('/overit', async (req, res) => {
 
 // POST /api/vratky-zadosti – podat žádost o vrácení
 router.post('/', async (req, res) => {
-  const { objednavka_id, email, jmeno, telefon, polozky, duvod } = req.body;
+  const { objednavka_id, email, jmeno, telefon, polozky, duvod, webova_stranka } = req.body;
+
+  // Honeypot - skryté pole, které reální uživatelé nikdy nevyplní.
+  if (webova_stranka) {
+    return res.json({ id: 0 });
+  }
+
+  const zbyvaSekund = jeZablokovana(req.ip);
+  if (zbyvaSekund > 0) {
+    return res.status(429).json({ chyba: `Příliš mnoho žádostí z tohoto místa. Zkuste to znovu za ${Math.ceil(zbyvaSekund / 60)} min.` });
+  }
 
   if (!objednavka_id || !email || !Array.isArray(polozky) || !polozky.length) {
     return res.status(400).json({ chyba: 'Chybí povinné údaje.' });
@@ -86,6 +106,7 @@ router.post('/', async (req, res) => {
       [objednavka_id, jmeno || null, email, telefon || null, JSON.stringify(polozky), duvod || null]
     );
 
+    zaznamenatZadost(req.ip);
     res.json(result.rows[0]);
 
     // Potvrzení zákazníkovi (zákonná povinnost) i upozornění majitelce se posílají

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
 const vyzadovatAdmina = require('../middleware/adminAuth');
+const { jeZablokovana, zaznamenatDotaz } = require('../middleware/poradnaLimiter');
 const { odeslat_potvrzeni_poradna, odeslat_upozorneni_poradna } = require('./emaily');
 
 async function initTabulka() {
@@ -38,6 +39,11 @@ router.post('/', async (req, res) => {
     return res.json({ id: 0 });
   }
 
+  const zbyvaSekund = jeZablokovana(req.ip);
+  if (zbyvaSekund > 0) {
+    return res.status(429).json({ chyba: `Příliš mnoho dotazů z tohoto místa. Zkuste to znovu za ${Math.ceil(zbyvaSekund / 60)} min.` });
+  }
+
   const emailOk = email && EMAIL_RE.test(String(email).trim());
   const telefonOk = telefon && TELEFON_RE.test(String(telefon).trim());
   if (!emailOk && !telefonOk) {
@@ -53,6 +59,7 @@ router.post('/', async (req, res) => {
       [vek_dite || null, delka_mm ? parseInt(delka_mm) : null, sirka_mm ? parseInt(sirka_mm) : null, poznamka || null, email || null, telefon || null]
     );
     const zadost = result.rows[0];
+    zaznamenatDotaz(req.ip);
     res.json(zadost);
 
     // E-maily se posílají až po odpovědi, ať prodleva/chyba s odesláním dotaz nezablokuje.

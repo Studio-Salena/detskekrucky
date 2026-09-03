@@ -509,7 +509,6 @@ footer {
   <h1>Botičky pro <span>šikovné</span> nožičky</h1>
   <p>Zdravá a stylová barefoot obuv pro každý věk – od prvních krůčků až po školní výlety. Nechte nožičky růst přirozeně.</p>
   <div class="hero-btns">
-    <button class="btn-primary" onclick="scrollToProducts()">Prohlédnout kolekci</button>
     <button class="btn-outline" onclick="togglePoradnaForm()">Poradna velikostí</button>
   </div>
   <div style="text-align:center">
@@ -552,14 +551,6 @@ footer {
   </div>
 </div>
 
-<!-- BENEFITS -->
-<div class="benefits">
-  <div class="benefit"><div class="benefit-icon">🌿</div><div class="benefit-text">Barefoot filozofie</div></div>
-  
-  <div class="benefit"><div class="benefit-icon">🔄</div><div class="benefit-text">Vrácení do 14 dnů</div></div>
-  <div class="benefit"><div class="benefit-icon">💚</div><div class="benefit-text">Poradíme s výběrem</div></div>
-</div>
-
 <!-- FILTERS -->
 <div class="filters-wrap">
   <div>
@@ -575,6 +566,14 @@ footer {
       <input type="text" placeholder="Hledat boty..." oninput="searchProducts(this.value)" id="searchInput">
     </div>
   </div>
+</div>
+
+<!-- BENEFITS -->
+<div class="benefits">
+  <div class="benefit"><div class="benefit-icon">🌿</div><div class="benefit-text">Barefoot filozofie</div></div>
+
+  <div class="benefit"><div class="benefit-icon">🔄</div><div class="benefit-text">Vrácení do 14 dnů</div></div>
+  <div class="benefit"><div class="benefit-icon">💚</div><div class="benefit-text">Poradíme s výběrem</div></div>
 </div>
 
 <!-- PRODUCTS -->
@@ -682,6 +681,12 @@ footer {
       <div style="font-size:0.85rem;margin-bottom:8px">Zaplaťte prosím na účet <strong>2003533776/2010</strong>, případně naskenujte QR kód v bankovní aplikaci:</div>
       <img id="chPrevodQr" style="width:180px;height:180px;border-radius:8px" alt="QR platba">
     </div>
+    <div class="form-group" style="display:flex;align-items:flex-start;gap:8px">
+      <input type="checkbox" id="chSouhlas" style="width:18px;height:18px;flex-shrink:0;margin-top:2px">
+      <label for="chSouhlas" style="font-size:0.85rem;font-weight:400;color:var(--text);cursor:pointer">
+        Souhlasím s <a href="obchodni-podminky.html" target="_blank" style="color:var(--brown);font-weight:700">obchodními podmínkami</a> a zpracováním osobních údajů pro účely vyřízení objednávky.
+      </label>
+    </div>
     <div class="honeypot-pole" aria-hidden="true">
       <label for="chWebovaStranka">Nevyplňujte toto pole</label>
       <input type="text" id="chWebovaStranka" name="webova_stranka" tabindex="-1" autocomplete="off">
@@ -737,6 +742,10 @@ footer {
       <div id="vratkyPolozkySeznam" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px"></div>
       <div class="form-group"><label>Důvod vrácení</label><textarea id="vratkyDuvod" rows="3" placeholder="Např. nesedí velikost..." style="width:100%;padding:10px;border:2px solid var(--tan-light);border-radius:10px;font-family:inherit;resize:vertical"></textarea></div>
       <div class="form-group"><label>Telefon (nepovinné, pro rychlejší domluvu)</label><input type="text" id="vratkyTelefon" placeholder="+420 777 123 456"></div>
+      <div class="honeypot-pole" aria-hidden="true">
+        <label for="vratkyWeb">Nevyplňujte toto pole</label>
+        <input type="text" id="vratkyWeb" tabindex="-1" autocomplete="off">
+      </div>
       <button onclick="odeslatZadostVratky()" style="width:100%;padding:14px;background:var(--brown);color:#fff;border:none;border-radius:12px;font-family:'Nunito',sans-serif;font-weight:700;font-size:1rem;cursor:pointer;margin-bottom:10px">Odeslat žádost o vrácení</button>
     </div>
 
@@ -1306,6 +1315,10 @@ async function odeslatObjednavku() {
     document.getElementById('checkoutMsg').innerHTML = `<div class="msg msg-error">${chybaValidace}</div>`;
     return;
   }
+  if (!document.getElementById('chSouhlas').checked) {
+    document.getElementById('checkoutMsg').innerHTML = '<div class="msg msg-error">Pro odeslání objednávky je potřeba souhlasit s obchodními podmínkami.</div>';
+    return;
+  }
 
   const btn = document.getElementById('submitBtn');
   btn.disabled = true;
@@ -1533,7 +1546,8 @@ async function odeslatZadostVratky() {
         email: document.getElementById('vratkyObjEmail').value.trim(),
         telefon: document.getElementById('vratkyTelefon').value.trim(),
         polozky: vybranePolozky,
-        duvod: document.getElementById('vratkyDuvod').value.trim()
+        duvod: document.getElementById('vratkyDuvod').value.trim(),
+        webova_stranka: document.getElementById('vratkyWeb').value
       })
     });
     if (res.ok) {
