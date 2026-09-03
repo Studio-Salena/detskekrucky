@@ -25,7 +25,7 @@ initSkladSloupce();
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT p.id, p.nazev, p.znacka, p.emoji, p.kategorie, p.cena, p.cena_puvodni, p.typ_nohy,
+      SELECT p.id, p.nazev, p.znacka, p.emoji, p.kategorie, p.cena, p.cena_puvodni, p.typ_nohy, p.popis,
              s.velikost, s.ean, s.pocet_kusu, s.min_pocet, s.delka_mm, s.sirka_mm, s.dostupnost,
              CASE WHEN s.pocet_kusu <= s.min_pocet THEN true ELSE false END as nizky_stav
       FROM produkty p
