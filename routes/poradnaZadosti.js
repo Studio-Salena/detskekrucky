@@ -17,6 +17,7 @@ async function initTabulka() {
         stav TEXT NOT NULL DEFAULT 'nova',
         vytvoreno TIMESTAMPTZ DEFAULT NOW()
       );
+      ALTER TABLE poradna_zadosti ADD COLUMN IF NOT EXISTS sirka_mm INTEGER;
     `);
     console.log('Poradna_zadosti tabulka OK');
   } catch (e) {
@@ -30,7 +31,7 @@ const TELEFON_RE = /^(\+420\s?)?\d{3}\s?\d{3}\s?\d{3}$/;
 
 // POST /api/poradna-zadosti – maminka odešle krátký dotaz na velikost (veřejné)
 router.post('/', async (req, res) => {
-  const { vek_dite, delka_mm, poznamka, email, telefon, webova_stranka } = req.body;
+  const { vek_dite, delka_mm, sirka_mm, poznamka, email, telefon, webova_stranka } = req.body;
 
   // Honeypot - skryté pole, které reální uživatelé nikdy nevyplní.
   if (webova_stranka) {
@@ -48,8 +49,8 @@ router.post('/', async (req, res) => {
 
   try {
     const result = await pool.query(
-      'INSERT INTO poradna_zadosti (vek_dite, delka_mm, poznamka, email, telefon) VALUES ($1,$2,$3,$4,$5) RETURNING *',
-      [vek_dite || null, delka_mm ? parseInt(delka_mm) : null, poznamka || null, email || null, telefon || null]
+      'INSERT INTO poradna_zadosti (vek_dite, delka_mm, sirka_mm, poznamka, email, telefon) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+      [vek_dite || null, delka_mm ? parseInt(delka_mm) : null, sirka_mm ? parseInt(sirka_mm) : null, poznamka || null, email || null, telefon || null]
     );
     const zadost = result.rows[0];
     res.json(zadost);

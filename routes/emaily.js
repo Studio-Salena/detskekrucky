@@ -294,6 +294,7 @@ async function odeslat_potvrzeni_poradna(zadost) {
         <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-top:12px">
           ${zadost.vek_dite ? `<p style="margin:0 0 6px 0"><strong>Věk dítěte:</strong> ${zadost.vek_dite}</p>` : ''}
           ${zadost.delka_mm ? `<p style="margin:0 0 6px 0"><strong>Naměřená délka nožičky:</strong> ${zadost.delka_mm} mm</p>` : ''}
+          ${zadost.sirka_mm ? `<p style="margin:0 0 6px 0"><strong>Naměřená šířka nožičky:</strong> ${zadost.sirka_mm} mm</p>` : ''}
           ${zadost.poznamka ? `<p style="margin:0"><strong>Poznámka:</strong> ${zadost.poznamka}</p>` : ''}
         </div>
         <hr>
@@ -316,6 +317,7 @@ async function odeslat_upozorneni_poradna(zadost) {
         <h2 style="color:#FF6B35">👣 Nový dotaz na velikost</h2>
         ${zadost.vek_dite ? `<p><strong>Věk dítěte:</strong> ${zadost.vek_dite}</p>` : ''}
         ${zadost.delka_mm ? `<p><strong>Naměřená délka nožičky:</strong> ${zadost.delka_mm} mm</p>` : ''}
+        ${zadost.sirka_mm ? `<p><strong>Naměřená šířka nožičky:</strong> ${zadost.sirka_mm} mm</p>` : ''}
         ${zadost.poznamka ? `<p><strong>Poznámka k nožičce:</strong> ${zadost.poznamka}</p>` : ''}
         <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-top:12px">
           <p style="margin:0 0 6px 0"><strong>E-mail:</strong> ${zadost.email || '—'}</p>

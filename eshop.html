@@ -537,9 +537,10 @@ footer {
     <h3>👣 Poradna velikostí</h3>
     <p class="poradna-sub">Napište nám pár údajů o nožičce a ozveme se s doporučením.</p>
     <div id="poradnaMsg"></div>
+    <div class="form-group"><label>Věk dítěte</label><input type="text" id="poradnaVek" placeholder="např. 3 roky"></div>
     <div class="poradna-row">
-      <div class="form-group"><label>Věk dítěte</label><input type="text" id="poradnaVek" placeholder="např. 3 roky"></div>
       <div class="form-group"><label>Délka nožičky (mm)</label><input type="number" id="poradnaMm" placeholder="150"></div>
+      <div class="form-group"><label>Šířka nožičky (mm)</label><input type="number" id="poradnaSirkaMm" placeholder="60"></div>
     </div>
     <div class="form-group"><label>Poznámka k nožičce (nepovinné)</label><textarea id="poradnaPoznamka" rows="2" placeholder="např. má širší nožku a vysoký nárt"></textarea></div>
     <div class="poradna-row">
@@ -1024,6 +1025,7 @@ const PORADNA_TELEFON_RE = /^(\+420\s?)?\d{3}\s?\d{3}\s?\d{3}$/;
 async function odeslatPoradnu() {
   const vek_dite = document.getElementById('poradnaVek').value.trim();
   const delka_mm = document.getElementById('poradnaMm').value.trim();
+  const sirka_mm = document.getElementById('poradnaSirkaMm').value.trim();
   const poznamka = document.getElementById('poradnaPoznamka').value.trim();
   const email = document.getElementById('poradnaEmail').value.trim();
   const telefon = document.getElementById('poradnaTelefon').value.trim();
@@ -1057,12 +1059,12 @@ async function odeslatPoradnu() {
     const res = await fetch(API + '/poradna-zadosti', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ vek_dite, delka_mm: delka_mm || null, poznamka, email, telefon, webova_stranka })
+      body: JSON.stringify({ vek_dite, delka_mm: delka_mm || null, sirka_mm: sirka_mm || null, poznamka, email, telefon, webova_stranka })
     });
     const data = await res.json();
     if (res.ok) {
       msg.innerHTML = '<div class="msg msg-success">💌 Dotaz odeslán! Ozveme se vám co nejdřív.</div>';
-      ['poradnaVek','poradnaMm','poradnaPoznamka','poradnaEmail','poradnaTelefon'].forEach(id => document.getElementById(id).value = '');
+      ['poradnaVek','poradnaMm','poradnaSirkaMm','poradnaPoznamka','poradnaEmail','poradnaTelefon'].forEach(id => document.getElementById(id).value = '');
       btn.textContent = 'Odesláno! ✓';
       setTimeout(() => { btn.disabled = false; btn.textContent = 'Odeslat dotaz 💌'; msg.innerHTML = ''; }, 4000);
     } else {
