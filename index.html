@@ -1431,19 +1431,6 @@
     box-shadow: 0 8px 24px rgba(176,94,42,0.45);
   }
 
-  /* ── JEŽEK BÉĎA FOLLOWER ── */
-  #bedas-cursor {
-    position: fixed;
-    pointer-events: none;
-    z-index: 9995;
-    font-size: 2rem;
-    transition: left 0.18s cubic-bezier(0.25,0.46,0.45,0.94),
-                top  0.18s cubic-bezier(0.25,0.46,0.45,0.94);
-    filter: drop-shadow(0 3px 8px rgba(0,0,0,0.15));
-    transform: translate(-50%, -50%);
-    display: none;
-  }
-
   /* ── BACK TO TOP ── */
   #back-to-top {
     position: fixed;
@@ -1474,18 +1461,6 @@
   #back-to-top:hover {
     transform: translateY(-4px) scale(1.1);
     box-shadow: 0 8px 24px rgba(176,94,42,0.45);
-  }
-
-  /* ── HEDGEHOG CURSOR FOLLOWER ── */
-  #beda-cursor {
-    position: fixed;
-    pointer-events: none;
-    font-size: 1.8rem;
-    z-index: 99999;
-    transition: left 0.12s ease, top 0.12s ease;
-    transform: translate(-50%, -50%);
-    filter: drop-shadow(0 2px 6px rgba(0,0,0,0.15));
-    display: none;
   }
 
   /* ── COOKIE BAR ── styly jsou přímo inline na elementu (viz konec body) ── */
@@ -2245,27 +2220,32 @@ async function newsletterOdeslat(e) {
 <!-- FOOTPRINT TRAIL SCRIPT -->
 <script>
 (function() {
-  const prints = ['👣', '👣'];
-  let lastX = 0, lastY = 0, count = 0;
+  // Na mobilu (úzká obrazovka) stopy vůbec nespouštět - při rolování jich
+  // stíhalo naskákat víc najednou, překrývaly text a sekalo to rolování.
+  if (window.innerWidth <= 768) return;
+
+  const MAX_SOUCASNE = 4;
+  let aktivnich = 0;
 
   function spawnPrint(x, y) {
+    if (aktivnich >= MAX_SOUCASNE) return;
     const el = document.createElement('div');
     el.className = 'footprint';
-    el.textContent = count % 3 === 0 ? '👣' : '👣';
+    el.textContent = '👣';
     const rot = (Math.random() * 40 - 20);
     el.style.setProperty('--rot', rot + 'deg');
     el.style.left = (x - 14) + 'px';
     el.style.top  = (y + window.scrollY - 14) + 'px';
     document.body.appendChild(el);
-    count++;
-    setTimeout(() => el.remove(), 1900);
+    aktivnich++;
+    setTimeout(() => { el.remove(); aktivnich--; }, 1900);
   }
 
   let throttle = false;
   window.addEventListener('scroll', () => {
     if (throttle) return;
     throttle = true;
-    setTimeout(() => { throttle = false; }, 180);
+    setTimeout(() => { throttle = false; }, 450);
 
     const scrollX = window.innerWidth * 0.15 + Math.sin(Date.now() / 400) * 60;
     const scrollY = window.scrollY + window.innerHeight * 0.5;
@@ -2362,9 +2342,6 @@ function closeMenu() {
 <!-- BACK TO TOP -->
 <button id="back-to-top" title="Zpět nahoru" onclick="window.scrollTo({top:0,behavior:'smooth'})">👣</button>
 
-<!-- JEŽEK BÉĎA FOLLOWER -->
-<div id="bedas-cursor">🦔</div>
-
 <script>
 // Back to top visibility
 window.addEventListener('scroll', () => {
@@ -2372,43 +2349,6 @@ window.addEventListener('scroll', () => {
   if (window.scrollY > 400) btn.classList.add('visible');
   else btn.classList.remove('visible');
 });
-
-// Ježek Béďa follows mouse with lag
-(function() {
-  const bedas = document.getElementById('bedas-cursor');
-  let mouseX = 0, mouseY = 0;
-  let currX = 0, currY = 0;
-  let lastX = 0;
-  let visible = false;
-
-  document.addEventListener('mousemove', (e) => {
-    mouseX = e.clientX;
-    mouseY = e.clientY;
-    if (!visible) {
-      bedas.style.display = 'block';
-      visible = true;
-    }
-  });
-
-  document.addEventListener('mouseleave', () => {
-    bedas.style.display = 'none';
-    visible = false;
-  });
-
-  function animate() {
-    currX += (mouseX - currX) * 0.12;
-    currY += (mouseY - currY) * 0.12;
-
-    // Flip ježek direction based on movement
-    const dir = currX < lastX ? 'scaleX(-1)' : 'scaleX(1)';
-    bedas.style.transform = `translate(-50%, -50%) ${dir}`;
-    bedas.style.left = currX + 'px';
-    bedas.style.top  = currY + 'px';
-    lastX = currX;
-    requestAnimationFrame(animate);
-  }
-  animate();
-})();
 </script>
 
 <script>

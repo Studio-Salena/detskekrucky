@@ -85,17 +85,27 @@ router.post('/', async (req, res) => {
     }
 
     // Zkontrolovat sklad (FOR UPDATE - zamkne řádky do konce transakce, aby dvě
-    // souběžné objednávky na poslední kus nemohly obě projít kontrolou) a spocitat celkem
+    // souběžné objednávky na poslední kus nemohly obě projít kontrolou) a spocitat celkem.
+    // Položky "u dodavatele" nemají reálnou sledovanou zásobu - projdou bez ohledu
+    // na pocet_kusu a při expedici se ze skladu neodečítají (viz níže).
     let celkem = 0;
+    const dostupnostMap = new Map(); // "produkt_id_velikost" -> 'skladem' | 'dodavatel'
     for (const p of polozky) {
       const sklad = await client.query(
-        'SELECT pocet_kusu FROM sklad WHERE produkt_id = $1 AND velikost = $2 FOR UPDATE',
+        'SELECT pocet_kusu, dostupnost FROM sklad WHERE produkt_id = $1 AND velikost = $2 FOR UPDATE',
         [p.produkt_id, p.velikost]
       );
-      if (sklad.rows.length === 0 || sklad.rows[0].pocet_kusu < p.pocet) {
+      if (sklad.rows.length === 0) {
         await client.query('ROLLBACK');
         return res.status(400).json({ chyba: `Nedostatek zbozi na sklade: produkt ${p.produkt_id} velikost ${p.velikost}` });
       }
+      const radek = sklad.rows[0];
+      const jeUDodavatele = radek.dostupnost === 'dodavatel';
+      if (!jeUDodavatele && radek.pocet_kusu < p.pocet) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ chyba: `Nedostatek zbozi na sklade: produkt ${p.produkt_id} velikost ${p.velikost}` });
+      }
+      dostupnostMap.set(`${p.produkt_id}_${p.velikost}`, radek.dostupnost);
       celkem += p.cena * p.pocet;
     }
 
@@ -151,20 +161,23 @@ router.post('/', async (req, res) => {
       );
     }
 
-    // Vlozit polozky a odecist ze skladu
+    // Vlozit polozky a odecist ze skladu (u položek "u dodavatele" se sklad
+    // neodečítá - pocet_kusu tam nereprezentuje reálnou fyzickou zásobu)
     for (const p of polozky) {
       await client.query(
         'INSERT INTO objednavky_polozky (objednavka_id, produkt_id, velikost, pocet, cena) VALUES ($1,$2,$3,$4,$5)',
         [objednavka_id, p.produkt_id, p.velikost, p.pocet, p.cena]
       );
-      await client.query(
-        'UPDATE sklad SET pocet_kusu = pocet_kusu - $3 WHERE produkt_id = $1 AND velikost = $2',
-        [p.produkt_id, p.velikost, p.pocet]
-      );
-      await client.query(
-        'INSERT INTO pohyby_skladu (produkt_id, velikost, typ, pocet, poznamka) VALUES ($1,$2,$3,$4,$5)',
-        [p.produkt_id, p.velikost, 'prodej', p.pocet, `Objednavka #${objednavka_id}`]
-      );
+      if (dostupnostMap.get(`${p.produkt_id}_${p.velikost}`) !== 'dodavatel') {
+        await client.query(
+          'UPDATE sklad SET pocet_kusu = pocet_kusu - $3 WHERE produkt_id = $1 AND velikost = $2',
+          [p.produkt_id, p.velikost, p.pocet]
+        );
+        await client.query(
+          'INSERT INTO pohyby_skladu (produkt_id, velikost, typ, pocet, poznamka) VALUES ($1,$2,$3,$4,$5)',
+          [p.produkt_id, p.velikost, 'prodej', p.pocet, `Objednavka #${objednavka_id}`]
+        );
+      }
     }
 
     await client.query('COMMIT');

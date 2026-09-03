@@ -10,6 +10,7 @@ async function initSkladSloupce() {
     await pool.query(`
       ALTER TABLE sklad ADD COLUMN IF NOT EXISTS delka_mm INTEGER;
       ALTER TABLE sklad ADD COLUMN IF NOT EXISTS sirka_mm INTEGER;
+      ALTER TABLE sklad ADD COLUMN IF NOT EXISTS dostupnost TEXT NOT NULL DEFAULT 'skladem';
       ALTER TABLE produkty ADD COLUMN IF NOT EXISTS typ_nohy TEXT;
     `);
     // Postgres nemá "ADD CONSTRAINT IF NOT EXISTS" - když constraint už existuje, chybu tiše ignorujeme.
@@ -25,7 +26,7 @@ router.get('/', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT p.id, p.nazev, p.znacka, p.emoji, p.kategorie, p.cena, p.cena_puvodni, p.typ_nohy,
-             s.velikost, s.ean, s.pocet_kusu, s.min_pocet, s.delka_mm, s.sirka_mm,
+             s.velikost, s.ean, s.pocet_kusu, s.min_pocet, s.delka_mm, s.sirka_mm, s.dostupnost,
              CASE WHEN s.pocet_kusu <= s.min_pocet THEN true ELSE false END as nizky_stav
       FROM produkty p
       LEFT JOIN sklad s ON p.id = s.produkt_id
@@ -47,6 +48,7 @@ router.post('/naskladnit', async (req, res) => {
   // naskladnění bez těchto polí nepřepsalo už uložené hodnoty na null.
   const eanZadan = Object.prototype.hasOwnProperty.call(req.body, 'ean');
   const rozmeryZadany = Object.prototype.hasOwnProperty.call(req.body, 'delka_mm') || Object.prototype.hasOwnProperty.call(req.body, 'sirka_mm');
+  const dostupnostZadana = Object.prototype.hasOwnProperty.call(req.body, 'dostupnost') && req.body.dostupnost;
   try {
     if (rozmeryZadany) {
       await pool.query(`
@@ -69,6 +71,14 @@ router.post('/naskladnit', async (req, res) => {
         ON CONFLICT (produkt_id, velikost)
         DO UPDATE SET pocet_kusu = sklad.pocet_kusu + $3
       `, [produkt_id, velikost, pocet]);
+    }
+    // Dostupnost (skladem / u dodavatele) se řeší samostatně, ať se nemusí
+    // násobit výše uvedené větve - řádek už v tuhle chvíli vždycky existuje.
+    if (dostupnostZadana) {
+      await pool.query(
+        'UPDATE sklad SET dostupnost = $1 WHERE produkt_id = $2 AND velikost = $3',
+        [req.body.dostupnost, produkt_id, velikost]
+      );
     }
     if (pocet > 0) {
       await pool.query(`
@@ -139,7 +149,7 @@ router.get('/nizky-stav', async (req, res) => {
 
 // Přidat nový produkt (volitelně rovnou i s první variantou - velikost/počet/EAN)
 router.post('/produkty', async (req, res) => {
-  const { nazev, znacka, emoji, popis, kategorie, cena, cena_puvodni, typ_nohy, velikost, pocet, ean, delka_mm, sirka_mm } = req.body;
+  const { nazev, znacka, emoji, popis, kategorie, cena, cena_puvodni, typ_nohy, velikost, pocet, ean, delka_mm, sirka_mm, dostupnost } = req.body;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -151,8 +161,8 @@ router.post('/produkty', async (req, res) => {
     if (velikost) {
       const pocetKusu = pocet || 0;
       await client.query(
-        'INSERT INTO sklad (produkt_id, velikost, pocet_kusu, ean, delka_mm, sirka_mm) VALUES ($1,$2,$3,$4,$5,$6)',
-        [produkt.id, velikost, pocetKusu, ean || null, delka_mm || null, sirka_mm || null]
+        'INSERT INTO sklad (produkt_id, velikost, pocet_kusu, ean, delka_mm, sirka_mm, dostupnost) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        [produkt.id, velikost, pocetKusu, ean || null, delka_mm || null, sirka_mm || null, dostupnost || 'skladem']
       );
       if (pocetKusu > 0) {
         await client.query(
@@ -191,14 +201,14 @@ router.patch('/produkty/:id', async (req, res) => {
 
 // Upravit velikost a/nebo EAN/rozměry existující položky skladu
 router.patch('/polozka/:produktId/:velikost', async (req, res) => {
-  const { velikost_nova, ean, delka_mm, sirka_mm } = req.body;
+  const { velikost_nova, ean, delka_mm, sirka_mm, dostupnost } = req.body;
   if (!velikost_nova) {
     return res.status(400).json({ chyba: 'Chybí nová velikost.' });
   }
   try {
     const result = await pool.query(
-      'UPDATE sklad SET velikost=$1, ean=$2, delka_mm=$3, sirka_mm=$4 WHERE produkt_id=$5 AND velikost=$6 RETURNING *',
-      [velikost_nova, ean || null, delka_mm || null, sirka_mm || null, req.params.produktId, req.params.velikost]
+      'UPDATE sklad SET velikost=$1, ean=$2, delka_mm=$3, sirka_mm=$4, dostupnost=$5 WHERE produkt_id=$6 AND velikost=$7 RETURNING *',
+      [velikost_nova, ean || null, delka_mm || null, sirka_mm || null, dostupnost || 'skladem', req.params.produktId, req.params.velikost]
     );
     if (!result.rows.length) {
       return res.status(404).json({ chyba: 'Položka skladu nenalezena.' });

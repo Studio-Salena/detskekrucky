@@ -986,6 +986,12 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <div class="form-group"><label>Vnitřní délka (mm, volitelné)</label><input type="number" id="nsDelkaMm" placeholder="150"></div>
       <div class="form-group"><label>Vnitřní šířka (mm, volitelné)</label><input type="number" id="nsSirkaMm" placeholder="60"></div>
     </div>
+    <div class="form-group"><label>Dostupnost</label>
+      <select id="nsDostupnost">
+        <option value="skladem">✅ Skladem</option>
+        <option value="dodavatel">🚚 Skladem u dodavatele (dodání 7-14 dní)</option>
+      </select>
+    </div>
     <div class="form-group"><label>Typ pohybu</label>
       <select id="nsTyp">
         <option value="naskladneni">➕ Naskladnění (příjem)</option>
@@ -1013,6 +1019,12 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     <div class="form-grid-2">
       <div class="form-group"><label>Vnitřní délka (mm)</label><input type="number" id="usDelkaMm" placeholder="150"></div>
       <div class="form-group"><label>Vnitřní šířka (mm)</label><input type="number" id="usSirkaMm" placeholder="60"></div>
+    </div>
+    <div class="form-group"><label>Dostupnost</label>
+      <select id="usDostupnost">
+        <option value="skladem">✅ Skladem</option>
+        <option value="dodavatel">🚚 Skladem u dodavatele (dodání 7-14 dní)</option>
+      </select>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modalUpravitSklad')">Zrušit</button>
@@ -1145,6 +1157,12 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <video id="kameraVideoPEan" style="width:100%;max-height:220px;object-fit:cover;" autoplay muted playsinline></video>
         <button class="btn btn-outline btn-sm" style="position:absolute;top:8px;right:8px;background:#fff" onclick="zavritKameruPole('kameraWrapPEan','kameraVideoPEan')">✕</button>
       </div>
+    </div>
+    <div class="form-group"><label>Dostupnost</label>
+      <select id="pDostupnost">
+        <option value="skladem">✅ Skladem</option>
+        <option value="dodavatel">🚚 Skladem u dodavatele (dodání 7-14 dní)</option>
+      </select>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modalNovyProdukt')">Zrušit</button>
@@ -1735,11 +1753,11 @@ function renderSklad(data) {
       <td style="font-size:0.82rem;color:var(--text-light)">${s.ean||'—'}</td>
       <td><strong style="color:${s.pocet_kusu===0?'var(--red)':s.nizky_stav?'var(--orange)':'var(--text)'}">${s.pocet_kusu} ks</strong></td>
       <td>${s.min_pocet} ks</td>
-      <td>${s.pocet_kusu===0?'<span class="badge badge-vyprodano">Vyprodáno</span>':s.nizky_stav?'<span class="badge badge-nizky">Nízký stav</span>':'<span class="badge badge-ok">OK</span>'}</td>
+      <td>${s.dostupnost==='dodavatel'?'<span class="badge" style="background:#e3f2fd;color:#1565c0">🚚 U dodavatele</span> ':''}${s.pocet_kusu===0?'<span class="badge badge-vyprodano">Vyprodáno</span>':s.nizky_stav?'<span class="badge badge-nizky">Nízký stav</span>':'<span class="badge badge-ok">OK</span>'}</td>
       <td style="display:flex;gap:4px">
         <button class="btn btn-green btn-sm" onclick="rychleNaskladnit(${s.id},${s.velikost},'${s.nazev}')">+</button>
         <button class="btn btn-orange btn-sm" onclick="rychleOdecist(${s.id},${s.velikost},'${s.nazev}')">−</button>
-        <button class="btn btn-outline btn-sm" onclick="upravitSkladPolozku(${s.id},${s.velikost},'${s.nazev.replace(/'/g,"\\'")}','${s.ean||''}',${s.delka_mm||0},${s.sirka_mm||0})" title="Upravit velikost/EAN/rozměry">✏️</button>
+        <button class="btn btn-outline btn-sm" onclick="upravitSkladPolozku(${s.id},${s.velikost},'${s.nazev.replace(/'/g,"\\'")}','${s.ean||''}',${s.delka_mm||0},${s.sirka_mm||0},'${s.dostupnost||'skladem'}')" title="Upravit velikost/EAN/rozměry">✏️</button>
         <button class="btn btn-red btn-sm" onclick="smazatSkladPolozku(${s.id},${s.velikost},'${s.nazev}')">🗑️</button>
       </td>
     </tr>`;
@@ -1842,7 +1860,7 @@ function rychleOdecist(id, vel, nazev) {
   adminFetch(API+'/sklad/odecist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({produkt_id:id,velikost:vel,pocet:parseInt(pocet),poznamka:'Odečtení z adminu'})})
     .then(()=>{loadSklad();alert('✅ Odečteno!');}).catch(()=>alert('❌ Chyba'));
 }
-function upravitSkladPolozku(id, vel, nazev, aktualniEan, aktualniDelkaMm, aktualniSirkaMm) {
+function upravitSkladPolozku(id, vel, nazev, aktualniEan, aktualniDelkaMm, aktualniSirkaMm, aktualniDostupnost) {
   document.getElementById('upravitSkladMsg').innerHTML = '';
   document.getElementById('upravitSkladNazev').textContent = nazev;
   document.getElementById('usProduktId').value = id;
@@ -1851,6 +1869,7 @@ function upravitSkladPolozku(id, vel, nazev, aktualniEan, aktualniDelkaMm, aktua
   document.getElementById('usEan').value = aktualniEan || '';
   document.getElementById('usDelkaMm').value = aktualniDelkaMm || '';
   document.getElementById('usSirkaMm').value = aktualniSirkaMm || '';
+  document.getElementById('usDostupnost').value = aktualniDostupnost || 'skladem';
   openModal('modalUpravitSklad');
 }
 
@@ -1861,12 +1880,13 @@ async function ulozitUpravuSkladu() {
   const ean = document.getElementById('usEan').value.trim();
   const delkaMm = document.getElementById('usDelkaMm').value;
   const sirkaMm = document.getElementById('usSirkaMm').value;
+  const dostupnost = document.getElementById('usDostupnost').value;
   const msg = document.getElementById('upravitSkladMsg');
   if (!velikostNova) { msg.innerHTML = '<div class="error-msg">Zadejte velikost.</div>'; return; }
   try {
     const res = await adminFetch(API+'/sklad/polozka/'+produktId+'/'+velikostPuvodni, {
       method:'PATCH', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ velikost_nova: parseInt(velikostNova), ean: ean || null, delka_mm: delkaMm?parseInt(delkaMm):null, sirka_mm: sirkaMm?parseInt(sirkaMm):null })
+      body: JSON.stringify({ velikost_nova: parseInt(velikostNova), ean: ean || null, delka_mm: delkaMm?parseInt(delkaMm):null, sirka_mm: sirkaMm?parseInt(sirkaMm):null, dostupnost })
     });
     const data = await res.json();
     if (res.ok) {
@@ -1889,6 +1909,7 @@ async function ulozitNaskladneni() {
     if (ean) telo.ean = ean;
     const delkaMm = document.getElementById('nsDelkaMm').value, sirkaMm = document.getElementById('nsSirkaMm').value;
     if (delkaMm || sirkaMm) { telo.delka_mm = delkaMm?parseInt(delkaMm):null; telo.sirka_mm = sirkaMm?parseInt(sirkaMm):null; }
+    telo.dostupnost = document.getElementById('nsDostupnost').value;
   }
   try {
     await adminFetch(API+ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(telo)});
@@ -1896,6 +1917,7 @@ async function ulozitNaskladneni() {
     document.getElementById('nsEan').value = '';
     document.getElementById('nsDelkaMm').value = '';
     document.getElementById('nsSirkaMm').value = '';
+    document.getElementById('nsDostupnost').value = 'skladem';
     setTimeout(()=>{closeModal('modalNaskladnit');loadSklad();loadPrehled();},1500);
   } catch(e) { document.getElementById('naskladnitMsg').innerHTML='<div class="error-msg">Chyba</div>'; }
 }
@@ -1984,7 +2006,8 @@ async function ulozitProdukt() {
       pocet: parseInt(document.getElementById('pPocet').value)||0,
       ean:document.getElementById('pEan').value||null,
       delka_mm: parseInt(document.getElementById('pDelkaMm').value)||null,
-      sirka_mm: parseInt(document.getElementById('pSirkaMm').value)||null})});
+      sirka_mm: parseInt(document.getElementById('pSirkaMm').value)||null,
+      dostupnost: document.getElementById('pDostupnost').value})});
     if (res.ok) { document.getElementById('produktMsg').innerHTML='<div class="success-msg">✅ Uloženo!</div>'; setTimeout(()=>{closeModal('modalNovyProdukt');loadProdukty();},1500); }
     else { document.getElementById('produktMsg').innerHTML='<div class="error-msg">Chyba serveru</div>'; }
   } catch(e) { document.getElementById('produktMsg').innerHTML='<div class="error-msg">Chyba</div>'; }

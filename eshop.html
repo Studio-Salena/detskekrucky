@@ -119,6 +119,7 @@ nav{display:flex;align-items:center;gap:8px}
 .product-img-default{background:linear-gradient(135deg,#fff8f0,#f5e6d3)}
 .product-badge{position:absolute;top:12px;left:12px;background:var(--brown);color:#fff;padding:4px 10px;border-radius:10px;font-size:0.7rem;font-weight:700}
 .product-badge.sale{background:#e74c3c}
+.product-badge.dodavatel{left:auto;right:12px;background:#1565c0}
 .product-info{padding:16px}
 .product-brand{font-size:0.75rem;color:var(--text-light);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
 .product-name{font-family:'Cormorant',serif;font-size:1rem;color:var(--text);margin-bottom:6px}
@@ -471,18 +472,6 @@ footer {
 #back-to-top.visible { opacity: 1; transform: translateY(0); }
 #back-to-top:hover { transform: translateY(-4px) scale(1.1); box-shadow: 0 8px 24px rgba(176,94,42,0.45); }
 
-/* ── JEŽEK BÉĎA FOLLOWER ── */
-#bedas-cursor {
-  position: fixed;
-  pointer-events: none;
-  z-index: 9995;
-  font-size: 2rem;
-  transition: left 0.18s cubic-bezier(0.25,0.46,0.45,0.94),
-              top  0.18s cubic-bezier(0.25,0.46,0.45,0.94);
-  filter: drop-shadow(0 3px 8px rgba(0,0,0,0.15));
-  transform: translate(-50%, -50%);
-  display: none;
-}
 </style>
 </head>
 <body>
@@ -635,7 +624,8 @@ footer {
     <div class="modal-price" id="detailPrice"></div>
     <div class="size-label">Vyberte velikost:</div>
     <div class="sizes-grid" id="detailSizes"></div>
-    <div id="detailRozmery" style="display:none;font-size:0.8rem;color:var(--text-light);margin:-10px 0 16px"></div>
+    <div id="detailRozmery" style="display:none;font-size:0.8rem;color:var(--text-light);margin:0 0 6px"></div>
+    <div id="detailDostupnost" style="display:none;font-size:0.85rem;font-weight:700;margin:0 0 16px"></div>
     <button class="modal-add-btn" onclick="addToCartFromModal()">&#128722; Přidat do košíku</button>
     <button class="modal-close" onclick="closeModal()">Zavřít</button>
   </div>
@@ -842,11 +832,18 @@ const KATEGORIE_CACHE_KEY = 'kategorie_cache_v1';
 const KATEGORIE_CACHE_TTL_MS = 3 * 60 * 1000;
 
 function vykreslitKategorieGrid(seznam) {
-  document.getElementById('kategorieGrid').innerHTML = seznam.map(k => `
+  const dlazdice = seznam.map(k => `
     <div class="kategorie-dlazdice" data-slug="${k.slug}" onclick="vybratKategoriiZGridu('${k.slug}')">
       <span class="ikona">${k.ikona || '&#128095;'}</span>
       <div class="nazev">${k.nazev}</div>
     </div>`).join('');
+  // Dárkový poukaz není kategorie produktů, jen rychlá zkratka na konci rozcestníku.
+  const poukazDlazdice = `
+    <div class="kategorie-dlazdice" onclick="openModal('modalPoukazy')">
+      <span class="ikona">&#127873;</span>
+      <div class="nazev">Dárkové poukazy</div>
+    </div>`;
+  document.getElementById('kategorieGrid').innerHTML = dlazdice + poukazDlazdice;
 }
 
 async function nacistKategorieFiltru() {
@@ -897,13 +894,16 @@ async function nacistProdukty() {
       const p = map[klic];
       if (!p.emoji && s.emoji) p.emoji = s.emoji;
       if (s.kategorie) p.kategorieCitac[s.kategorie] = (p.kategorieCitac[s.kategorie] || 0) + 1;
-      if (s.velikost == null || !(s.pocet_kusu > 0)) return;
+      // "U dodavatele" velikosti se zobrazí i bez fyzické skladové zásoby -
+      // pocet_kusu u nich neznamená, kolik je reálně k mání, jen se sledují jinak.
+      const jeUDodavatele = s.dostupnost === 'dodavatel';
+      if (s.velikost == null || !(s.pocet_kusu > 0 || jeUDodavatele)) return;
 
       // Občas vznikne omylem duplicitní řádek pro stejnou velikost (dvě různé
       // produkt_id) - ponecháme tu s vyšší skladovou zásobou, ať v modalu není
       // stejná velikost dvakrát.
       const existujici = p.velikosti.find(v => v.velikost === s.velikost);
-      const zaznam = { velikost: s.velikost, pocet: s.pocet_kusu, produkt_id: s.id, cena: s.cena, cena_puvodni: s.cena_puvodni, ean: s.ean, delka_mm: s.delka_mm, sirka_mm: s.sirka_mm };
+      const zaznam = { velikost: s.velikost, pocet: s.pocet_kusu, produkt_id: s.id, cena: s.cena, cena_puvodni: s.cena_puvodni, ean: s.ean, delka_mm: s.delka_mm, sirka_mm: s.sirka_mm, dostupnost: s.dostupnost || 'skladem' };
       if (existujici) {
         if (s.pocet_kusu > existujici.pocet) Object.assign(existujici, zaznam);
       } else {
@@ -922,6 +922,9 @@ async function nacistProdukty() {
       p.cena = Math.min(...ceny);
       const cenyPuvodni = new Set(p.velikosti.map(v => v.cena_puvodni || null));
       p.cena_puvodni = (cenyPuvodni.size === 1 && [...cenyPuvodni][0]) ? [...cenyPuvodni][0] : null;
+      // Aspoň jedna velikost "u dodavatele" - na kartě to zákaznici naznačí
+      // ještě před otevřením detailu, přesný stav podle velikosti je pak v modalu.
+      p.maDodavatele = p.velikosti.some(v => v.dostupnost === 'dodavatel');
       return p;
     });
     naplnitFiltrVelikosti();
@@ -952,6 +955,7 @@ function zobrazitProdukty(produkty) {
       <div class="product-img ${bg.trida}" style="${bg.styl}">
         <span>${p.emoji}</span>
         ${p.cena_puvodni ? '<span class="product-badge sale">SLEVA</span>' : ''}
+        ${p.maDodavatele ? '<span class="product-badge dodavatel">🚚 U dodavatele</span>' : ''}
       </div>
       <div class="product-info">
         <div class="product-brand">${p.znacka}</div>
@@ -1095,9 +1099,10 @@ function openDetail(klic) {
   if (aktivniProdukt.typ_nohy) { document.getElementById('detailTypNohyText').textContent = aktivniProdukt.typ_nohy; typNohyEl.style.display = 'block'; }
   else { typNohyEl.style.display = 'none'; }
   document.getElementById('detailSizes').innerHTML = aktivniProdukt.velikosti.map(v =>
-    `<button class="size-btn" onclick="vybrVelikost(${v.velikost},this)">${v.velikost}</button>`
+    `<button class="size-btn" onclick="vybrVelikost(${v.velikost},this)" title="${v.dostupnost === 'dodavatel' ? 'Skladem u dodavatele, dodání do 7–14 dní' : 'Skladem'}">${v.velikost}${v.dostupnost === 'dodavatel' ? ' 🚚' : ''}</button>`
   ).join('');
   document.getElementById('detailRozmery').style.display = 'none';
+  document.getElementById('detailDostupnost').style.display = 'none';
   document.getElementById('modalDetail').classList.add('open');
 }
 
@@ -1117,6 +1122,17 @@ function vybrVelikost(vel, btn) {
     rozmeryEl.style.display = 'block';
   } else {
     rozmeryEl.style.display = 'none';
+  }
+
+  const dostupnostEl = document.getElementById('detailDostupnost');
+  if (velData && velData.dostupnost === 'dodavatel') {
+    dostupnostEl.textContent = '🚚 Skladem u dodavatele, dodání do 7–14 dní';
+    dostupnostEl.style.color = '#1565c0';
+    dostupnostEl.style.display = 'block';
+  } else {
+    dostupnostEl.textContent = '✅ Skladem';
+    dostupnostEl.style.color = 'var(--sage)';
+    dostupnostEl.style.display = 'block';
   }
 }
 
@@ -1681,14 +1697,18 @@ async function nacistMojeObjednavky() {
 <!-- BACK TO TOP -->
 <button id="back-to-top" title="Zpět nahoru" onclick="window.scrollTo({top:0,behavior:'smooth'})">👣</button>
 
-<!-- JEŽEK BÉĎA FOLLOWER -->
-<div id="bedas-cursor">🦔</div>
-
 <!-- FOOTPRINT TRAIL SCRIPT -->
 <script>
 (function() {
-  let count = 0;
+  // Na mobilu (úzká obrazovka) stopy vůbec nespouštět - při rolování jich
+  // stíhalo naskákat víc najednou, překrývaly text a sekalo to rolování.
+  if (window.innerWidth <= 768) return;
+
+  const MAX_SOUCASNE = 4;
+  let aktivnich = 0;
+
   function spawnPrint(x, y) {
+    if (aktivnich >= MAX_SOUCASNE) return;
     const el = document.createElement('div');
     el.className = 'footprint';
     el.textContent = '👣';
@@ -1697,15 +1717,15 @@ async function nacistMojeObjednavky() {
     el.style.left = (x - 14) + 'px';
     el.style.top  = (y + window.scrollY - 14) + 'px';
     document.body.appendChild(el);
-    count++;
-    setTimeout(() => el.remove(), 1900);
+    aktivnich++;
+    setTimeout(() => { el.remove(); aktivnich--; }, 1900);
   }
 
   let throttle = false;
   window.addEventListener('scroll', () => {
     if (throttle) return;
     throttle = true;
-    setTimeout(() => { throttle = false; }, 180);
+    setTimeout(() => { throttle = false; }, 450);
 
     const scrollX = window.innerWidth * 0.15 + Math.sin(Date.now() / 400) * 60;
     const scrollY = window.scrollY + window.innerHeight * 0.5;
@@ -1719,41 +1739,6 @@ window.addEventListener('scroll', () => {
   if (window.scrollY > 400) btn.classList.add('visible');
   else btn.classList.remove('visible');
 });
-
-// Ježek Béďa follows mouse with lag
-(function() {
-  const bedas = document.getElementById('bedas-cursor');
-  let mouseX = 0, mouseY = 0;
-  let currX = 0, currY = 0;
-  let lastX = 0;
-  let visible = false;
-
-  document.addEventListener('mousemove', (e) => {
-    mouseX = e.clientX;
-    mouseY = e.clientY;
-    if (!visible) {
-      bedas.style.display = 'block';
-      visible = true;
-    }
-  });
-
-  document.addEventListener('mouseleave', () => {
-    bedas.style.display = 'none';
-    visible = false;
-  });
-
-  function animate() {
-    currX += (mouseX - currX) * 0.12;
-    currY += (mouseY - currY) * 0.12;
-    const dir = currX < lastX ? 'scaleX(-1)' : 'scaleX(1)';
-    bedas.style.transform = `translate(-50%, -50%) ${dir}`;
-    bedas.style.left = currX + 'px';
-    bedas.style.top  = currY + 'px';
-    lastX = currX;
-    requestAnimationFrame(animate);
-  }
-  animate();
-})();
 </script>
 
 </body>
