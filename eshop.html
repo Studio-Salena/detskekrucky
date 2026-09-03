@@ -1652,15 +1652,27 @@ async function nacistMojeObjednavky() {
       document.getElementById('mojeObjednavky').innerHTML = '<div class="empty">Zatím žádné objednávky.</div>';
       return;
     }
-    const stavBarvy = {nova:'#2ecc71', vyrizuje:'#f39c12', odeslano:'#3498db', doruceno:'#27ae60', zruseno:'#e74c3c'};
-    document.getElementById('mojeObjednavky').innerHTML = data.map(o => `
+    // Stavy musí přesně odpovídat enumu na serveru (routes/objednavky.js:
+    // 'nova','zaplacena','odeslana','dorucena','zrusena') - jinak barva/popisek
+    // spadne na výchozí hodnotu a zrušená objednávka by vypadala jako nová.
+    const stavInfo = {
+      nova: {barva:'#2ecc71', text:'Nová'},
+      zaplacena: {barva:'#f39c12', text:'Zaplacená'},
+      odeslana: {barva:'#3498db', text:'Odeslaná'},
+      dorucena: {barva:'#27ae60', text:'Doručená'},
+      zrusena: {barva:'#e74c3c', text:'Zrušená'}
+    };
+    document.getElementById('mojeObjednavky').innerHTML = data.map(o => {
+      const info = stavInfo[o.stav] || {barva:'#2ecc71', text: o.stav || 'nová'};
+      return `
       <div style="background:var(--cream);border-radius:10px;padding:12px;margin-bottom:10px;border:1px solid var(--tan-light)">
         <div style="display:flex;justify-content:space-between;align-items:center">
           <strong>#${o.id} – ${new Date(o.vytvoreno).toLocaleDateString('cs-CZ')}</strong>
-          <span style="background:${stavBarvy[o.stav]||'#2ecc71'};color:#fff;padding:3px 10px;border-radius:10px;font-size:0.75rem;font-weight:700">${o.stav||'nová'}</span>
+          <span style="background:${info.barva};color:#fff;padding:3px 10px;border-radius:10px;font-size:0.75rem;font-weight:700">${info.text}</span>
         </div>
         <div style="color:var(--text-light);font-size:0.85rem;margin-top:4px">Celkem: <strong style="color:var(--brown)">${o.celkem} Kč</strong></div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   } catch(e) {
     document.getElementById('mojeObjednavky').innerHTML = '<div class="empty">Nepodařilo se načíst objednávky.</div>';
   }

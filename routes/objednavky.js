@@ -82,6 +82,15 @@ router.post('/', async (req, res) => {
       zakaznik_id = novy.rows[0].id;
     } else {
       zakaznik_id = zakaznik.rows[0].id;
+      // Objednávka nemá vlastní snapshot doručovací adresy - v detailu objednávky
+      // (admin i "Moje objednávky") se vždycky čte aktuální adresa ze zakaznici,
+      // takže ji tu při každé objednávce aktualizujeme na to, co zákazník právě
+      // vyplnil (jinak by se u druhé objednávky na jinou adresu pořád ukazovala
+      // ta z první objednávky/registrace).
+      await client.query(
+        'UPDATE zakaznici SET jmeno=$1, telefon=$2, ulice=$3, mesto=$4, psc=$5 WHERE id=$6',
+        [jmeno, telefon, ulice, mesto, psc, zakaznik_id]
+      );
     }
 
     // Zkontrolovat sklad (FOR UPDATE - zamkne řádky do konce transakce, aby dvě
