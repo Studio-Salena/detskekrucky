@@ -878,19 +878,51 @@ function vybratKategoriiZGridu(slug) {
 async function nacistProdukty() {
   try {
     const data = await fetch(API + '/sklad').then(r => r.json());
+    // Sklad se v adminu zakládá po jednotlivých EAN (velikostech), takže stejný
+    // model bot má v DB většinou víc samostatných produkt_id - jeden na velikost.
+    // Tady se proto seskupuje podle značka+název (ne podle produkt_id), ať se
+    // v gridu zobrazí jedna karta na model. Sklad/admin/EAN evidence tím není
+    // nijak dotčená - jde čistě o to, jak se data poskládají pro zobrazení.
     const map = {};
     data.forEach(s => {
-      if (!map[s.id]) {
-        map[s.id] = {
-          id: s.id, nazev: s.nazev, znacka: s.znacka,
-          emoji: s.emoji || '&#128098;', popis: s.popis || '',
-          kategorie: s.kategorie, cena: s.cena, typ_nohy: s.typ_nohy || '',
-          cena_puvodni: s.cena_puvodni, velikosti: []
+      const klic = (s.znacka || '').trim() + '||' + (s.nazev || '').trim();
+      if (!map[klic]) {
+        map[klic] = {
+          klic, nazev: (s.nazev || '').trim(), znacka: s.znacka,
+          popis: s.popis || '', typ_nohy: s.typ_nohy || '',
+          kategorieCitac: {}, emoji: '', velikosti: []
         };
       }
-      if (s.pocet_kusu > 0) map[s.id].velikosti.push({velikost: s.velikost, pocet: s.pocet_kusu, delka_mm: s.delka_mm, sirka_mm: s.sirka_mm});
+      const p = map[klic];
+      if (!p.emoji && s.emoji) p.emoji = s.emoji;
+      if (s.kategorie) p.kategorieCitac[s.kategorie] = (p.kategorieCitac[s.kategorie] || 0) + 1;
+      if (s.velikost == null || !(s.pocet_kusu > 0)) return;
+
+      // Občas vznikne omylem duplicitní řádek pro stejnou velikost (dvě různé
+      // produkt_id) - ponecháme tu s vyšší skladovou zásobou, ať v modalu není
+      // stejná velikost dvakrát.
+      const existujici = p.velikosti.find(v => v.velikost === s.velikost);
+      const zaznam = { velikost: s.velikost, pocet: s.pocet_kusu, produkt_id: s.id, cena: s.cena, cena_puvodni: s.cena_puvodni, ean: s.ean, delka_mm: s.delka_mm, sirka_mm: s.sirka_mm };
+      if (existujici) {
+        if (s.pocet_kusu > existujici.pocet) Object.assign(existujici, zaznam);
+      } else {
+        p.velikosti.push(zaznam);
+      }
     });
-    vsechnyProdukty = Object.values(map).filter(p => p.velikosti.length > 0);
+
+    vsechnyProdukty = Object.values(map).filter(p => p.velikosti.length > 0).map(p => {
+      // Kategorii karty určí ta, která se mezi velikostmi vyskytuje nejčastěji
+      // (drobné překlepy v kategorii jedné velikosti tak kartu nerozdělí).
+      p.kategorie = Object.entries(p.kategorieCitac).sort((a, b) => b[1] - a[1])[0][0];
+      delete p.kategorieCitac;
+      p.emoji = p.emoji || '&#128098;';
+      const ceny = p.velikosti.map(v => v.cena);
+      p.cenaOd = new Set(ceny).size > 1;
+      p.cena = Math.min(...ceny);
+      const cenyPuvodni = new Set(p.velikosti.map(v => v.cena_puvodni || null));
+      p.cena_puvodni = (cenyPuvodni.size === 1 && [...cenyPuvodni][0]) ? [...cenyPuvodni][0] : null;
+      return p;
+    });
     naplnitFiltrVelikosti();
     zobrazitProdukty(vsechnyProdukty);
   } catch(e) {
@@ -913,7 +945,9 @@ function zobrazitProdukty(produkty) {
     const minVel = Math.min(...p.velikosti.map(v => v.velikost));
     const maxVel = Math.max(...p.velikosti.map(v => v.velikost));
     const bg = ziskatPozadiKategorie(p.kategorie);
-    return `<div class="product-card" onclick="openDetail(${p.id})">
+    const klicJs = p.klic.replace(/'/g, "\\'");
+    const cenaText = (p.cenaOd ? 'od ' : '') + p.cena + ' Kč';
+    return `<div class="product-card" onclick="openDetail('${klicJs}')">
       <div class="product-img ${bg.trida}" style="${bg.styl}">
         <span>${p.emoji}</span>
         ${p.cena_puvodni ? '<span class="product-badge sale">SLEVA</span>' : ''}
@@ -924,10 +958,10 @@ function zobrazitProdukty(produkty) {
         <div class="product-sizes">Velikosti: ${minVel}&ndash;${maxVel}</div>
         <div class="product-footer">
           <div>
-            <span class="product-price">${p.cena} Kč</span>
+            <span class="product-price">${cenaText}</span>
             ${p.cena_puvodni ? `<span class="product-price-old">${p.cena_puvodni} Kč</span>` : ''}
           </div>
-          <button class="add-btn" title="Přidat do košíku" onclick="event.stopPropagation();openDetail(${p.id})">+</button>
+          <button class="add-btn" title="Přidat do košíku" onclick="event.stopPropagation();openDetail('${klicJs}')">+</button>
         </div>
       </div>
     </div>`;
@@ -1043,18 +1077,18 @@ async function odeslatPoradnu() {
   }
 }
 
-function openDetail(id) {
-  aktivniProdukt = vsechnyProdukty.find(p => p.id === id);
+function openDetail(klic) {
+  aktivniProdukt = vsechnyProdukty.find(p => p.klic === klic);
   vybranaVelikost = null;
   if (!aktivniProdukt) return;
   const isImgDetail = aktivniProdukt.emoji && aktivniProdukt.emoji.startsWith('http');
-  document.getElementById('detailIcon').innerHTML = isImgDetail 
+  document.getElementById('detailIcon').innerHTML = isImgDetail
     ? `<img src="${aktivniProdukt.emoji}" style="width:100%;height:200px;object-fit:cover;border-radius:12px">`
     : aktivniProdukt.emoji || '👟';
   document.getElementById('detailBrand').textContent = aktivniProdukt.znacka;
   document.getElementById('detailName').textContent = aktivniProdukt.nazev;
   document.getElementById('detailPopis').textContent = aktivniProdukt.popis || 'Kvalitní barefoot obuv pro zdravý vývoj dětských nožiček.';
-  document.getElementById('detailPrice').textContent = aktivniProdukt.cena + ' Kč';
+  document.getElementById('detailPrice').textContent = (aktivniProdukt.cenaOd ? 'od ' : '') + aktivniProdukt.cena + ' Kč';
   const typNohyEl = document.getElementById('detailTypNohy');
   if (aktivniProdukt.typ_nohy) { document.getElementById('detailTypNohyText').textContent = aktivniProdukt.typ_nohy; typNohyEl.style.display = 'block'; }
   else { typNohyEl.style.display = 'none'; }
@@ -1069,8 +1103,13 @@ function vybrVelikost(vel, btn) {
   vybranaVelikost = vel;
   document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
-  const rozmeryEl = document.getElementById('detailRozmery');
   const velData = aktivniProdukt.velikosti.find(v => v.velikost === vel);
+
+  // Ceny se mezi velikostmi stejného modelu občas liší - po výběru konkrétní
+  // velikosti se místo "od X Kč" ukáže přesná cena pro tu velikost.
+  document.getElementById('detailPrice').textContent = (velData ? velData.cena : aktivniProdukt.cena) + ' Kč';
+
+  const rozmeryEl = document.getElementById('detailRozmery');
   if (velData && (velData.delka_mm || velData.sirka_mm)) {
     rozmeryEl.textContent = `📏 Vnitřní rozměry (vel. ${vel}): ${velData.delka_mm || '?'} × ${velData.sirka_mm || '?'} mm (délka × šířka)`;
     rozmeryEl.style.display = 'block';
@@ -1091,12 +1130,16 @@ function closeModal(id) {
 }
 
 function addToCart(produkt, velikost) {
-  const key = produkt.id + '_' + velikost;
+  // Karta zastupuje víc reálných produkt_id (jedno na velikost) - do košíku
+  // a na server musí jít produkt_id/cena té konkrétní zvolené velikosti.
+  const velData = produkt.velikosti.find(v => v.velikost === velikost);
+  if (!velData) return;
+  const key = velData.produkt_id + '_' + velikost;
   const existujici = kosik.find(i => i.key === key);
   if (existujici) {
     existujici.pocet++;
   } else {
-    kosik.push({key, id: produkt.id, nazev: produkt.nazev, znacka: produkt.znacka, emoji: produkt.emoji, velikost, cena: produkt.cena, pocet: 1});
+    kosik.push({key, id: velData.produkt_id, nazev: produkt.nazev, znacka: produkt.znacka, emoji: produkt.emoji, velikost, cena: velData.cena, pocet: 1});
   }
   ulozitKosik();
   showToast(produkt.nazev + ' přidáno do košíku!');
