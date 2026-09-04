@@ -323,7 +323,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <span class="pill" onclick="filtrovatObjednavky('vyrizuje',this)">🟡 Vyřizuje se</span>
         <span class="pill" onclick="filtrovatObjednavky('odeslano',this)">🔵 Odesláno</span>
         <span class="pill" onclick="filtrovatObjednavky('doruceno',this)">✅ Doručeno</span>
-        <span class="pill" onclick="filtrovatObjednavky('zruseno',this)">❌ Zrušeno</span>
+        <span class="pill" onclick="filtrovatObjednavky('zrusena',this)">❌ Zrušeno</span>
       </div>
       <div class="table-wrap">
         <div id="objednavkyTable"><div class="loading">Načítám...</div></div>
@@ -1287,8 +1287,8 @@ function showPage(name, el) {
 }
 
 function stavBadge(stav) {
-  const map = {nova:'badge-nova',vyrizuje:'badge-vyrizuje',odeslano:'badge-odeslano',doruceno:'badge-doruceno',zruseno:'badge-zruseno'};
-  const label = {nova:'Nová',vyrizuje:'Vyřizuje se',odeslano:'Odesláno',doruceno:'Doručeno',zruseno:'Zrušeno'};
+  const map = {nova:'badge-nova',vyrizuje:'badge-vyrizuje',odeslano:'badge-odeslano',doruceno:'badge-doruceno',zrusena:'badge-zruseno'};
+  const label = {nova:'Nová',vyrizuje:'Vyřizuje se',odeslano:'Odesláno',doruceno:'Doručeno',zrusena:'Zrušeno'};
   return `<span class="badge ${map[stav]||'badge-nova'}">${label[stav]||'Nová'}</span>`;
 }
 
@@ -1342,7 +1342,7 @@ async function loadPrehled() {
       adminFetch(API+'/prodejna').then(r=>r.json()).catch(()=>[]),
       adminFetch(API+'/sklad').then(r=>r.json()).catch(()=>[])
     ]);
-    const platne = Array.isArray(obj) ? obj.filter(o=>o.stav!=='zruseno') : [];
+    const platne = Array.isArray(obj) ? obj.filter(o=>o.stav!=='zrusena') : [];
     const prodejnaProdeje = Array.isArray(prodejna) ? prodejna : [];
     const trzbyEshop = platne.reduce((s,o)=>s+o.celkem,0);
     const trzbyProdejna = prodejnaProdeje.reduce((s,p)=>s+Number(p.celkem),0);
@@ -1430,7 +1430,7 @@ function renderObjednavky(data) {
         <option ${o.stav==='vyrizuje'?'selected':''} value="vyrizuje">🟡 Vyřizuje se</option>
         <option ${o.stav==='odeslano'?'selected':''} value="odeslano">🔵 Odesláno</option>
         <option ${o.stav==='doruceno'?'selected':''} value="doruceno">✅ Doručeno</option>
-        <option ${o.stav==='zruseno'?'selected':''} value="zruseno">❌ Zrušeno</option>
+        <option ${o.stav==='zrusena'?'selected':''} value="zrusena">❌ Zrušeno</option>
       </select></td>
       <td style="font-size:0.78rem">${new Date(o.vytvoreno).toLocaleDateString('cs-CZ')}</td>
       <td style="display:flex;gap:4px">
@@ -2138,7 +2138,7 @@ async function loadUcetnictvi() {
   if (rokPole && !rokPole.value) rokPole.value = new Date().getFullYear() - 1;
   try {
     const data = await adminFetch(API+'/objednavky').then(r=>r.json());
-    const obj = Array.isArray(data) ? data.filter(o=>o.stav!=='zruseno') : [];
+    const obj = Array.isArray(data) ? data.filter(o=>o.stav!=='zrusena') : [];
     const trzby = obj.reduce((s,o)=>s+o.celkem,0);
     const prodejnaTrzbyUcet = prodejnaData.reduce((s,p)=>s+Number(p.celkem),0);
 
@@ -2189,7 +2189,7 @@ async function loadUcetnictvi() {
 async function exportUcetnictviPDF() {
   try {
     const obj = await adminFetch(API+'/objednavky').then(r=>r.json());
-    const objAktivni = obj.filter(o=>o.stav!=='zruseno');
+    const objAktivni = obj.filter(o=>o.stav!=='zrusena');
 
     let prodejnaTrzbyPdf = 0;
     try {
@@ -2308,7 +2308,7 @@ const PAUSAL_STROP = 1200000;    // max. výdaje 1 200 000 Kč (k roku 2026 - ov
 
 async function spocitatRocniData(rok) {
   const obj = await adminFetch(API+'/objednavky').then(r=>r.json());
-  const objRok = (Array.isArray(obj)?obj:[]).filter(o => o.stav!=='zruseno' && new Date(o.vytvoreno).getFullYear()===rok);
+  const objRok = (Array.isArray(obj)?obj:[]).filter(o => o.stav!=='zrusena' && new Date(o.vytvoreno).getFullYear()===rok);
 
   let prodejnaRok = [];
   try {
@@ -2465,7 +2465,7 @@ async function exportCSV(typ) {
     } else if (typ==='ucetnictvi') {
       const d=await adminFetch(API+'/objednavky').then(r=>r.json());
       rows=[['ID','Datum','Zákazník','Email','Celkem Kč','Platba','Doprava','Stav']];
-      d.filter(o=>o.stav!=='zruseno').forEach(o=>rows.push([o.id,new Date(o.vytvoreno).toLocaleDateString('cs-CZ'),o.jmeno||'',o.email||'',o.celkem,o.platba||'',o.doprava||'',o.stav||'']));
+      d.filter(o=>o.stav!=='zrusena').forEach(o=>rows.push([o.id,new Date(o.vytvoreno).toLocaleDateString('cs-CZ'),o.jmeno||'',o.email||'',o.celkem,o.platba||'',o.doprava||'',o.stav||'']));
       nazev='trzby';
     } else if (typ==='newsletter') {
       const d=await adminFetch(API+'/newsletter').then(r=>r.json());

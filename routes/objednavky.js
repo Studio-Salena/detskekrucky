@@ -60,6 +60,17 @@ router.post('/', async (req, res) => {
   if (!Array.isArray(polozky) || !polozky.length) {
     return res.status(400).json({ chyba: 'Košík je prázdný.' });
   }
+  // Server nesmí věřit ničemu cenovému/skladovému, co pošle klient - z každé
+  // položky se dál používá jen produkt_id/velikost (k dohledání v DB) a pocet
+  // (ověřené jako kladné celé číslo). Cena se vždy dopočítá z produkty.cena níže.
+  for (const p of polozky) {
+    if (!p || !Number.isInteger(p.produkt_id) || p.velikost === undefined || p.velikost === null) {
+      return res.status(400).json({ chyba: 'Neplatná položka v košíku.' });
+    }
+    if (!Number.isInteger(p.pocet) || p.pocet <= 0 || p.pocet > 1000) {
+      return res.status(400).json({ chyba: 'Neplatný počet kusů (musí být celé kladné číslo).' });
+    }
+  }
   const chybaValidace = validovatObjednavku({ jmeno, email, telefon, ulice, mesto, psc });
   if (chybaValidace) {
     return res.status(400).json({ chyba: chybaValidace });
@@ -99,9 +110,10 @@ router.post('/', async (req, res) => {
     // na pocet_kusu a při expedici se ze skladu neodečítají (viz níže).
     let celkem = 0;
     const dostupnostMap = new Map(); // "produkt_id_velikost" -> 'skladem' | 'dodavatel'
+    const cenaMap = new Map(); // "produkt_id_velikost" -> aktuální cena z DB (autoritativní, klientovi se nevěří)
     for (const p of polozky) {
       const sklad = await client.query(
-        'SELECT pocet_kusu, dostupnost FROM sklad WHERE produkt_id = $1 AND velikost = $2 FOR UPDATE',
+        'SELECT s.pocet_kusu, s.dostupnost, p.cena FROM sklad s JOIN produkty p ON p.id = s.produkt_id WHERE s.produkt_id = $1 AND s.velikost = $2 FOR UPDATE',
         [p.produkt_id, p.velikost]
       );
       if (sklad.rows.length === 0) {
@@ -114,8 +126,11 @@ router.post('/', async (req, res) => {
         await client.query('ROLLBACK');
         return res.status(400).json({ chyba: `Nedostatek zbozi na sklade: produkt ${p.produkt_id} velikost ${p.velikost}` });
       }
-      dostupnostMap.set(`${p.produkt_id}_${p.velikost}`, radek.dostupnost);
-      celkem += p.cena * p.pocet;
+      const klic = `${p.produkt_id}_${p.velikost}`;
+      const cenaSkutecna = Number(radek.cena);
+      dostupnostMap.set(klic, radek.dostupnost);
+      cenaMap.set(klic, cenaSkutecna);
+      celkem += cenaSkutecna * p.pocet;
     }
 
     const mezisoucet = celkem;
@@ -173,11 +188,12 @@ router.post('/', async (req, res) => {
     // Vlozit polozky a odecist ze skladu (u položek "u dodavatele" se sklad
     // neodečítá - pocet_kusu tam nereprezentuje reálnou fyzickou zásobu)
     for (const p of polozky) {
+      const klic = `${p.produkt_id}_${p.velikost}`;
       await client.query(
         'INSERT INTO objednavky_polozky (objednavka_id, produkt_id, velikost, pocet, cena) VALUES ($1,$2,$3,$4,$5)',
-        [objednavka_id, p.produkt_id, p.velikost, p.pocet, p.cena]
+        [objednavka_id, p.produkt_id, p.velikost, p.pocet, cenaMap.get(klic)]
       );
-      if (dostupnostMap.get(`${p.produkt_id}_${p.velikost}`) !== 'dodavatel') {
+      if (dostupnostMap.get(klic) !== 'dodavatel') {
         await client.query(
           'UPDATE sklad SET pocet_kusu = pocet_kusu - $3 WHERE produkt_id = $1 AND velikost = $2',
           [p.produkt_id, p.velikost, p.pocet]
@@ -191,6 +207,10 @@ router.post('/', async (req, res) => {
 
     await client.query('COMMIT');
     zaznamenatObjednavku(req.ip);
+
+    // Do emailu jde vždy jen skutečná (DB) cena, ne to, co poslal klient.
+    const polozkySkutecne = polozky.map(p => ({ ...p, cena: cenaMap.get(`${p.produkt_id}_${p.velikost}`) }));
+
     // Odeslat potvrzovaci email
 try {
   await odeslat_potvrzeni({
@@ -200,7 +220,7 @@ try {
     email,
     doprava,
     platba,
-    polozky,
+    polozky: polozkySkutecne,
     sleva
   });
 } catch (emailErr) {
@@ -212,7 +232,7 @@ res.json({ zprava: 'Objednavka uspesne vytvorena', objednavka_id, celkem });
 // Upozornění majitelce se posílá až po odpovědi zákazníkovi, ať prodleva/chyba
 // s odesláním objednávku nezablokuje (stejný vzor jako u rezervací).
 odeslat_upozorneni_objednavky({
-  objednavka_id, celkem, jmeno, email, telefon, ulice, mesto, psc, doprava, platba, polozky, sleva
+  objednavka_id, celkem, jmeno, email, telefon, ulice, mesto, psc, doprava, platba, polozky: polozkySkutecne, sleva
 }).catch(e => console.error('Upozorneni majitelce o objednavce se nepodarilo odeslat:', e.message));
 
   } catch (err) {
@@ -270,11 +290,62 @@ router.patch('/:id/stav', vyzadovatAdmina, async (req, res) => {
   if (!stavy.includes(stav)) {
     return res.status(400).json({ chyba: 'Neplatny stav' });
   }
+  const client = await pool.connect();
   try {
-    await pool.query('UPDATE objednavky SET stav = $1 WHERE id = $2', [stav, req.params.id]);
+    await client.query('BEGIN');
+
+    // FOR UPDATE zamkne řádek objednávky do konce transakce - dvě souběžná
+    // zrušení téže objednávky se tak serializují a druhé z nich už uvidí
+    // aktuální (zrušený) stav, takže vrácení skladu/poukazu níže neproběhne dvakrát.
+    const soucasna = await client.query('SELECT stav, poukaz_id, sleva FROM objednavky WHERE id = $1 FOR UPDATE', [req.params.id]);
+    if (soucasna.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ chyba: 'Objednávka nenalezena.' });
+    }
+    const puvodniStav = soucasna.rows[0].stav;
+
+    if (stav === 'zrusena' && puvodniStav !== 'zrusena') {
+      // Vrátit sklad přesně podle toho, co se při vytvoření objednávky skutečně
+      // odečetlo (pohyby_skladu je autoritativní záznam - položky "u dodavatele"
+      // v něm nejsou, takže se u nich sklad ani nevrací).
+      const pohyby = await client.query(
+        `SELECT produkt_id, velikost, pocet FROM pohyby_skladu
+         WHERE typ = 'prodej' AND poznamka = $1 ORDER BY produkt_id, velikost`,
+        [`Objednavka #${req.params.id}`]
+      );
+      for (const p of pohyby.rows) {
+        await client.query('SELECT 1 FROM sklad WHERE produkt_id = $1 AND velikost = $2 FOR UPDATE', [p.produkt_id, p.velikost]);
+        await client.query(
+          'UPDATE sklad SET pocet_kusu = pocet_kusu + $3 WHERE produkt_id = $1 AND velikost = $2',
+          [p.produkt_id, p.velikost, p.pocet]
+        );
+        await client.query(
+          'INSERT INTO pohyby_skladu (produkt_id, velikost, typ, pocet, poznamka) VALUES ($1,$2,$3,$4,$5)',
+          [p.produkt_id, p.velikost, 'vratka', p.pocet, `Zruseni objednavky #${req.params.id}`]
+        );
+      }
+
+      // Vrátit hodnotu uplatněného dárkového poukazu (pokud byl použit).
+      const { poukaz_id, sleva } = soucasna.rows[0];
+      if (poukaz_id && Number(sleva) > 0) {
+        await client.query(
+          `UPDATE darkove_poukazy SET zustatek = zustatek + $1,
+                  stav = CASE WHEN stav = 'pouzity' THEN 'aktivni' ELSE stav END
+           WHERE id = $2`,
+          [sleva, poukaz_id]
+        );
+        await client.query('DELETE FROM poukazy_pouziti WHERE objednavka_id = $1', [req.params.id]);
+      }
+    }
+
+    await client.query('UPDATE objednavky SET stav = $1 WHERE id = $2', [stav, req.params.id]);
+    await client.query('COMMIT');
     res.json({ zprava: 'Stav aktualizovan' });
   } catch (err) {
+    await client.query('ROLLBACK');
     res.status(500).json({ chyba: err.message });
+  } finally {
+    client.release();
   }
 });
 
