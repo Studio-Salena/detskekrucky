@@ -1323,7 +1323,7 @@ async function globalSearch(q) {
     if (filtered.length === 0) { res.style.display = 'none'; return; }
     res.innerHTML = filtered.map(o =>
       `<div class="search-result-item" onclick="detailObjednavky(${o.id});document.getElementById('searchResults').style.display='none'">
-        📦 #${o.id} — ${o.jmeno||'—'} <small style="color:var(--text-light)">${o.celkem} Kč ${stavBadge(o.stav)}</small>
+        📦 #${o.id} — ${escH(o.jmeno)||'—'} <small style="color:var(--text-light)">${o.celkem} Kč ${stavBadge(o.stav)}</small>
       </div>`
     ).join('');
     res.style.display = 'block';
@@ -1386,7 +1386,7 @@ async function loadPrehled() {
     document.getElementById('prehledNovaTable').innerHTML = noveObj.length === 0
       ? '<div class="empty">Žádné nové objednávky ✅</div>'
       : `<table><thead><tr><th>ID</th><th>Zákazník</th><th>Celkem</th><th>Akce</th></tr></thead><tbody>
-        ${noveObj.map(o=>`<tr><td><strong>#${o.id}</strong></td><td>${o.jmeno||'—'}</td><td><strong>${o.celkem.toLocaleString('cs-CZ')} Kč</strong></td>
+        ${noveObj.map(o=>`<tr><td><strong>#${o.id}</strong></td><td>${escH(o.jmeno)||'—'}</td><td><strong>${o.celkem.toLocaleString('cs-CZ')} Kč</strong></td>
         <td style="display:flex;gap:4px"><button class="btn btn-blue btn-sm" onclick="detailObjednavky(${o.id})">Detail</button>
         <button class="btn btn-green btn-sm" onclick="zmenitStav(${o.id},'vyrizuje').then(loadPrehled)">Vyřídit</button></td></tr>`).join('')}
         </tbody></table>`;
@@ -1421,7 +1421,7 @@ function renderObjednavky(data) {
     <table><thead><tr><th>ID</th><th>Zákazník</th><th>Celkem</th><th>Doprava</th><th>Platba</th><th>Stav</th><th>Datum</th><th>Akce</th></tr></thead>
     <tbody>${data.map(o=>`<tr>
       <td><strong>#${o.id}</strong></td>
-      <td>${o.jmeno||'—'}<br><small style="color:var(--text-light)">${o.email||''}</small></td>
+      <td>${escH(o.jmeno)||'—'}<br><small style="color:var(--text-light)">${escH(o.email)}</small></td>
       <td><strong>${o.celkem.toLocaleString('cs-CZ')} Kč</strong></td>
       <td style="font-size:0.78rem">${o.doprava||'—'}</td>
       <td style="font-size:0.78rem">${o.platba||'—'}</td>
@@ -1479,21 +1479,21 @@ async function detailObjednavky(id) {
     document.getElementById('detailObjTitle').textContent = '📦 Objednávka #'+id;
     const polozky = data.polozky || [];
     document.getElementById('detailObjContent').innerHTML = `
-      <div class="info-box"><strong>${data.jmeno||'—'}</strong><br>
-        📧 ${data.email||'—'} &nbsp;|&nbsp; 📞 ${data.telefon||'—'}<br>
-        📍 ${data.ulice||'—'}, ${data.mesto||'—'} ${data.psc||''}</div>
-      <div class="info-box">🚚 <strong>${data.doprava||'—'}</strong> &nbsp;|&nbsp; 💳 <strong>${data.platba||'—'}</strong> &nbsp;|&nbsp; ${stavBadge(data.stav)}</div>
+      <div class="info-box"><strong>${escH(data.jmeno)||'—'}</strong><br>
+        📧 ${escH(data.email)||'—'} &nbsp;|&nbsp; 📞 ${escH(data.telefon)||'—'}<br>
+        📍 ${escH(data.ulice)||'—'}, ${escH(data.mesto)||'—'} ${escH(data.psc)}</div>
+      <div class="info-box">🚚 <strong>${escH(data.doprava)||'—'}</strong> &nbsp;|&nbsp; 💳 <strong>${escH(data.platba)||'—'}</strong> &nbsp;|&nbsp; ${stavBadge(data.stav)}</div>
       <div class="section-divider">Položky</div>
       <table><thead><tr><th>Produkt</th><th>Vel.</th><th>Ks</th><th>Cena/ks</th><th>Celkem</th></tr></thead>
       <tbody>${polozky.map(p=>`<tr>
-        <td><strong>${p.nazev||'Produkt'}</strong></td><td>${p.velikost}</td><td>${p.pocet}</td>
+        <td><strong>${escH(p.nazev)||'Produkt'}</strong></td><td>${escH(p.velikost)}</td><td>${escH(p.pocet)}</td>
         <td>${p.cena.toLocaleString('cs-CZ')} Kč</td><td><strong>${(p.cena*p.pocet).toLocaleString('cs-CZ')} Kč</strong></td>
       </tr>`).join('')}
-      ${Number(data.sleva)>0?`<tr><td colspan="4">🎁 Poukaz${data.poukaz_kod?' '+data.poukaz_kod:''}</td><td style="color:var(--sage)">−${Number(data.sleva).toLocaleString('cs-CZ')} Kč</td></tr>`:''}
+      ${Number(data.sleva)>0?`<tr><td colspan="4">🎁 Poukaz${data.poukaz_kod?' '+escH(data.poukaz_kod):''}</td><td style="color:var(--sage)">−${Number(data.sleva).toLocaleString('cs-CZ')} Kč</td></tr>`:''}
       <tr style="background:var(--cream)"><td colspan="4"><strong>CELKEM</strong></td>
         <td><strong style="color:var(--brown);font-size:1.1rem">${data.celkem.toLocaleString('cs-CZ')} Kč</strong></td></tr>
       </tbody></table>
-      ${data.poznamka?`<div class="info-box" style="margin-top:12px">📝 ${data.poznamka}</div>`:''}`;
+      ${data.poznamka?`<div class="info-box" style="margin-top:12px">📝 ${escH(data.poznamka)}</div>`:''}`;
     openModal('modalDetailObj');
   } catch(e) { alert('Chyba'); }
 }
@@ -1511,11 +1511,11 @@ async function tiskObjednavkyId(id) {
     <style>body{font-family:Arial,sans-serif;padding:20px;color:#333}h1{color:#8B4513}table{width:100%;border-collapse:collapse;margin:16px 0}th,td{padding:8px 12px;border:1px solid #ddd;text-align:left}th{background:#f5e6d3}.total{font-size:1.2rem;font-weight:bold;color:#8B4513}</style>
     </head><body>
     <h1>🥾 Dětské krůčky — Objednávka #${id}</h1>
-    <p><strong>${data.jmeno}</strong> | ${data.email} | ${data.telefon||'—'}</p>
-    <p>📍 ${data.ulice}, ${data.mesto} ${data.psc}</p>
-    <p>🚚 ${data.doprava} | 💳 ${data.platba}</p>
+    <p><strong>${escH(data.jmeno)}</strong> | ${escH(data.email)} | ${escH(data.telefon)||'—'}</p>
+    <p>📍 ${escH(data.ulice)}, ${escH(data.mesto)} ${escH(data.psc)}</p>
+    <p>🚚 ${escH(data.doprava)} | 💳 ${escH(data.platba)}</p>
     <table><thead><tr><th>Produkt</th><th>Vel.</th><th>Ks</th><th>Cena</th><th>Celkem</th></tr></thead>
-    <tbody>${polozky.map(p=>`<tr><td>${p.nazev}</td><td>${p.velikost}</td><td>${p.pocet}</td><td>${p.cena} Kč</td><td>${p.cena*p.pocet} Kč</td></tr>`).join('')}
+    <tbody>${polozky.map(p=>`<tr><td>${escH(p.nazev)}</td><td>${escH(p.velikost)}</td><td>${escH(p.pocet)}</td><td>${p.cena} Kč</td><td>${p.cena*p.pocet} Kč</td></tr>`).join('')}
     <tr><td colspan="4"><strong>CELKEM</strong></td><td class="total">${data.celkem} Kč</td></tr></tbody></table>
     <p style="margin-top:20px;color:#999;font-size:0.8rem">Vytištěno: ${new Date().toLocaleDateString('cs-CZ')}</p>
     </body></html>`);
@@ -1636,8 +1636,8 @@ function renderZakaznici(data) {
   document.getElementById('zakazniciTable').innerHTML = `
     <table><thead><tr><th>ID</th><th>Jméno</th><th>Email</th><th>Telefon</th><th>Město</th><th>Newsletter</th><th>Registrace</th><th>Akce</th></tr></thead>
     <tbody>${data.map(z=>`<tr>
-      <td>${z.id}</td><td><strong>${z.jmeno}</strong></td><td>${z.email}</td>
-      <td>${z.telefon||'—'}</td><td>${z.mesto||'—'}</td>
+      <td>${z.id}</td><td><strong>${escH(z.jmeno)}</strong></td><td>${escH(z.email)}</td>
+      <td>${escH(z.telefon)||'—'}</td><td>${escH(z.mesto)||'—'}</td>
       <td style="text-align:center">${newsletterSet.has((z.email || '').toLowerCase()) ? '✅' : '—'}</td>
       <td>${new Date(z.vytvoreno).toLocaleDateString('cs-CZ')}</td>
       <td style="white-space:nowrap">
@@ -2179,8 +2179,8 @@ async function loadUcetnictvi() {
     document.getElementById('ucetObjednavky').innerHTML = `
       <table><thead><tr><th>ID</th><th>Datum</th><th>Zákazník</th><th>Celkem</th><th>Platba</th><th>Stav</th></tr></thead>
       <tbody>${obj.map(o=>`<tr><td>#${o.id}</td><td>${new Date(o.vytvoreno).toLocaleDateString('cs-CZ')}</td>
-        <td>${o.jmeno||'—'}</td><td><strong>${o.celkem.toLocaleString('cs-CZ')} Kč</strong></td>
-        <td>${o.platba||'—'}</td><td>${stavBadge(o.stav)}</td>
+        <td>${escH(o.jmeno)||'—'}</td><td><strong>${o.celkem.toLocaleString('cs-CZ')} Kč</strong></td>
+        <td>${escH(o.platba)||'—'}</td><td>${stavBadge(o.stav)}</td>
       </tr>`).join('')}</tbody></table>`;
   } catch(e) { console.error(e); }
 }
@@ -3329,9 +3329,9 @@ async function loadVratky() {
       <td><strong>#${v.id}</strong></td>
       <td>${new Date(v.vytvoreno).toLocaleDateString('cs-CZ')}</td>
       <td>${v.prodej_id ? '#'+v.prodej_id : '—'}</td>
-      <td>${(v.polozky||[]).map(x=>`${x.nazev||''} vel.${x.velikost} x${x.pocet}`).join(', ')}</td>
+      <td>${(v.polozky||[]).map(x=>`${escH(x.nazev)} vel.${escH(x.velikost)} x${escH(x.pocet)}`).join(', ')}</td>
       <td><strong style="color:var(--brown)">−${Number(v.castka).toLocaleString('cs-CZ')} Kč</strong></td>
-      <td>${v.duvod||'—'}</td>
+      <td>${escH(v.duvod)||'—'}</td>
       <td>${v.vraceno_na_sklad ? '✅' : '—'}</td>
       <td><button class="btn btn-red btn-sm" onclick="smazatVratku(${v.id})">✕</button></td>
     </tr>`).join('')}</tbody></table>`;
@@ -3429,9 +3429,9 @@ async function loadVratkyZadosti() {
       <tbody>${seznam.map(z=>`<tr>
         <td>${new Date(z.vytvoreno).toLocaleDateString('cs-CZ')}</td>
         <td>#${z.objednavka_id}</td>
-        <td>${z.email}${z.telefon?'<br><small>'+z.telefon+'</small>':''}</td>
-        <td>${(z.polozky||[]).map(p=>`${p.nazev} vel.${p.velikost} x${p.pocet}`).join(', ')}</td>
-        <td>${z.duvod||'—'}</td>
+        <td>${escH(z.email)}${z.telefon?'<br><small>'+escH(z.telefon)+'</small>':''}</td>
+        <td>${(z.polozky||[]).map(p=>`${escH(p.nazev)} vel.${escH(p.velikost)} x${escH(p.pocet)}`).join(', ')}</td>
+        <td>${escH(z.duvod)||'—'}</td>
         <td>${stavZadostiPopisky[z.stav]||z.stav}</td>
         <td style="display:flex;gap:4px;flex-wrap:wrap">
           ${z.stav==='nova' ? `<button class="btn btn-green btn-sm" onclick="zmenitStavZadosti(${z.id},'schvalena')">✅ Schválit</button>
@@ -3546,12 +3546,12 @@ async function loadPoukazy() {
       document.getElementById('poukazyTable').innerHTML = `
         <table><thead><tr><th>Kód</th><th>Hodnota</th><th>Zůstatek</th><th>Platnost do</th><th>Kde</th><th>Kupující</th><th>Stav</th><th>Akce</th></tr></thead>
         <tbody>${seznam.map(p=>`<tr>
-          <td><code style="background:var(--cream);padding:2px 6px;border-radius:4px">${p.kod}</code></td>
+          <td><code style="background:var(--cream);padding:2px 6px;border-radius:4px">${escH(p.kod)}</code></td>
           <td><strong>${Number(p.hodnota).toLocaleString('cs-CZ')} Kč</strong></td>
           <td><strong style="color:${Number(p.zustatek)>0?'var(--sage)':'var(--text-light)'}">${Number(p.zustatek).toLocaleString('cs-CZ')} Kč</strong></td>
           <td>${new Date(p.platnost_do).toLocaleDateString('cs-CZ')}</td>
           <td>${p.zakoupeno_kde==='eshop'?'🛒 E-shop':'🏪 Prodejna'}</td>
-          <td>${p.kupujici_jmeno||'—'}</td>
+          <td>${escH(p.kupujici_jmeno)||'—'}</td>
           <td>${new Date(p.platnost_do) < new Date() && p.stav==='aktivni' ? '<span class="badge badge-zruseno">⏰ Expirovaný</span>' : (stavPopisek[p.stav]||p.stav)}</td>
           <td style="display:flex;gap:4px">
             <button class="btn btn-outline btn-sm" onclick="zobrazitPoukazDetail(${p.id})">🖨️</button>
@@ -3581,9 +3581,9 @@ async function loadPoukazyZadosti() {
       <tbody>${seznam.map(z=>`<tr>
         <td>${new Date(z.vytvoreno).toLocaleDateString('cs-CZ')}</td>
         <td><strong>${Number(z.hodnota).toLocaleString('cs-CZ')} Kč</strong></td>
-        <td>${z.kupujici_jmeno}<br><small>${z.kupujici_email}${z.kupujici_telefon?' | '+z.kupujici_telefon:''}</small></td>
-        <td>${z.pro_koho||'—'}</td>
-        <td style="max-width:180px;font-size:0.85rem">${z.vzkaz||'—'}</td>
+        <td>${escH(z.kupujici_jmeno)}<br><small>${escH(z.kupujici_email)}${z.kupujici_telefon?' | '+escH(z.kupujici_telefon):''}</small></td>
+        <td>${escH(z.pro_koho)||'—'}</td>
+        <td style="max-width:180px;font-size:0.85rem">${escH(z.vzkaz)||'—'}</td>
         <td>${stavPopisek[z.stav]||z.stav}</td>
         <td style="display:flex;gap:4px;flex-wrap:wrap">
           ${z.stav==='nova' ? `<button class="btn btn-green btn-sm" onclick="vyriditPoukazZadost(${z.id})">💳 Potvrdit platbu a vydat</button>
@@ -3677,7 +3677,7 @@ async function zobrazitPoukazDetail(id, poukazData=null) {
         <div style="font-size:0.85rem;font-weight:700;color:var(--text);margin-bottom:4px">V HODNOTĚ: <span style="color:var(--brown);font-weight:900;border-bottom:2px solid var(--brown)">${Number(poukaz.hodnota).toLocaleString('cs-CZ')} Kč</span></div>
         <div style="font-size:0.7rem;color:var(--text-light);margin-bottom:10px">Na nákup barefoot obuvi</div>
         <div style="font-size:0.68rem;line-height:1.7">
-          <div><strong>PRO:</strong> <span style="border-bottom:1px dotted #9a8a76">${proKoho || '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'}</span></div>
+          <div><strong>PRO:</strong> <span style="border-bottom:1px dotted #9a8a76">${escH(proKoho) || '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'}</span></div>
           <div><strong>PLATNOST DO:</strong> ${new Date(poukaz.platnost_do).toLocaleDateString('cs-CZ')}</div>
         </div>
         <svg id="poukazBarcode" style="margin-top:6px"></svg>
@@ -3697,7 +3697,7 @@ function tisknoutPoukaz(sEanem = true) {
   const proKoho = (p.poznamka && p.poznamka.startsWith('Pro:')) ? p.poznamka.replace('Pro:','').trim() : '';
   const zakladUrl = window.location.origin + window.location.pathname.replace('admin.html','');
   const pw = window.open('','_blank','width=760,height=460');
-  pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Poukaz ${p.kod}</title>
+  pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Poukaz ${escH(p.kod)}</title>
   <base href="${zakladUrl}">
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></scr` + `ipt>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant:wght@700;800&family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
@@ -3764,7 +3764,7 @@ function tisknoutPoukaz(sEanem = true) {
       <div class="value-row">V HODNOTĚ: <span class="value-amount">${Number(p.hodnota).toLocaleString('cs-CZ')} Kč</span></div>
       <div class="desc">Na nákup barefoot obuvi</div>
       <div class="details">
-        <div class="detail-row"><span class="detail-label">PRO:</span><span class="detail-fill">${proKoho}</span></div>
+        <div class="detail-row"><span class="detail-label">PRO:</span><span class="detail-fill">${escH(proKoho)}</span></div>
         <div class="detail-row"><span class="detail-label">VĚNOVÁNO OD:</span><span class="detail-fill"></span></div>
         <div class="detail-row"><span class="detail-label">PLATNOST DO:</span><span class="detail-fill">${new Date(p.platnost_do).toLocaleDateString('cs-CZ')}</span></div>
       </div>
@@ -3775,7 +3775,7 @@ function tisknoutPoukaz(sEanem = true) {
     </div>
   </div>
   <script>
-    ${zobrazitEan ? `JsBarcode('#bc', '${p.ean}', {format:'EAN13', width:1.8, height:48, fontSize:13, margin:0});` : ''}
+    ${zobrazitEan ? `JsBarcode('#bc', '${escJs(p.ean)}', {format:'EAN13', width:1.8, height:48, fontSize:13, margin:0});` : ''}
     window.onload = () => setTimeout(()=>window.print(), 400);
   <\/script>
   </body></html>`);
@@ -3849,10 +3849,10 @@ function pridatVratkaRadek(produkt_id='', nazev='', velikost='', pocet=1, cena='
   div.className = 'vratka-radek';
   div.style = 'display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:8px;align-items:end';
   div.innerHTML = `
-    <div class="form-group" style="margin:0"><label>Produkt</label><input type="text" class="vr-nazev" value="${nazev}" placeholder="Název produktu" data-produkt-id="${produkt_id}"></div>
-    <div class="form-group" style="margin:0"><label>Velikost</label><input type="text" class="vr-velikost" value="${velikost}" placeholder="Vel."></div>
-    <div class="form-group" style="margin:0"><label>Ks</label><input type="number" class="vr-pocet" value="${pocet}" min="1"></div>
-    <div class="form-group" style="margin:0"><label>Cena/ks</label><input type="number" class="vr-cena" value="${cena}" placeholder="0"></div>
+    <div class="form-group" style="margin:0"><label>Produkt</label><input type="text" class="vr-nazev" value="${escAttr(nazev)}" placeholder="Název produktu" data-produkt-id="${escAttr(produkt_id)}"></div>
+    <div class="form-group" style="margin:0"><label>Velikost</label><input type="text" class="vr-velikost" value="${escAttr(velikost)}" placeholder="Vel."></div>
+    <div class="form-group" style="margin:0"><label>Ks</label><input type="number" class="vr-pocet" value="${escAttr(pocet)}" min="1"></div>
+    <div class="form-group" style="margin:0"><label>Cena/ks</label><input type="number" class="vr-cena" value="${escAttr(cena)}" placeholder="0"></div>
     <button class="btn btn-red btn-sm" onclick="this.closest('.vratka-radek').remove()">✕</button>
   `;
   kont.appendChild(div);
@@ -4037,9 +4037,9 @@ async function loadNewsletter() {
     document.getElementById('newsletterTable').innerHTML = `
       <table><thead><tr><th>Email</th><th>Přihlášen</th><th>Akce</th></tr></thead>
       <tbody>${data.map(n=>`<tr>
-        <td><strong>${n.email}</strong></td>
+        <td><strong>${escH(n.email)}</strong></td>
         <td>${new Date(n.created_at).toLocaleDateString('cs-CZ')}</td>
-        <td><button class="btn btn-red btn-sm" onclick="smazatNewsletter('${n.id}','${n.email}')">🗑️ Smazat</button></td>
+        <td><button class="btn btn-red btn-sm" onclick="smazatNewsletter('${n.id}','${escAttr(escJs(n.email))}')">🗑️ Smazat</button></td>
       </tr>`).join('')}</tbody></table>`;
   } catch(e) { document.getElementById('newsletterTable').innerHTML = '<div class="error-msg">Chyba načítání</div>'; }
 }
@@ -4256,6 +4256,9 @@ function formatDatum(d) {
 function escH(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function escHtml(s) { return escH(s); }
 function escAttr(s) { return escH(s).replace(/"/g,'&quot;'); }
+// Pro vkládání hodnoty do JS řetězcového literálu (např. při psaní do nového
+// okna přes document.write) - escH/escAttr escapují jen HTML, ne uvozovky/zpětná lomítka.
+function escJs(s) { return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/</g,'\\x3C'); }
 
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
