@@ -111,7 +111,13 @@ router.post('/', async (req, res) => {
     let celkem = 0;
     const dostupnostMap = new Map(); // "produkt_id_velikost" -> 'skladem' | 'dodavatel'
     const cenaMap = new Map(); // "produkt_id_velikost" -> aktuální cena z DB (autoritativní, klientovi se nevěří)
-    for (const p of polozky) {
+    // Zamyká se v pevném pořadí (produkt_id, velikost), ne v pořadí, v jakém
+    // je poslal klient - jinak by dvě souběžné objednávky se stejnými dvěma
+    // položkami v opačném pořadí mohly skončit v deadlocku.
+    const polozkyKZamceni = [...polozky].sort((a, b) =>
+      a.produkt_id - b.produkt_id || a.velikost - b.velikost
+    );
+    for (const p of polozkyKZamceni) {
       const sklad = await client.query(
         'SELECT s.pocet_kusu, s.dostupnost, p.cena FROM sklad s JOIN produkty p ON p.id = s.produkt_id WHERE s.produkt_id = $1 AND s.velikost = $2 FOR UPDATE',
         [p.produkt_id, p.velikost]

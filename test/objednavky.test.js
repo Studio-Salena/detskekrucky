@@ -143,3 +143,21 @@ test('více produktů v jedné objednávce - každá položka se oceňuje zvlá�
   assert.equal(stav.objednavkyPolozky.length, 2);
   assert.ok(stav.objednavkyPolozky.every(p => p.cena === 500 || p.cena === 700));
 });
+
+test('sklad se zamyká v pevném pořadí (produkt_id, velikost), ne v pořadí z požadavku - ochrana proti deadlocku', async () => {
+  const stav = zakladniStav();
+  stav.callLog = [];
+  const handler = pripravitHandler(stav);
+  // Košík úmyslně v OPAČNÉM pořadí (produkt 2 první, produkt 1 druhý).
+  await zavolatHandler(handler, objednavkovyPozadavek({
+    polozky: [
+      { produkt_id: 2, velikost: 25, pocet: 1, cena: 700 },
+      { produkt_id: 1, velikost: 24, pocet: 1, cena: 500 }
+    ]
+  }));
+
+  const zamykaciDotazy = stav.callLog.filter(c => c.sql.includes('FROM sklad s JOIN produkty p'));
+  assert.equal(zamykaciDotazy.length, 2);
+  assert.deepEqual(zamykaciDotazy[0].params, [1, 24]); // produkt 1 se zamyká první bez ohledu na pořadí v košíku
+  assert.deepEqual(zamykaciDotazy[1].params, [2, 25]);
+});

@@ -42,6 +42,7 @@ function vytvoritMockClient(stav) {
     release() {},
     async query(sql, params = []) {
       const s = sql.replace(/\s+/g, ' ').trim();
+      if (stav.callLog) stav.callLog.push({ sql: s, params });
 
       if (s.startsWith('ALTER TABLE')) return {};
       if (s.startsWith('BEGIN')) return {};
