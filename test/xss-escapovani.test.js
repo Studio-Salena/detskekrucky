@@ -56,3 +56,16 @@ test('data z objednávky (poznámka) se v admin.html renderují přes escH', () 
   assert.match(ADMIN_HTML, /escH\(z\.duvod\)/); // vratky-zadosti
   assert.match(ADMIN_HTML, /escH\(z\.vzkaz\)/); // poukazy-zadosti
 });
+
+test('atributové kontexty (onclick s vloženým API řetězcem) používají escAttr(escJs(...)), ne escH samotné', () => {
+  // Tohle jsou přesně místa, kde escH samotné nestačí (viz zadání) - hodnota
+  // jde jak do HTML atributu (onclick="..."), tak do vnořeného JS řetězce ('...').
+  assert.match(ADMIN_HTML, /onclick="rychleNaskladnit\(\$\{s\.id\},\$\{s\.velikost\},'\$\{escAttr\(escJs\(s\.nazev\)\)\}'\)"/);
+  assert.match(ADMIN_HTML, /onclick="upravitSkladPolozku\([^"]*escAttr\(escJs\(s\.nazev\)\)[^"]*"/);
+  assert.match(ADMIN_HTML, /onclick="upravitProdukt\([^"]*escAttr\(escJs\(p\.nazev\)\)[^"]*"/);
+  assert.match(ADMIN_HTML, /onclick="smazatKategorii\(\$\{k\.id\},'\$\{escAttr\(escJs\(k\.nazev\)\)\}'\)"/);
+});
+
+test('obrázek produktu (src atribut) je escAttr-ovaný', () => {
+  assert.match(ADMIN_HTML, /<img src="\$\{escAttr\(p\.emoji\)\}"/);
+});
