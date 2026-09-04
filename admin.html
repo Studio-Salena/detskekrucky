@@ -104,6 +104,7 @@ tr:hover td{background:#fffaf5}
 .badge-odeslano{background:#d6eaf8;color:#2980b9}
 .badge-doruceno{background:#d5f5e3;color:#1e8449}
 .badge-zruseno{background:#fde8e8;color:#e74c3c}
+.badge-zaplacena{background:#eee2f7;color:#8e44ad}
 .badge-ok{background:#e8f7ee;color:#27ae60}
 .badge-nizky{background:#fff3cd;color:#e67e22}
 .badge-vyprodano{background:#fde8e8;color:#e74c3c}
@@ -321,8 +322,9 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <span class="pill active" onclick="filtrovatObjednavky('vse',this)">Vše</span>
         <span class="pill" onclick="filtrovatObjednavky('nova',this)">🟢 Nové</span>
         <span class="pill" onclick="filtrovatObjednavky('vyrizuje',this)">🟡 Vyřizuje se</span>
-        <span class="pill" onclick="filtrovatObjednavky('odeslano',this)">🔵 Odesláno</span>
-        <span class="pill" onclick="filtrovatObjednavky('doruceno',this)">✅ Doručeno</span>
+        <span class="pill" onclick="filtrovatObjednavky('zaplacena',this)">🟣 Zaplaceno</span>
+        <span class="pill" onclick="filtrovatObjednavky('odeslana',this)">🔵 Odesláno</span>
+        <span class="pill" onclick="filtrovatObjednavky('dorucena',this)">✅ Doručeno</span>
         <span class="pill" onclick="filtrovatObjednavky('zrusena',this)">❌ Zrušeno</span>
       </div>
       <div class="table-wrap">
@@ -1287,9 +1289,9 @@ function showPage(name, el) {
 }
 
 function stavBadge(stav) {
-  const map = {nova:'badge-nova',vyrizuje:'badge-vyrizuje',odeslano:'badge-odeslano',doruceno:'badge-doruceno',zrusena:'badge-zruseno'};
-  const label = {nova:'Nová',vyrizuje:'Vyřizuje se',odeslano:'Odesláno',doruceno:'Doručeno',zrusena:'Zrušeno'};
-  return `<span class="badge ${map[stav]||'badge-nova'}">${label[stav]||'Nová'}</span>`;
+  const map = {nova:'badge-nova',vyrizuje:'badge-vyrizuje',zaplacena:'badge-zaplacena',odeslana:'badge-odeslano',dorucena:'badge-doruceno',zrusena:'badge-zruseno'};
+  const label = {nova:'Nová',vyrizuje:'Vyřizuje se',zaplacena:'Zaplacena',odeslana:'Odesláno',dorucena:'Doručeno',zrusena:'Zrušeno'};
+  return `<span class="badge ${map[stav]||'badge-nova'}">${label[stav]||stav||'Nová'}</span>`;
 }
 
 // NOTIFIKACE
@@ -1423,13 +1425,14 @@ function renderObjednavky(data) {
       <td><strong>#${o.id}</strong></td>
       <td>${escH(o.jmeno)||'—'}<br><small style="color:var(--text-light)">${escH(o.email)}</small></td>
       <td><strong>${o.celkem.toLocaleString('cs-CZ')} Kč</strong></td>
-      <td style="font-size:0.78rem">${o.doprava||'—'}</td>
-      <td style="font-size:0.78rem">${o.platba||'—'}</td>
-      <td><select class="stav-select" onchange="zmenitStav(${o.id},this.value)">
+      <td style="font-size:0.78rem">${escH(o.doprava)||'—'}</td>
+      <td style="font-size:0.78rem">${escH(o.platba)||'—'}</td>
+      <td><select class="stav-select" onchange="zmenitStav(${o.id},this.value,this)" data-puvodni="${escAttr(o.stav)}">
         <option ${o.stav==='nova'?'selected':''} value="nova">🟢 Nová</option>
         <option ${o.stav==='vyrizuje'?'selected':''} value="vyrizuje">🟡 Vyřizuje se</option>
-        <option ${o.stav==='odeslano'?'selected':''} value="odeslano">🔵 Odesláno</option>
-        <option ${o.stav==='doruceno'?'selected':''} value="doruceno">✅ Doručeno</option>
+        <option ${o.stav==='zaplacena'?'selected':''} value="zaplacena">🟣 Zaplaceno</option>
+        <option ${o.stav==='odeslana'?'selected':''} value="odeslana">🔵 Odesláno</option>
+        <option ${o.stav==='dorucena'?'selected':''} value="dorucena">✅ Doručeno</option>
         <option ${o.stav==='zrusena'?'selected':''} value="zrusena">❌ Zrušeno</option>
       </select></td>
       <td style="font-size:0.78rem">${new Date(o.vytvoreno).toLocaleDateString('cs-CZ')}</td>
@@ -1454,22 +1457,35 @@ function filtrovatObjednavky(stav, btn) {
   renderObjednavky(stav==='vse' ? vsechnyObjednavky : vsechnyObjednavky.filter(o=>o.stav===stav));
 }
 
-async function zmenitStav(id, stav) {
+// selectEl (volitelný) - <select> odkud změna přišla; při chybě se vrátí na
+// původní hodnotu, ať UI neukazuje stav, který server ve skutečnosti odmítl.
+async function zmenitStav(id, stav, selectEl) {
   try {
-    await adminFetch(API+'/objednavky/'+id+'/stav', {
+    const res = await adminFetch(API+'/objednavky/'+id+'/stav', {
       method:'PATCH', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({stav})
     });
+    if (!res.ok) {
+      const data = await res.json().catch(()=>({}));
+      alert('❌ ' + (data.chyba || 'Nepodařilo se změnit stav objednávky.'));
+      if (selectEl && selectEl.dataset.puvodni) selectEl.value = selectEl.dataset.puvodni;
+      return false;
+    }
+    if (selectEl) selectEl.dataset.puvodni = stav;
     checkNoveObjednavky();
-  } catch(e) { alert('Chyba'); }
-  return Promise.resolve();
+    return true;
+  } catch(e) {
+    alert('❌ Chyba spojení se serverem.');
+    if (selectEl && selectEl.dataset.puvodni) selectEl.value = selectEl.dataset.puvodni;
+    return false;
+  }
 }
 
 async function oznacitVseOdeslano() {
   const nove = vsechnyObjednavky.filter(o => o.stav === 'nova' || o.stav === 'vyrizuje');
   if (!nove.length) { alert('Žádné nevyřízené objednávky.'); return; }
   if (!confirm(`Označit ${nove.length} objednávek jako odesláno?`)) return;
-  await Promise.all(nove.map(o => zmenitStav(o.id, 'odeslano')));
+  await Promise.all(nove.map(o => zmenitStav(o.id, 'odeslana')));
   loadObjednavky();
 }
 

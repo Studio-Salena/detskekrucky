@@ -292,7 +292,9 @@ router.get('/:id', vyzadovatAdmina, async (req, res) => {
 // Zmenit stav objednavky (jen pro admin)
 router.patch('/:id/stav', vyzadovatAdmina, async (req, res) => {
   const { stav } = req.body;
-  const stavy = ['nova', 'zaplacena', 'odeslana', 'dorucena', 'zrusena'];
+  // Canonical stavový model - musí přesně odpovídat tomu, co posílá admin.html
+  // (viz stavBadge/select tam) a co zobrazuje "Moje objednávky" na eshop.html.
+  const stavy = ['nova', 'vyrizuje', 'zaplacena', 'odeslana', 'dorucena', 'zrusena'];
   if (!stavy.includes(stav)) {
     return res.status(400).json({ chyba: 'Neplatny stav' });
   }
@@ -309,6 +311,15 @@ router.patch('/:id/stav', vyzadovatAdmina, async (req, res) => {
       return res.status(404).json({ chyba: 'Objednávka nenalezena.' });
     }
     const puvodniStav = soucasna.rows[0].stav;
+
+    // Zrušenou objednávku už nejde "odrušit" zpátky do jiného stavu - sklad a
+    // poukaz už byly vráceny a bez jasné obchodní logiky (nové navázání na
+    // konkrétní pohyby skladu, případné znovu-strhnutí poukazu) by šlo o tichou
+    // ztrátu konzistence mezi objednávkou a skladem/poukazem.
+    if (puvodniStav === 'zrusena' && stav !== 'zrusena') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ chyba: 'Zrušenou objednávku nelze vrátit do jiného stavu.' });
+    }
 
     if (stav === 'zrusena' && puvodniStav !== 'zrusena') {
       // Vrátit sklad přesně podle toho, co se při vytvoření objednávky skutečně

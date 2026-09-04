@@ -72,3 +72,25 @@ test('neplatný stav je odmítnut beze změny skladu', async () => {
   assert.equal(res.statusCode, 400);
   assert.equal(stav.sklad.find(r => r.produkt_id === 1).pocet_kusu, 3);
 });
+
+test('zrušenou objednávku nelze vrátit do jiného stavu (opačný přechod je zakázaný)', async () => {
+  const stav = stavPoZalozeniObjednavky();
+  const handler = pripravitHandler(stav);
+
+  await zavolatHandler(handler, 1, 'zrusena');
+  const zasoba = stav.sklad.find(r => r.produkt_id === 1).pocet_kusu;
+
+  const res = await zavolatHandler(handler, 1, 'nova');
+  assert.equal(res.statusCode, 400);
+  assert.equal(stav.objednavky[0].stav, 'zrusena'); // stav se nezměnil
+  assert.equal(stav.sklad.find(r => r.produkt_id === 1).pocet_kusu, zasoba); // sklad se znovu neodečetl
+});
+
+test('kanonický stav "vyrizuje" je povolený', async () => {
+  const stav = stavPoZalozeniObjednavky();
+  const handler = pripravitHandler(stav);
+  const res = await zavolatHandler(handler, 1, 'vyrizuje');
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(stav.objednavky[0].stav, 'vyrizuje');
+});
