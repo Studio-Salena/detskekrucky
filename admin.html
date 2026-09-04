@@ -1340,7 +1340,7 @@ async function loadPrehled() {
       adminFetch(API+'/objednavky').then(r=>r.json()).catch(()=>[]),
       adminFetch(API+'/sklad/nizky-stav').then(r=>r.json()).catch(()=>[]),
       adminFetch(API+'/prodejna').then(r=>r.json()).catch(()=>[]),
-      adminFetch(API+'/sklad').then(r=>r.json()).catch(()=>[])
+      adminFetch(API+'/sklad/admin').then(r=>r.json()).catch(()=>[])
     ]);
     const platne = Array.isArray(obj) ? obj.filter(o=>o.stav!=='zrusena') : [];
     const prodejnaProdeje = Array.isArray(prodejna) ? prodejna : [];
@@ -1729,7 +1729,7 @@ function popiskyProduktu(produkty) {
 async function loadSklad() {
   document.getElementById('skladTable').innerHTML = '<div class="loading">Načítám...</div>';
   try {
-    const data = await adminFetch(API+'/sklad').then(r=>r.json());
+    const data = await adminFetch(API+'/sklad/admin').then(r=>r.json());
     veskerySklad = Array.isArray(data) ? data : [];
     const produkty = {};
     veskerySklad.forEach(s => { if (!produkty[s.id]) produkty[s.id] = {nazev:s.nazev, ean:s.ean}; });
@@ -1945,7 +1945,7 @@ let vybraneProdukty = new Set();
 async function loadProdukty() {
   document.getElementById('produktyTable').innerHTML='<div class="loading">Načítám...</div>';
   try {
-    const data = await adminFetch(API+'/sklad').then(r=>r.json());
+    const data = await adminFetch(API+'/sklad/admin').then(r=>r.json());
     const map = {};
     if (Array.isArray(data)) data.forEach(s=>{
       if(!map[s.id])map[s.id]={...s,celkem:0,velikostiSeznam:[]};
@@ -2443,7 +2443,7 @@ async function exportCSV(typ) {
       rows=[['ID','Jméno','Email','Telefon','Ulice','Město','PSČ','Registrace']];
       d.forEach(z=>rows.push([z.id,z.jmeno,z.email,z.telefon||'',z.ulice||'',z.mesto||'',z.psc||'',new Date(z.vytvoreno).toLocaleDateString('cs-CZ')]));
     } else if (typ==='sklad') {
-      const d=await adminFetch(API+'/sklad').then(r=>r.json());
+      const d=await adminFetch(API+'/sklad/admin').then(r=>r.json());
       rows=[['Produkt','Značka','Kategorie','Cena Kč','Velikost','Kusů','Min. stav','Status']];
       d.forEach(s=>rows.push([s.nazev,s.znacka,s.kategorie,s.cena,s.velikost,s.pocet_kusu,s.min_pocet,s.pocet_kusu===0?'Vyprodáno':s.nizky_stav?'Nízký stav':'OK']));
       nazev='sklad';
@@ -2759,7 +2759,7 @@ async function tisknoutUzaverku(klicDne) {
 
 async function nacistSkladProProdejna() {
   try {
-    const data = await adminFetch(API+'/sklad').then(r=>r.json());
+    const data = await adminFetch(API+'/sklad/admin').then(r=>r.json());
     prodejnaSkladData = Array.isArray(data) ? data : [];
     // Naplnit selecty produktů
     const produkty = {};

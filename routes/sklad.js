@@ -22,7 +22,30 @@ async function initSkladSloupce() {
 }
 initSkladSloupce();
 
+// Veřejné - frontend (e-shop) nesmí dostat interní skladové údaje jako
+// min_pocet (interní práh pro "nízký stav") nebo z něj odvozené nizky_stav,
+// jen to, co potřebuje k zobrazení produktu a dostupnosti.
 router.get('/', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT p.id, p.nazev, p.znacka, p.emoji, p.kategorie, p.cena, p.cena_puvodni, p.typ_nohy, p.popis,
+             s.velikost, s.ean, s.pocet_kusu, s.delka_mm, s.sirka_mm, s.dostupnost
+      FROM produkty p
+      LEFT JOIN sklad s ON p.id = s.produkt_id
+      ORDER BY p.nazev, s.velikost
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ chyba: err.message });
+  }
+});
+
+// Vše pod touto řádkou vyžaduje přihlášení do administrace
+// (veřejný e-shop potřebuje jen GET / výše, aby mohl zobrazit produkty)
+router.use(vyzadovatAdmina);
+
+// Admin verze se všemi interními údaji (min_pocet, nizky_stav) pro sklad v adminu.
+router.get('/admin', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT p.id, p.nazev, p.znacka, p.emoji, p.kategorie, p.cena, p.cena_puvodni, p.typ_nohy, p.popis,
@@ -37,10 +60,6 @@ router.get('/', async (req, res) => {
     res.status(500).json({ chyba: err.message });
   }
 });
-
-// Vše pod touto řádkou vyžaduje přihlášení do administrace
-// (veřejný e-shop potřebuje jen GET / výše, aby mohl zobrazit produkty)
-router.use(vyzadovatAdmina);
 
 router.post('/naskladnit', async (req, res) => {
   const { produkt_id, velikost, pocet, poznamka } = req.body;
