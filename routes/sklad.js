@@ -23,13 +23,14 @@ async function initSkladSloupce() {
 initSkladSloupce();
 
 // Veřejné - frontend (e-shop) nesmí dostat interní skladové údaje jako
-// min_pocet (interní práh pro "nízký stav") nebo z něj odvozené nizky_stav,
-// jen to, co potřebuje k zobrazení produktu a dostupnosti.
+// min_pocet (interní práh pro "nízký stav"), z něj odvozené nizky_stav, ani
+// EAN (čárový kód pro sklad/pokladnu) - eshop.html/index.html je nikde
+// nevyužívají, jen to, co potřebuje k zobrazení produktu a dostupnosti.
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT p.id, p.nazev, p.znacka, p.emoji, p.kategorie, p.cena, p.cena_puvodni, p.typ_nohy, p.popis,
-             s.velikost, s.ean, s.pocet_kusu, s.delka_mm, s.sirka_mm, s.dostupnost
+             s.velikost, s.pocet_kusu, s.delka_mm, s.sirka_mm, s.dostupnost
       FROM produkty p
       LEFT JOIN sklad s ON p.id = s.produkt_id
       ORDER BY p.nazev, s.velikost

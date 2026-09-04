@@ -123,10 +123,73 @@ router.post('/vratky', async (req, res) => {
   if (castka == null || castka < 0) {
     return res.status(400).json({ chyba: 'Chybí částka k vrácení.' });
   }
+  for (const p of polozky) {
+    if (!p || !Number.isInteger(p.produkt_id) || p.velikost === undefined || p.velikost === null) {
+      return res.status(400).json({ chyba: 'Neplatná položka k vrácení.' });
+    }
+    if (!Number.isInteger(p.pocet) || p.pocet <= 0) {
+      return res.status(400).json({ chyba: 'Neplatný počet kusů k vrácení.' });
+    }
+  }
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    // Admin frontend není autorita - když je vratka navázaná na konkrétní
+    // prodej/objednávku, ověřit položky proti tomu, co v ní skutečně bylo,
+    // a proti tomu, co už se přes ni vrátilo dřív (opakované částečné vratky).
+    // Bez vazby (ruční/historická oprava skladu bez zdroje) se ověřit nedá -
+    // tam zůstává jen základní validace tvaru výše.
+    if (prodej_id || objednavka_id) {
+      let zdrojovePolozky;
+      if (prodej_id) {
+        const prodej = await client.query('SELECT polozky FROM prodejna_prodeje WHERE id=$1', [prodej_id]);
+        if (!prodej.rows.length) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ chyba: 'Navázaný prodej nenalezen.' });
+        }
+        zdrojovePolozky = prodej.rows[0].polozky;
+      } else {
+        const obj = await client.query('SELECT produkt_id, velikost, pocet FROM objednavky_polozky WHERE objednavka_id=$1', [objednavka_id]);
+        zdrojovePolozky = obj.rows;
+      }
+
+      const mapaZdroj = new Map();
+      for (const p of zdrojovePolozky) {
+        const klic = `${p.produkt_id}_${p.velikost}`;
+        mapaZdroj.set(klic, (mapaZdroj.get(klic) || 0) + Number(p.pocet));
+      }
+
+      const jizVracene = await client.query(
+        `SELECT polozky FROM vratky WHERE ${prodej_id ? 'prodej_id = $1' : 'objednavka_id = $1'}`,
+        [prodej_id || objednavka_id]
+      );
+      const mapaJizVraceno = new Map();
+      for (const radek of jizVracene.rows) {
+        for (const p of radek.polozky) {
+          const klic = `${p.produkt_id}_${p.velikost}`;
+          mapaJizVraceno.set(klic, (mapaJizVraceno.get(klic) || 0) + Number(p.pocet));
+        }
+      }
+
+      const nyniPozadovano = new Map();
+      for (const p of polozky) {
+        const klic = `${p.produkt_id}_${p.velikost}`;
+        const puvodniPocet = mapaZdroj.get(klic);
+        if (!puvodniPocet) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ chyba: `Položka (produkt ${p.produkt_id}, vel. ${p.velikost}) nebyla součástí navázaného prodeje/objednávky.` });
+        }
+        const jizVracenoPocet = mapaJizVraceno.get(klic) || 0;
+        const celkemNyni = (nyniPozadovano.get(klic) || 0) + p.pocet;
+        if (jizVracenoPocet + celkemNyni > puvodniPocet) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ chyba: `Nelze vrátit víc kusů (produkt ${p.produkt_id}, vel. ${p.velikost}), než bylo prodáno/objednáno a ještě nevráceno.` });
+        }
+        nyniPozadovano.set(klic, celkemNyni);
+      }
+    }
 
     const vratka = await client.query(
       'INSERT INTO vratky (prodej_id, objednavka_id, polozky, castka, duvod, vraceno_na_sklad) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',

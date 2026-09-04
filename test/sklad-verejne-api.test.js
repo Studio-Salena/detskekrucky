@@ -1,5 +1,5 @@
 // P2.7 - veřejné GET /api/sklad nesmí vracet interní údaje (min_pocet,
-// z něj odvozené nizky_stav) - ty smí vidět jen admin přes GET /api/sklad/admin.
+// z něj odvozené nizky_stav, EAN) - ty smí vidět jen admin přes GET /api/sklad/admin.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
@@ -11,11 +11,11 @@ function vytvoritMockPool() {
       const s = sql.replace(/\s+/g, ' ').trim();
       if (s.startsWith('SELECT p.id, p.nazev')) {
         // Mock vrátí "všechno" - skutečnou filtraci sloupců dělá SQL v
-        // routes/sklad.js, tady jen ověřujeme, že veřejná route o min_pocet
+        // routes/sklad.js, tady jen ověřujeme, že veřejná route o tato pole
         // v SQL vůbec nepožádá.
-        if (s.includes('min_pocet')) return { rows: [RADEK] };
-        const { min_pocet, nizky_stav, ...verejny } = RADEK;
-        return { rows: [verejny] };
+        if (s.includes('min_pocet')) return { rows: [RADEK] }; // admin dotaz
+        const { min_pocet, nizky_stav, ean, ...verejny } = RADEK;
+        return { rows: [s.includes('s.ean') ? { ...verejny, ean } : verejny] };
       }
       if (s.startsWith('ALTER TABLE') || s.startsWith('CREATE TABLE')) return {};
       throw new Error('Mock nezná dotaz: ' + s);
@@ -47,7 +47,7 @@ function vytvoritRes() {
   return res;
 }
 
-test('veřejné GET /api/sklad neobsahuje min_pocet ani nizky_stav', async () => {
+test('veřejné GET /api/sklad neobsahuje min_pocet, nizky_stav ani ean', async () => {
   const router = nacistSkladSMockPoolem();
   const handler = najitHandler(router, 'get', '/');
   const res = vytvoritRes();
@@ -56,9 +56,10 @@ test('veřejné GET /api/sklad neobsahuje min_pocet ani nizky_stav', async () =>
   assert.equal(res.statusCode, 200);
   assert.equal('min_pocet' in res.body[0], false);
   assert.equal('nizky_stav' in res.body[0], false);
+  assert.equal('ean' in res.body[0], false);
 });
 
-test('GET /api/sklad/admin obsahuje min_pocet i nizky_stav (pro admin sklad)', async () => {
+test('GET /api/sklad/admin obsahuje min_pocet, nizky_stav i ean (pro admin sklad)', async () => {
   const router = nacistSkladSMockPoolem();
   const handler = najitHandler(router, 'get', '/admin');
   const res = vytvoritRes();
@@ -67,4 +68,5 @@ test('GET /api/sklad/admin obsahuje min_pocet i nizky_stav (pro admin sklad)', a
   assert.equal(res.statusCode, 200);
   assert.equal('min_pocet' in res.body[0], true);
   assert.equal('nizky_stav' in res.body[0], true);
+  assert.equal('ean' in res.body[0], true);
 });
