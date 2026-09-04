@@ -286,6 +286,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <div class="stat-card"><div class="stat-label">Objednávky</div><div class="stat-value" id="statObjednavky">...</div><div class="stat-sub stat-red" id="statNove"></div></div>
         <div class="stat-card"><div class="stat-label">Zákazníci</div><div class="stat-value" id="statZakaznici">—</div></div>
         <div class="stat-card"><div class="stat-label">Nízký stav skladu</div><div class="stat-value stat-red" id="statNizkyStav">...</div><div class="stat-sub stat-red">položek</div></div>
+        <div class="stat-card"><div class="stat-label">Hodnota skladu</div><div class="stat-value" id="statHodnotaSkladu">...</div><div class="stat-sub">v prodejních cenách</div></div>
       </div>
 
       <div class="chart-wrap no-print">
@@ -1335,10 +1336,11 @@ document.addEventListener('click', e => {
 // PŘEHLED
 async function loadPrehled() {
   try {
-    const [obj, sklad, prodejna] = await Promise.all([
+    const [obj, sklad, prodejna, celySklad] = await Promise.all([
       adminFetch(API+'/objednavky').then(r=>r.json()).catch(()=>[]),
       adminFetch(API+'/sklad/nizky-stav').then(r=>r.json()).catch(()=>[]),
-      adminFetch(API+'/prodejna').then(r=>r.json()).catch(()=>[])
+      adminFetch(API+'/prodejna').then(r=>r.json()).catch(()=>[]),
+      adminFetch(API+'/sklad').then(r=>r.json()).catch(()=>[])
     ]);
     const platne = Array.isArray(obj) ? obj.filter(o=>o.stav!=='zruseno') : [];
     const prodejnaProdeje = Array.isArray(prodejna) ? prodejna : [];
@@ -1350,6 +1352,10 @@ async function loadPrehled() {
     document.getElementById('statObjednavky').textContent = Array.isArray(obj)?obj.length:0;
     document.getElementById('statNove').textContent = nove+' nových';
     document.getElementById('statNizkyStav').textContent = Array.isArray(sklad)?sklad.length:0;
+    const hodnotaSkladu = Array.isArray(celySklad)
+      ? celySklad.reduce((s,p)=>s+(Number(p.cena)||0)*(Number(p.pocet_kusu)||0),0)
+      : 0;
+    document.getElementById('statHodnotaSkladu').textContent = hodnotaSkladu.toLocaleString('cs-CZ')+' Kč';
 
     // Graf
     const mesice = {};
