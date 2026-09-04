@@ -2,12 +2,35 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
 
-if (!process.env.STRIPE_KEY) {
-  console.error('CHYBA: STRIPE_KEY není nastaven v proměnných prostředí! Platby nebudou fungovat.');
+// Platba kartou je momentálně vypnutá v checkoutu (viz commit "Odebrat platbu
+// kartou z checkoutu e-shopu"), ale routa zůstává v kódu pro budoucí návrat -
+// jen se řídí feature flagem STRIPE_ENABLED, který musí být explicitně 'true'
+// (fail closed: cokoli jiného, včetně chybějící proměnné, endpointy vypne).
+const STRIPE_ENABLED = process.env.STRIPE_ENABLED === 'true';
+
+let stripe = null;
+if (STRIPE_ENABLED) {
+  if (!process.env.STRIPE_KEY) {
+    // Nikdy neinicializovat Stripe klienta bez klíče - radši zůstat vypnutý
+    // (stripe zůstává null), než se spolehnout na nefunkční/undefined klíč.
+    console.error('CHYBA: STRIPE_ENABLED=true, ale STRIPE_KEY není nastaven - platby kartou zůstávají vypnuté.');
+  } else {
+    stripe = require('stripe')(process.env.STRIPE_KEY);
+  }
 }
-const stripe = require('stripe')(process.env.STRIPE_KEY);
+
+// Společná kontrola pro všechny routy níže - když Stripe není zapnutý a
+// funkční, odmítne request rovnou bez volání Stripe API.
+function pozadovatStripe(req, res) {
+  if (!stripe) {
+    res.status(503).json({ chyba: 'Platba kartou je momentálně nedostupná.' });
+    return false;
+  }
+  return true;
+}
 
 router.post('/vytvorit', async (req, res) => {
+  if (!pozadovatStripe(req, res)) return;
   const { objednavka_id } = req.body;
   try {
     const objednavka = await pool.query(`
@@ -56,6 +79,7 @@ router.post('/vytvorit', async (req, res) => {
 });
 
 router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!pozadovatStripe(req, res)) return;
   const sig = req.headers['stripe-signature'];
   let event;
   try {
@@ -74,6 +98,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 });
 
 router.get('/stav/:session_id', async (req, res) => {
+  if (!pozadovatStripe(req, res)) return;
   try {
     const session = await stripe.checkout.sessions.retrieve(req.params.session_id);
     res.json({

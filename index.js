@@ -5,13 +5,10 @@ const pool = require('./db/pool');
 const skladRoutes = require('./routes/sklad');
 const objednavkyRoutes = require('./routes/objednavky');
 const authRoutes = require('./routes/auth');
-// Stripe (routes/platby.js) je dočasně vypnutý - platba kartou byla odebraná
-// z checkoutu (viz commit "Odebrat platbu kartou z checkoutu e-shopu"), ale
-// endpointy /vytvorit a /stav/:id zůstaly veřejně dostupné bez jakékoli vazby
-// na vlastníka objednávky. Security audit: dokud se karta znovu nezapne,
-// nemá smysl to držet mountnuté. Znovu zapnout: odkomentovat require +
-// app.use níže (a ověřit, že STRIPE_KEY/STRIPE_WEBHOOK_SECRET jsou na Renderu).
-// const platbyRoutes = require('./routes/platby');
+// routes/platby.js (Stripe) zůstává mountnuté, ale je samo o sobě vypnuté
+// (fail closed), dokud není explicitně nastaveno STRIPE_ENABLED=true na
+// Renderu - viz feature flag přímo v routes/platby.js.
+const platbyRoutes = require('./routes/platby');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -78,7 +75,7 @@ app.get('/', (req, res) => {
 app.use('/api/sklad', skladRoutes);
 app.use('/api/objednavky', objednavkyRoutes);
 app.use('/api/auth', authRoutes);
-// app.use('/api/platby', platbyRoutes); // vypnuto - viz komentář u require výše
+app.use('/api/platby', platbyRoutes);
 
 app.use('/api/produkty', skladRoutes);
 app.use('/api/kategorie', kategorieRoutes);
