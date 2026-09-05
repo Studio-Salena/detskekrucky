@@ -152,6 +152,12 @@ tr:hover td{background:#fffaf5}
 .success-msg{background:#e8f7ee;color:#27ae60;padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:0.83rem}
 .info-box{background:var(--cream);border-radius:10px;padding:12px 14px;border:1px solid var(--tan-light);font-size:0.84rem;margin-bottom:12px}
 .section-divider{font-family:'Dancing Script',cursive;font-size:1.1rem;color:var(--brown);margin:16px 0 10px;padding-bottom:5px;border-bottom:1px solid var(--tan-light)}
+.fotky-dropzone{border:2px dashed var(--tan-light);border-radius:12px;padding:20px;text-align:center;transition:all 0.15s}
+.fotky-dropzone.drag{border-color:var(--brown);background:rgba(139,69,19,0.05)}
+.fotka-karta{width:130px;border:2px solid var(--tan-light);border-radius:10px;padding:6px;text-align:center}
+.fotka-karta.primarni{border-color:var(--brown)}
+.fotka-karta img{width:100%;height:90px;object-fit:cover;border-radius:6px;display:block}
+.fotka-karta input[type=text]{width:100%;font-size:0.72rem;margin:4px 0;padding:3px;border:1px solid var(--tan-light);border-radius:4px;font-family:inherit;box-sizing:border-box}
 select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px;font-size:0.78rem;cursor:pointer;font-family:'Nunito',sans-serif}
 .filter-pills{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
 .pill{padding:5px 12px;border-radius:16px;border:2px solid var(--tan-light);background:#fff;cursor:pointer;font-family:'Nunito',sans-serif;font-weight:700;font-size:0.75rem;color:var(--text-light);transition:all 0.2s}
@@ -1207,6 +1213,18 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     <div class="form-group"><label>Popis</label><textarea id="upPopis" rows="3" style="width:100%;padding:8px;border:1px solid var(--tan-light);border-radius:8px;font-family:inherit;resize:vertical"></textarea></div>
     <div class="form-group"><label>Typ nohy/nártu</label><input type="text" id="upTypNohy" placeholder="např. vhodné pro širší nártu"></div>
     <div style="font-size:0.85rem;color:var(--text-light);margin-bottom:10px">EAN kódy a rozměry (mm) se upravují u jednotlivých velikostí v záložce Sklad (✏️ u dané položky).</div>
+
+    <div class="section-divider">📷 Fotografie produktu</div>
+    <div id="fotkyDropzone" class="fotky-dropzone" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="fotkyDrop(event)">
+      <input type="file" id="fotkyInput" accept="image/*" multiple style="display:none" onchange="fotkyVybrany(this.files)">
+      <div style="margin-bottom:8px">Přetáhni fotky sem, nebo</div>
+      <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('fotkyInput').click()">📤 Nahrát fotografie</button>
+      <div style="font-size:0.75rem;color:var(--text-light);margin-top:6px">Jde vybrat víc fotek najednou, i vyfotit rovnou mobilem. Max 10 MB / fotka.</div>
+    </div>
+    <div id="fotkyProgress" style="display:none;font-size:0.85rem;color:var(--text-light);margin-top:8px">Nahrávám...</div>
+    <div id="fotkyMsg"></div>
+    <div id="fotkyGalerie" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:10px"></div>
+
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modalUpravitProdukt')">Zrušit</button>
       <button class="btn btn-primary" onclick="ulozitUpravuProduktu()">💾 Uložit</button>
@@ -2067,7 +2085,112 @@ function upravitProdukt(id,nazev,znacka,cena,cenaPuvodni,emoji,popis,kategorie,t
   document.getElementById('upPopis').value=popis||'';
   document.getElementById('upTypNohy').value=typNohy||'';
   naplnitVyberKategorii('upKategorie', kategorie);
+  fotkyProduktId = id;
+  document.getElementById('fotkyMsg').innerHTML = '';
+  nacistFotkyProduktu(id);
   openModal('modalUpravitProdukt');
+}
+
+// FOTOGRAFIE PRODUKTU
+let fotkyProduktId = null;
+let fotkyData = [];
+
+async function nacistFotkyProduktu(id) {
+  document.getElementById('fotkyGalerie').innerHTML = '<div class="loading">Načítám...</div>';
+  try {
+    const data = await adminFetch(API+'/produkty/'+id+'/images').then(r=>r.json());
+    fotkyData = Array.isArray(data) ? data : [];
+  } catch(e) { fotkyData = []; }
+  vykreslitFotkyGalerii();
+}
+
+function vykreslitFotkyGalerii() {
+  const kont = document.getElementById('fotkyGalerie');
+  if (!fotkyData.length) { kont.innerHTML = '<div class="empty" style="width:100%">Zatím žádné fotografie.</div>'; return; }
+  const serazene = [...fotkyData].sort((a,b)=>a.position-b.position);
+  kont.innerHTML = serazene.map((f,i) => `
+    <div class="fotka-karta ${f.is_primary?'primarni':''}">
+      <img src="${escAttr(f.url)}" loading="lazy" alt="${escAttr(f.alt||'')}">
+      <div style="display:flex;justify-content:center;gap:4px;margin-top:4px">
+        <button class="btn btn-outline btn-sm" title="Posunout nahoru" ${i===0?'disabled':''} onclick="posunoutFotku(${f.id},-1)">↑</button>
+        <button class="btn btn-outline btn-sm" title="Posunout dolů" ${i===serazene.length-1?'disabled':''} onclick="posunoutFotku(${f.id},1)">↓</button>
+      </div>
+      <div style="font-size:0.72rem;margin:4px 0;color:${f.is_primary?'var(--brown)':'var(--text-light)'}">${f.is_primary?'⭐ Hlavní fotka':'&nbsp;'}</div>
+      <input type="text" value="${escAttr(f.alt||'')}" placeholder="ALT text" onchange="upravitAltFotky(${f.id},this.value)">
+      <div style="display:flex;gap:4px;justify-content:center">
+        ${!f.is_primary?`<button class="btn btn-outline btn-sm" title="Nastavit jako hlavní" onclick="nastavitHlavniFotku(${f.id})">⭐</button>`:''}
+        <button class="btn btn-red btn-sm" title="Smazat" onclick="smazatFotku(${f.id})">🗑️</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function fotkyDrop(e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag');
+  if (e.dataTransfer.files && e.dataTransfer.files.length) fotkyVybrany(e.dataTransfer.files);
+}
+
+async function fotkyVybrany(files) {
+  if (!files || !files.length || !fotkyProduktId) return;
+  const progress = document.getElementById('fotkyProgress');
+  const msg = document.getElementById('fotkyMsg');
+  progress.style.display = 'block';
+  progress.textContent = 'Nahrávám ' + files.length + ' fotografii(í)...';
+  msg.innerHTML = '';
+  const fd = new FormData();
+  [...files].forEach(f => fd.append('fotky', f));
+  try {
+    const res = await adminFetch(API+'/produkty/'+fotkyProduktId+'/images', { method:'POST', body: fd });
+    const data = await res.json();
+    if (res.ok) {
+      msg.innerHTML = '<div class="success-msg">✅ Nahráno</div>';
+      await nacistFotkyProduktu(fotkyProduktId);
+    } else {
+      msg.innerHTML = `<div class="error-msg">${escH(data.chyba||'Nahrání selhalo')}</div>`;
+    }
+  } catch(e) {
+    msg.innerHTML = '<div class="error-msg">Chyba spojení</div>';
+  } finally {
+    progress.style.display = 'none';
+    document.getElementById('fotkyInput').value = '';
+  }
+}
+
+async function nastavitHlavniFotku(imageId) {
+  try {
+    await adminFetch(API+'/produkty/'+fotkyProduktId+'/images/'+imageId+'/primary', {method:'PATCH'});
+    await nacistFotkyProduktu(fotkyProduktId);
+  } catch(e) { alert('Nepodařilo se nastavit hlavní fotografii.'); }
+}
+
+async function smazatFotku(imageId) {
+  if (!confirm('Smazat tuto fotografii?')) return;
+  try {
+    await adminFetch(API+'/produkty/'+fotkyProduktId+'/images/'+imageId, {method:'DELETE'});
+    await nacistFotkyProduktu(fotkyProduktId);
+  } catch(e) { alert('Smazání se nepovedlo.'); }
+}
+
+async function upravitAltFotky(imageId, alt) {
+  try {
+    await adminFetch(API+'/produkty/'+fotkyProduktId+'/images/'+imageId, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({alt})});
+  } catch(e) {}
+}
+
+async function posunoutFotku(imageId, smer) {
+  const serazene = [...fotkyData].sort((a,b)=>a.position-b.position);
+  const idx = serazene.findIndex(f=>f.id===imageId);
+  const cil = idx + smer;
+  if (cil < 0 || cil >= serazene.length) return;
+  const a = serazene[idx], b = serazene[cil];
+  try {
+    await Promise.all([
+      adminFetch(API+'/produkty/'+fotkyProduktId+'/images/'+a.id, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({position:b.position})}),
+      adminFetch(API+'/produkty/'+fotkyProduktId+'/images/'+b.id, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({position:a.position})})
+    ]);
+    await nacistFotkyProduktu(fotkyProduktId);
+  } catch(e) { alert('Přeuspořádání se nepovedlo.'); }
 }
 
 async function ulozitUpravuProduktu() {

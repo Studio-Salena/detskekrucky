@@ -2,6 +2,7 @@
 const router = express.Router();
 const pool = require('../db/pool');
 const vyzadovatAdmina = require('../middleware/adminAuth');
+const { ziskatOptimalizovanouUrl } = require('../lib/cloudinary');
 
 // Idempotentní migrace - rozměry patří k velikosti (sklad), typ nohy k produktu.
 // Stejný vzor jako routes/prodejna.js:initTabulky.
@@ -28,14 +29,30 @@ initSkladSloupce();
 // nevyužívají, jen to, co potřebuje k zobrazení produktu a dostupnosti.
 router.get('/', async (req, res) => {
   try {
+    // LEFT JOIN LATERAL doplní hlavní fotografii produktu (pokud nějakou má)
+    // v TÉTO JEDNÉ dotazu - žádné dodatečné dotazy po produktech (N+1). Pokud
+    // produkt v product_images žádnou hlavní fotku nemá, primary_image_url
+    // vyjde NULL a frontend spadne zpátky na legacy p.emoji (URL nebo emoji).
     const result = await pool.query(`
       SELECT p.id, p.nazev, p.znacka, p.emoji, p.kategorie, p.cena, p.cena_puvodni, p.typ_nohy, p.popis,
-             s.velikost, s.pocet_kusu, s.delka_mm, s.sirka_mm, s.dostupnost
+             s.velikost, s.pocet_kusu, s.delka_mm, s.sirka_mm, s.dostupnost,
+             pi.url AS primary_image_url, pi.alt AS primary_image_alt
       FROM produkty p
       LEFT JOIN sklad s ON p.id = s.produkt_id
+      LEFT JOIN LATERAL (
+        SELECT url, alt FROM product_images
+        WHERE produkt_id = p.id AND is_primary = true
+        LIMIT 1
+      ) pi ON true
       ORDER BY p.nazev, s.velikost
     `);
-    res.json(result.rows);
+    // Transformace (formát/kvalita/resize) se do URL vkládá až tady, ne při
+    // uploadu - DB drží jen originální secure_url, žádné fyzické thumbnaily.
+    const radky = result.rows.map(r => r.primary_image_url
+      ? { ...r, primary_image_url: ziskatOptimalizovanouUrl(r.primary_image_url, 700) }
+      : r
+    );
+    res.json(radky);
   } catch (err) {
     res.status(500).json({ chyba: err.message });
   }

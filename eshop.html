@@ -896,11 +896,15 @@ async function nacistProdukty() {
         map[klic] = {
           klic, nazev: (s.nazev || '').trim(), znacka: s.znacka,
           popis: s.popis || '', typ_nohy: s.typ_nohy || '',
-          kategorieCitac: {}, emoji: '', velikosti: []
+          kategorieCitac: {}, emoji: '', primaryImageUrl: '', primaryImageAlt: '', velikosti: []
         };
       }
       const p = map[klic];
       if (!p.emoji && s.emoji) p.emoji = s.emoji;
+      // Model bot má v DB většinou víc produkt_id (jeden na velikost, viz
+      // komentář výše) - hlavní fotka nahraná admin.html u KTERÉHOKOLIV z
+      // nich se tu vezme jako fotka celé karty, stejně jako se to dělá s emoji.
+      if (!p.primaryImageUrl && s.primary_image_url) { p.primaryImageUrl = s.primary_image_url; p.primaryImageAlt = s.primary_image_alt || ''; }
       if (s.kategorie) p.kategorieCitac[s.kategorie] = (p.kategorieCitac[s.kategorie] || 0) + 1;
       // "U dodavatele" velikosti se zobrazí i bez fyzické skladové zásoby -
       // pocet_kusu u nich neznamená, kolik je reálně k mání, jen se sledují jinak.
@@ -948,6 +952,22 @@ function naplnitFiltrVelikosti() {
   sel.innerHTML = '<option value="">Velikost nožičky</option>' + velikosti.map(v => `<option value="${v}">${v}</option>`).join('');
 }
 
+// Fallback řetězec pro obrázek produktu: 1) hlavní fotka z product_images
+// (nahraná admin.html, přes Cloudinary), 2) legacy - produkty.emoji obsahuje
+// externí HTTP URL (starý způsob), 3) produkty.emoji je skutečné emoji.
+// p.emoji už v tuhle chvíli má vždycky nějakou hodnotu (viz výchozí
+// '&#128098;' o pár řádků výš), takže <span> fallback nemůže zůstat prázdný.
+function obrazekProduktuHtml(p, vyskaPx) {
+  const styl = `width:100%;height:${vyskaPx}px;object-fit:cover;border-radius:12px`;
+  if (p.primaryImageUrl) {
+    return `<img src="${p.primaryImageUrl}" alt="${p.primaryImageAlt || p.nazev || ''}" loading="lazy" decoding="async" style="${styl}">`;
+  }
+  if (p.emoji && p.emoji.startsWith('http')) {
+    return `<img src="${p.emoji}" alt="${p.nazev || ''}" loading="lazy" decoding="async" style="${styl}">`;
+  }
+  return `<span>${p.emoji}</span>`;
+}
+
 function zobrazitProdukty(produkty) {
   if (produkty.length === 0) {
     document.getElementById('productsGrid').innerHTML = '<div class="empty">&#128530; Žádné produkty nenalezeny.</div>';
@@ -961,7 +981,7 @@ function zobrazitProdukty(produkty) {
     const cenaText = (p.cenaOd ? 'od ' : '') + p.cena + ' Kč';
     return `<div class="product-card" onclick="openDetail('${klicJs}')">
       <div class="product-img ${bg.trida}" style="${bg.styl}">
-        <span>${p.emoji}</span>
+        ${obrazekProduktuHtml(p, 220)}
         ${p.cena_puvodni ? '<span class="product-badge sale">SLEVA</span>' : ''}
         ${p.maDodavatele ? '<span class="product-badge dodavatel">🚚 U dodavatele</span>' : ''}
       </div>
@@ -1095,10 +1115,7 @@ function openDetail(klic) {
   aktivniProdukt = vsechnyProdukty.find(p => p.klic === klic);
   vybranaVelikost = null;
   if (!aktivniProdukt) return;
-  const isImgDetail = aktivniProdukt.emoji && aktivniProdukt.emoji.startsWith('http');
-  document.getElementById('detailIcon').innerHTML = isImgDetail
-    ? `<img src="${aktivniProdukt.emoji}" style="width:100%;height:200px;object-fit:cover;border-radius:12px">`
-    : aktivniProdukt.emoji || '👟';
+  document.getElementById('detailIcon').innerHTML = obrazekProduktuHtml(aktivniProdukt, 200);
   document.getElementById('detailBrand').textContent = aktivniProdukt.znacka;
   document.getElementById('detailName').textContent = aktivniProdukt.nazev;
   document.getElementById('detailPopis').textContent = aktivniProdukt.popis || 'Kvalitní barefoot obuv pro zdravý vývoj dětských nožiček.';
