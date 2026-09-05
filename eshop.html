@@ -1667,10 +1667,11 @@ async function nacistMojeObjednavky() {
       return;
     }
     // Stavy musí přesně odpovídat enumu na serveru (routes/objednavky.js:
-    // 'nova','zaplacena','odeslana','dorucena','zrusena') - jinak barva/popisek
-    // spadne na výchozí hodnotu a zrušená objednávka by vypadala jako nová.
+    // 'nova','vyrizuje','zaplacena','odeslana','dorucena','zrusena') - jinak
+    // barva/popisek spadne na výchozí hodnotu a zrušená objednávka by vypadala jako nová.
     const stavInfo = {
       nova: {barva:'#2ecc71', text:'Nová'},
+      vyrizuje: {barva:'#e67e22', text:'Vyřizuje se'},
       zaplacena: {barva:'#f39c12', text:'Zaplacená'},
       odeslana: {barva:'#3498db', text:'Odeslaná'},
       dorucena: {barva:'#27ae60', text:'Doručená'},

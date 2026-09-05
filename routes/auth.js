@@ -4,6 +4,8 @@ const pool = require('../db/pool');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const vyzadovatAdmina = require('../middleware/adminAuth');
+const { jeZablokovana: jeLoginZablokovana, zaznamenatNeuspech, resetovat: resetovatLogin } = require('../middleware/zakaznikLoginLimiter');
+const { jeZablokovana: jeRegistraceZablokovana, zaznamenatRegistraci } = require('../middleware/registraceLimiter');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -12,11 +14,30 @@ if (!JWT_SECRET) {
 
 // Registrace
 router.post('/registrace', async (req, res) => {
+  const zbyvaSekund = jeRegistraceZablokovana(req.ip);
+  if (zbyvaSekund > 0) {
+    return res.status(429).json({ chyba: `Příliš mnoho pokusů o registraci z tohoto místa. Zkuste to znovu za ${Math.ceil(zbyvaSekund / 60)} min.` });
+  }
+  zaznamenatRegistraci(req.ip);
   const { jmeno, email, heslo, telefon, ulice, mesto, psc } = req.body;
   try {
-    const existuje = await pool.query('SELECT id FROM zakaznici WHERE email = $1', [email]);
+    const existuje = await pool.query('SELECT id, heslo FROM zakaznici WHERE email = $1', [email]);
     if (existuje.rows.length > 0) {
-      return res.status(400).json({ chyba: 'Email je jiz registrovan' });
+      if (existuje.rows[0].heslo) {
+        // Skutečný, už dřív dokončený účet - klasické "email je zabraný".
+        return res.status(400).json({ chyba: 'Email je jiz registrovan' });
+      }
+      // Zákazník vznikl jen z objednávky bez zadání hesla (host checkout) -
+      // účet ještě nikdy nešel dokončit, takže mu teď heslo prostě doplníme
+      // místo toho, abychom ho navěky blokovali hláškou "email už existuje".
+      const hash = await bcrypt.hash(heslo, 10);
+      const id = existuje.rows[0].id;
+      await pool.query(
+        'UPDATE zakaznici SET heslo=$1, jmeno=$2, telefon=$3, ulice=$4, mesto=$5, psc=$6 WHERE id=$7',
+        [hash, jmeno, telefon, ulice, mesto, psc, id]
+      );
+      const token = jwt.sign({ id, email }, JWT_SECRET, { expiresIn: '7d' });
+      return res.json({ zprava: 'Registrace uspesna', token });
     }
     const hash = await bcrypt.hash(heslo, 10);
     const result = await pool.query(
@@ -32,17 +53,31 @@ router.post('/registrace', async (req, res) => {
 
 // Prihlaseni
 router.post('/prihlaseni', async (req, res) => {
+  const zbyvaSekund = jeLoginZablokovana(req.ip);
+  if (zbyvaSekund > 0) {
+    return res.status(429).json({ chyba: `Příliš mnoho neúspěšných pokusů. Zkuste to znovu za ${Math.ceil(zbyvaSekund / 60)} min.` });
+  }
   const { email, heslo } = req.body;
   try {
     const result = await pool.query('SELECT * FROM zakaznici WHERE email = $1', [email]);
     if (result.rows.length === 0) {
+      zaznamenatNeuspech(req.ip);
       return res.status(400).json({ chyba: 'Neplatny email nebo heslo' });
     }
     const zakaznik = result.rows[0];
-    const shoda = await bcrypt.compare(heslo, zakaznik.heslo);
-    if (!shoda) {
+    if (!zakaznik.heslo) {
+      // Zákazník vznikl jen z host objednávky a heslo si ještě nikdy nenastavil -
+      // bcrypt.compare(heslo, null) by shodilo request na 500. Stejná generická
+      // hláška jako u špatného hesla, ať se nedá zjistit, které účty mají heslo.
+      zaznamenatNeuspech(req.ip);
       return res.status(400).json({ chyba: 'Neplatny email nebo heslo' });
     }
+    const shoda = await bcrypt.compare(heslo, zakaznik.heslo);
+    if (!shoda) {
+      zaznamenatNeuspech(req.ip);
+      return res.status(400).json({ chyba: 'Neplatny email nebo heslo' });
+    }
+    resetovatLogin(req.ip);
     const token = jwt.sign({ id: zakaznik.id, email }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, jmeno: zakaznik.jmeno, email: zakaznik.email });
   } catch (err) {

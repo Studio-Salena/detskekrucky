@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
 const vyzadovatAdmina = require('../middleware/adminAuth');
+const { jeZablokovana: jeZadostZablokovana, zaznamenatZadost } = require('../middleware/poukazyZadostLimiter');
 
 const POVOLENE_HODNOTY = [500, 1000, 1500];
 
@@ -92,6 +93,10 @@ router.get('/overit/:kod', async (req, res) => {
 
 // POST /api/poukazy/zadost – zákazník na e-shopu žádá o koupi poukazu (veřejné)
 router.post('/zadost', async (req, res) => {
+  const zbyvaSekund = jeZadostZablokovana(req.ip);
+  if (zbyvaSekund > 0) {
+    return res.status(429).json({ chyba: `Příliš mnoho žádostí z tohoto místa. Zkuste to znovu za ${Math.ceil(zbyvaSekund / 60)} min.` });
+  }
   const { hodnota, kupujici_jmeno, kupujici_email, kupujici_telefon, pro_koho, vzkaz } = req.body;
   const hodnotaCislo = Number(hodnota);
   if (!POVOLENE_HODNOTY.includes(hodnotaCislo)) {
@@ -100,6 +105,7 @@ router.post('/zadost', async (req, res) => {
   if (!kupujici_jmeno || !kupujici_email) {
     return res.status(400).json({ chyba: 'Vyplňte prosím jméno a e-mail.' });
   }
+  zaznamenatZadost(req.ip);
   try {
     const result = await pool.query(
       'INSERT INTO poukazy_zadosti (hodnota, kupujici_jmeno, kupujici_email, kupujici_telefon, pro_koho, vzkaz) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',

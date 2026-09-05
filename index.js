@@ -5,6 +5,9 @@ const pool = require('./db/pool');
 const skladRoutes = require('./routes/sklad');
 const objednavkyRoutes = require('./routes/objednavky');
 const authRoutes = require('./routes/auth');
+// routes/platby.js (Stripe) zůstává mountnuté, ale je samo o sobě vypnuté
+// (fail closed), dokud není explicitně nastaveno STRIPE_ENABLED=true na
+// Renderu - viz feature flag přímo v routes/platby.js.
 const platbyRoutes = require('./routes/platby');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });

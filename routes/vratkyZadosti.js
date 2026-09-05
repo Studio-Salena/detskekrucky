@@ -101,9 +101,42 @@ router.post('/', async (req, res) => {
       return res.status(404).json({ chyba: 'Objednávka s tímto číslem a e-mailem nebyla nalezena.' });
     }
 
+    // Položky k vrácení se nikdy neukládají tak, jak je poslal klient (to by
+    // znamenalo věřit i vymyšlenému produktu/názvu/množství) - ověří se proti
+    // skutečným položkám téhle objednávky a uloží se autoritativní název/cena z DB.
+    const skutecnePolozky = await pool.query(`
+      SELECT op.produkt_id, op.velikost, op.pocet, op.cena, p.nazev
+      FROM objednavky_polozky op
+      JOIN produkty p ON op.produkt_id = p.id
+      WHERE op.objednavka_id = $1
+    `, [objednavka_id]);
+    const mapaObjednanych = new Map(skutecnePolozky.rows.map(r => [`${r.produkt_id}_${r.velikost}`, r]));
+
+    const pozadovaneSoucty = new Map(); // klíč -> součet požadovaného počtu (kdyby klient poslal položku vícekrát)
+    const overenePolozky = [];
+    for (const p of polozky) {
+      if (!p || !Number.isInteger(p.produkt_id) || p.velikost === undefined || p.velikost === null) {
+        return res.status(400).json({ chyba: 'Neplatná položka k vrácení.' });
+      }
+      if (!Number.isInteger(p.pocet) || p.pocet <= 0) {
+        return res.status(400).json({ chyba: 'Neplatný počet kusů k vrácení.' });
+      }
+      const klic = `${p.produkt_id}_${p.velikost}`;
+      const objednano = mapaObjednanych.get(klic);
+      if (!objednano) {
+        return res.status(400).json({ chyba: 'Vybraná položka nebyla součástí této objednávky.' });
+      }
+      const celkemPozadovano = (pozadovaneSoucty.get(klic) || 0) + p.pocet;
+      if (celkemPozadovano > objednano.pocet) {
+        return res.status(400).json({ chyba: `Nelze vrátit ${celkemPozadovano} ks položky "${objednano.nazev}" - objednáno bylo jen ${objednano.pocet} ks.` });
+      }
+      pozadovaneSoucty.set(klic, celkemPozadovano);
+      overenePolozky.push({ produkt_id: p.produkt_id, velikost: p.velikost, pocet: p.pocet, nazev: objednano.nazev, cena: Number(objednano.cena) });
+    }
+
     const result = await pool.query(
       'INSERT INTO vratky_zadosti (objednavka_id, jmeno, email, telefon, polozky, duvod) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
-      [objednavka_id, jmeno || null, email, telefon || null, JSON.stringify(polozky), duvod || null]
+      [objednavka_id, jmeno || null, email, telefon || null, JSON.stringify(overenePolozky), duvod || null]
     );
 
     zaznamenatZadost(req.ip);
@@ -111,7 +144,7 @@ router.post('/', async (req, res) => {
 
     // Potvrzení zákazníkovi (zákonná povinnost) i upozornění majitelce se posílají
     // až po odpovědi, ať prodleva/chyba s odesláním žádost o vrácení nezablokuje.
-    const zadost = { objednavka_id, jmeno, email, telefon, polozky, duvod };
+    const zadost = { objednavka_id, jmeno, email, telefon, polozky: overenePolozky, duvod };
     odeslat_potvrzeni_vratky(zadost).catch(e => console.error('Potvrzeni zadosti o vratku se nepodarilo odeslat:', e.message));
     odeslat_upozorneni_vratky(zadost).catch(e => console.error('Upozorneni majitelce o vratce se nepodarilo odeslat:', e.message));
   } catch (err) {
