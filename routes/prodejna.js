@@ -158,10 +158,19 @@ router.post('/vratky', async (req, res) => {
         }
         zdrojovePolozky = prodej.rows[0].polozky;
       } else {
-        const objednavka = await client.query('SELECT id FROM objednavky WHERE id = $1 FOR UPDATE', [objednavka_id]);
+        const objednavka = await client.query('SELECT id, stav FROM objednavky WHERE id = $1 FOR UPDATE', [objednavka_id]);
         if (!objednavka.rows.length) {
           await client.query('ROLLBACK');
           return res.status(404).json({ chyba: 'Navázaná objednávka nenalezena.' });
+        }
+        // Symetrie se zrušením objednávky (routes/objednavky.js): kdo z obou
+        // (vratka/zrušení) získá zámek na objednávce první, ten "vyhrává" -
+        // druhý pak vidí už změněný stav a je odmítnut. Bez tohoto by šlo na
+        // už zrušenou objednávku (sklad už vrácen zrušením) vytvořit vratku,
+        // která by sklad vrátila podruhé.
+        if (objednavka.rows[0].stav === 'zrusena') {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ chyba: 'Na zrušenou objednávku nelze vytvořit vratku.' });
         }
         const obj = await client.query('SELECT produkt_id, velikost, pocet FROM objednavky_polozky WHERE objednavka_id=$1', [objednavka_id]);
         zdrojovePolozky = obj.rows;
@@ -234,11 +243,19 @@ router.post('/vratky', async (req, res) => {
   }
 });
 
-// DELETE /api/prodejna/vratky/:id – smazat záznam vratky (jen záznam, sklad se nemění)
+// DELETE /api/prodejna/vratky/:id – HARD DELETE zakázán. Vratka je od vytvoření
+// immutable auditní stopa - smazáním jen záznamu (bez odpovídající úpravy
+// skladu) by šlo obejít kontrolu už vráceného množství při další vratce a
+// zároveň "oslepit" kontrolu při zrušení objednávky (ta se dívá právě do
+// téhle tabulky), takže by cancellation mohla sklad vrátit podruhé. Skutečné
+// storno vratky (s korekcí skladu) je samostatný workflow pro pozdější etapu.
 router.delete('/vratky/:id', async (req, res) => {
   try {
-    await pool.query('DELETE FROM vratky WHERE id=$1', [req.params.id]);
-    res.json({ ok: true });
+    const vratka = await pool.query('SELECT id FROM vratky WHERE id=$1', [req.params.id]);
+    if (!vratka.rows.length) {
+      return res.status(404).json({ chyba: 'Vratka nenalezena.' });
+    }
+    return res.status(409).json({ chyba: 'Provedenou vratku nelze smazat. Pro opravu je nutné použít storno vratky.' });
   } catch (err) {
     res.status(500).json({ chyba: err.message });
   }

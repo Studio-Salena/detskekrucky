@@ -8,7 +8,7 @@ Web a e-shop pro obchod s barefoot obuví pro děti (majitelka: Monika Škarpich
 - **Frontend:** statický web (`index.html`), GitHub Pages (`hasalovaalena-glitch/detskekrucky`)
 - **Databáze:** self-hosted PostgreSQL na Forpsi VPS (produkční DB není Supabase)
 - **Hosting backendu:** Render – `detskekrucky1.onrender.com`
-- **Storage:** Supabase Storage bucket `produkty` (obrázky produktů)
+- **Storage:** žádné dedikované product-image storage zatím není implementované; legacy obrázky používají externí URL uloženou u produktu. Cloudinary zatím není implementované.
 - **Lokální cesta:** `C:\projekty\detskekrucky\`
 - **Prostředí:** Windows, VS Code, PowerShell – git příkazy se zadávají jednotlivě, ne řetězené
 
@@ -24,9 +24,8 @@ Web a e-shop pro obchod s barefoot obuví pro děti (majitelka: Monika Škarpich
 ## Hotové funkce
 
 - Správa produktů a skladu
-- Editovatelné textové sekce webu s persistencí v Supabase
+- Editovatelné textové sekce webu s persistencí v DB (tabulka `nastaveni`)
 - Dynamické načítání obsahu na `index.html`
-- Upload obrázků do Supabase Storage
 - Rezervační systém pro zákazníky se správou slotů
 - Emailové potvrzení rezervace zákazníkovi (přes Resend, `routes/emaily.js` → `odeslat_potvrzeni_rezervace`)
 

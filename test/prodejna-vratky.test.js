@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 function vytvoritStav() {
   return {
     prodejnaProdeje: [{ id: 10, polozky: [{ produkt_id: 1, velikost: 24, pocet: 3 }, { produkt_id: 2, velikost: 25, pocet: 1 }] }],
-    objednavky: [{ id: 20 }],
+    objednavky: [{ id: 20, stav: 'nova' }],
     objednavkyPolozky: [{ objednavka_id: 20, produkt_id: 5, velikost: 26, pocet: 2 }],
     vratky: [],
     dalsiVratkaId: 1,
@@ -31,10 +31,15 @@ function vytvoritMockClient(stav) {
         const p = stav.prodejnaProdeje.find(p => p.id === id);
         return { rows: p ? [{ id: p.id, polozky: p.polozky }] : [] };
       }
-      if (s.startsWith('SELECT id FROM objednavky WHERE id')) {
+      if (s.startsWith('SELECT id, stav FROM objednavky WHERE id')) {
         const [id] = params;
         const o = stav.objednavky.find(o => o.id === id);
-        return { rows: o ? [{ id: o.id }] : [] };
+        return { rows: o ? [{ id: o.id, stav: o.stav }] : [] };
+      }
+      if (s.startsWith('SELECT id FROM vratky WHERE id')) {
+        const [id] = params;
+        const v = stav.vratky.find(v => v.id === Number(id));
+        return { rows: v ? [{ id: v.id }] : [] };
       }
       if (s.startsWith('SELECT produkt_id, velikost, pocet FROM objednavky_polozky WHERE objednavka_id')) {
         const [id] = params;
@@ -181,7 +186,7 @@ test('vratka navázaná na objednávku zamyká objednávku (FOR UPDATE) PŘED č
   await handler({ body: { objednavka_id: 20, polozky: [{ produkt_id: 5, velikost: 26, pocet: 1 }], castka: 500 } }, res);
 
   assert.equal(res.statusCode, 200);
-  const lockIdx = stav.callLog.findIndex(c => c.sql.startsWith('SELECT id FROM objednavky WHERE id') && c.sql.includes('FOR UPDATE'));
+  const lockIdx = stav.callLog.findIndex(c => c.sql.startsWith('SELECT id, stav FROM objednavky WHERE id') && c.sql.includes('FOR UPDATE'));
   const vratkyIdx = stav.callLog.findIndex(c => c.sql.startsWith('SELECT polozky FROM vratky WHERE'));
   assert.notEqual(lockIdx, -1);
   assert.notEqual(vratkyIdx, -1);
@@ -212,6 +217,31 @@ test('zdrojový prodej se při vratce zamyká FOR UPDATE (serializace souběžn�
   assert.ok(lockDotaz.sql.includes('FOR UPDATE'), 'načtení zdrojového prodeje musí použít FOR UPDATE');
 });
 
+test('vratku na už zrušenou objednávku nelze vytvořit (409) - sklad by se vrátil podruhé', async () => {
+  const stav = vytvoritStav();
+  stav.objednavky[0].stav = 'zrusena'; // sklad už byl vrácen zrušením objednávky
+  const router = nacistProdejnaSMockPoolem(stav);
+  const handler = najitHandler(router, 'post', '/vratky');
+  const res = vytvoritRes();
+  await handler({ body: { objednavka_id: 20, polozky: [{ produkt_id: 5, velikost: 26, pocet: 1 }], castka: 500 } }, res);
+
+  assert.equal(res.statusCode, 409);
+  assert.match(res.body.chyba, /zrušenou objednávku/);
+  assert.equal(stav.vratky.length, 0);
+  assert.equal(stav.sklad.get('5_26'), undefined); // sklad nedotčen
+  const pohybyVolani = stav.callLog.filter(c => c.sql.startsWith('INSERT INTO pohyby_skladu'));
+  assert.equal(pohybyVolani.length, 0); // nevznikl žádný pohyb skladu
+
+  // zámek objednávky (a kontrola stavu) musí proběhnout PŘED čtením
+  // objednavky_polozky a existujících vratek
+  const lockIdx = stav.callLog.findIndex(c => c.sql.startsWith('SELECT id, stav FROM objednavky WHERE id'));
+  const polozkyIdx = stav.callLog.findIndex(c => c.sql.startsWith('SELECT produkt_id, velikost, pocet FROM objednavky_polozky'));
+  const vratkyIdx = stav.callLog.findIndex(c => c.sql.startsWith('SELECT polozky FROM vratky WHERE'));
+  assert.notEqual(lockIdx, -1);
+  assert.equal(polozkyIdx, -1, 'objednavky_polozky se nemají číst, když je objednávka zrušená');
+  assert.equal(vratkyIdx, -1, 'vratky se nemají číst, když je objednávka zrušená');
+});
+
 test('neplatný počet kusů (desetinný/záporný) je odmítnut i tady', async () => {
   const stav = vytvoritStav();
   const router = nacistProdejnaSMockPoolem(stav);
@@ -220,4 +250,33 @@ test('neplatný počet kusů (desetinný/záporný) je odmítnut i tady', async 
   await handler({ body: { prodej_id: 10, polozky: [{ produkt_id: 1, velikost: 24, pocet: -1 }], castka: 500 } }, res);
 
   assert.equal(res.statusCode, 400);
+});
+
+test('DELETE /vratky/:id na existující vratku je zakázán (409) - vratka je immutable auditní stopa', async () => {
+  const stav = vytvoritStav();
+  const router = nacistProdejnaSMockPoolem(stav);
+  const vytvoritHandler = najitHandler(router, 'post', '/vratky');
+  const vytvorRes = vytvoritRes();
+  await vytvoritHandler({ body: { prodej_id: 10, polozky: [{ produkt_id: 1, velikost: 24, pocet: 1 }], castka: 500 } }, vytvorRes);
+  assert.equal(vytvorRes.statusCode, 200);
+  const skladPredMazanim = stav.sklad.get('1_24');
+
+  const smazatHandler = najitHandler(router, 'delete', '/vratky/:id');
+  const smazatRes = vytvoritRes();
+  await smazatHandler({ params: { id: String(vytvorRes.body.id) } }, smazatRes);
+
+  assert.equal(smazatRes.statusCode, 409);
+  assert.match(smazatRes.body.chyba, /nelze smazat/);
+  assert.equal(stav.vratky.length, 1); // vratka stále existuje
+  assert.equal(stav.sklad.get('1_24'), skladPredMazanim); // sklad se nezměnil
+});
+
+test('DELETE /vratky/:id na neexistující vratku vrací 404', async () => {
+  const stav = vytvoritStav();
+  const router = nacistProdejnaSMockPoolem(stav);
+  const smazatHandler = najitHandler(router, 'delete', '/vratky/:id');
+  const res = vytvoritRes();
+  await smazatHandler({ params: { id: '999' } }, res);
+
+  assert.equal(res.statusCode, 404);
 });
