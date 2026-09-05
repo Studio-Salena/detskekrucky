@@ -86,6 +86,35 @@ test('zrušenou objednávku nelze vrátit do jiného stavu (opačný přechod je
   assert.equal(stav.sklad.find(r => r.produkt_id === 1).pocet_kusu, zasoba); // sklad se znovu neodečetl
 });
 
+test('objednávku se SKUTEČNĚ PROVEDENOU vratkou nelze automaticky zrušit (409)', async () => {
+  const stav = stavPoZalozeniObjednavky(); // objednávka #1 prodala 2ks, sklad je 3, poukaz vyčerpaný (0, 'pouzity')
+  stav.vratky.push({ id: 1, objednavka_id: 1, polozky: [{ produkt_id: 1, velikost: 24, pocet: 1 }], castka: 500 });
+  const handler = pripravitHandler(stav);
+  const pocetPohybuPred = stav.pohybySkladu.length;
+
+  const res = await zavolatHandler(handler, 1, 'zrusena');
+
+  assert.equal(res.statusCode, 409);
+  assert.match(res.body.chyba, /již provedenou vratkou/);
+  assert.equal(stav.objednavky[0].stav, 'nova'); // stav se nezměnil
+  assert.equal(stav.sklad.find(r => r.produkt_id === 1).pocet_kusu, 3); // sklad se nezměnil
+  assert.equal(stav.poukazy.find(p => p.id === 1).zustatek, 0); // poukaz se nezměnil
+  assert.equal(stav.poukazy.find(p => p.id === 1).stav, 'pouzity'); // poukaz se nezměnil
+  assert.equal(stav.pohybySkladu.length, pocetPohybuPred); // nevznikl nový pohyb ze zrušení
+});
+
+test('pouhá žádost o vrácení (vratky_zadosti) zrušení neblokuje - blokuje jen skutečný záznam v tabulce vratky', async () => {
+  const stav = stavPoZalozeniObjednavky();
+  stav.vratky = []; // žádná skutečně provedená vratka - jen hypotetická žádost by nebyla v této tabulce
+  const handler = pripravitHandler(stav);
+
+  const res = await zavolatHandler(handler, 1, 'zrusena');
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(stav.objednavky[0].stav, 'zrusena');
+  assert.equal(stav.sklad.find(r => r.produkt_id === 1).pocet_kusu, 5); // sklad se normálně vrátil
+});
+
 test('kanonický stav "vyrizuje" je povolený', async () => {
   const stav = stavPoZalozeniObjednavky();
   const handler = pripravitHandler(stav);

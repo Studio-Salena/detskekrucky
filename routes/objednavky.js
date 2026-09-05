@@ -60,11 +60,32 @@ router.post('/', async (req, res) => {
   if (!Array.isArray(polozky) || !polozky.length) {
     return res.status(400).json({ chyba: 'Košík je prázdný.' });
   }
+
+  // Agregovat položky se stejným SKU (produkt_id + velikost) PŘED validací a
+  // zamykáním skladu. Bez agregace by dva řádky se stejným SKU v jednom
+  // requestu mohly při kontrole níže vidět stejný (ještě neodečtený) stav
+  // skladu a dohromady odečíst víc, než sklad má - FOR UPDATE řeší souběh
+  // MEZI požadavky, ne duplicitu UVNITŘ jednoho požadavku.
+  const agregovanaMapa = new Map(); // "produkt_id_velikost" -> agregovaná položka
+  for (const p of polozky) {
+    if (!p || typeof p !== 'object') {
+      return res.status(400).json({ chyba: 'Neplatná položka v košíku.' });
+    }
+    const klic = `${p.produkt_id}_${p.velikost}`;
+    const existujici = agregovanaMapa.get(klic);
+    if (existujici) {
+      existujici.pocet += Number(p.pocet);
+    } else {
+      agregovanaMapa.set(klic, { produkt_id: p.produkt_id, velikost: p.velikost, pocet: Number(p.pocet) });
+    }
+  }
+  const polozkyAgregovane = [...agregovanaMapa.values()];
+
   // Server nesmí věřit ničemu cenovému/skladovému, co pošle klient - z každé
   // položky se dál používá jen produkt_id/velikost (k dohledání v DB) a pocet
   // (ověřené jako kladné celé číslo). Cena se vždy dopočítá z produkty.cena níže.
-  for (const p of polozky) {
-    if (!p || !Number.isInteger(p.produkt_id) || p.velikost === undefined || p.velikost === null) {
+  for (const p of polozkyAgregovane) {
+    if (!Number.isInteger(p.produkt_id) || p.velikost === undefined || p.velikost === null) {
       return res.status(400).json({ chyba: 'Neplatná položka v košíku.' });
     }
     if (!Number.isInteger(p.pocet) || p.pocet <= 0 || p.pocet > 1000) {
@@ -114,7 +135,7 @@ router.post('/', async (req, res) => {
     // Zamyká se v pevném pořadí (produkt_id, velikost), ne v pořadí, v jakém
     // je poslal klient - jinak by dvě souběžné objednávky se stejnými dvěma
     // položkami v opačném pořadí mohly skončit v deadlocku.
-    const polozkyKZamceni = [...polozky].sort((a, b) =>
+    const polozkyKZamceni = [...polozkyAgregovane].sort((a, b) =>
       a.produkt_id - b.produkt_id || a.velikost - b.velikost
     );
     for (const p of polozkyKZamceni) {
@@ -191,9 +212,10 @@ router.post('/', async (req, res) => {
       );
     }
 
-    // Vlozit polozky a odecist ze skladu (u položek "u dodavatele" se sklad
-    // neodečítá - pocet_kusu tam nereprezentuje reálnou fyzickou zásobu)
-    for (const p of polozky) {
+    // Vlozit polozky (agregované - jeden řádek na SKU) a odecist ze skladu
+    // (u položek "u dodavatele" se sklad neodečítá - pocet_kusu tam
+    // nereprezentuje reálnou fyzickou zásobu)
+    for (const p of polozkyAgregovane) {
       const klic = `${p.produkt_id}_${p.velikost}`;
       await client.query(
         'INSERT INTO objednavky_polozky (objednavka_id, produkt_id, velikost, pocet, cena) VALUES ($1,$2,$3,$4,$5)',
@@ -215,7 +237,7 @@ router.post('/', async (req, res) => {
     zaznamenatObjednavku(req.ip);
 
     // Do emailu jde vždy jen skutečná (DB) cena, ne to, co poslal klient.
-    const polozkySkutecne = polozky.map(p => ({ ...p, cena: cenaMap.get(`${p.produkt_id}_${p.velikost}`) }));
+    const polozkySkutecne = polozkyAgregovane.map(p => ({ ...p, cena: cenaMap.get(`${p.produkt_id}_${p.velikost}`) }));
 
     // Odeslat potvrzovaci email
 try {
@@ -322,6 +344,17 @@ router.patch('/:id/stav', vyzadovatAdmina, async (req, res) => {
     }
 
     if (stav === 'zrusena' && puvodniStav !== 'zrusena') {
+      // Pokud už na tuto objednávku existuje SKUTEČNĚ PROVEDENÁ vratka (tabulka
+      // vratky - založená z prodejny/admin, ne pouhá zákaznická žádost v
+      // vratky_zadosti), automatické zrušení zakázat. Jinak by se sklad, který
+      // vratka už jednou vrátila, vrátil podruhé (jednou vratkou, podruhé
+      // zrušením), a skončil by vyšší, než byl před objednávkou.
+      const existujiciVratka = await client.query('SELECT 1 FROM vratky WHERE objednavka_id = $1 LIMIT 1', [req.params.id]);
+      if (existujiciVratka.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ chyba: 'Objednávku s již provedenou vratkou nelze automaticky zrušit.' });
+      }
+
       // Vrátit sklad přesně podle toho, co se při vytvoření objednávky skutečně
       // odečetlo (pohyby_skladu je autoritativní záznam - položky "u dodavatele"
       // v něm nejsou, takže se u nich sklad ani nevrací).

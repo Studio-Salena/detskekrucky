@@ -144,6 +144,41 @@ test('více produktů v jedné objednávce - každá položka se oceňuje zvlá�
   assert.ok(stav.objednavkyPolozky.every(p => p.cena === 500 || p.cena === 700));
 });
 
+test('duplicitní SKU v requestu (3+3, sklad má 5) se agreguje na 6 PŘED kontrolou skladu a je odmítnuto', async () => {
+  const stav = pocatecniStav();
+  stav.sklad.push({ produkt_id: 1, velikost: 24, pocet_kusu: 5, dostupnost: 'skladem', cena: 500 });
+  const handler = pripravitHandler(stav);
+  const res = await zavolatHandler(handler, objednavkovyPozadavek({
+    polozky: [
+      { produkt_id: 1, velikost: 24, pocet: 3, cena: 500 },
+      { produkt_id: 1, velikost: 24, pocet: 3, cena: 500 }
+    ]
+  }));
+
+  assert.equal(res.statusCode, 400);
+  assert.equal(stav.objednavky.length, 0);
+  assert.equal(stav.sklad.find(r => r.produkt_id === 1).pocet_kusu, 5); // sklad nedotčen
+});
+
+test('duplicitní SKU v requestu (2+3, sklad má 5) se agreguje na jeden řádek s pocet=5 a projde', async () => {
+  const stav = pocatecniStav();
+  stav.sklad.push({ produkt_id: 1, velikost: 24, pocet_kusu: 5, dostupnost: 'skladem', cena: 500 });
+  const handler = pripravitHandler(stav);
+  const res = await zavolatHandler(handler, objednavkovyPozadavek({
+    polozky: [
+      { produkt_id: 1, velikost: 24, pocet: 2, cena: 1 },       // podvržená cena, ignoruje se
+      { produkt_id: 1, velikost: 24, pocet: 3, cena: 999999 }   // podvržená cena, ignoruje se
+    ]
+  }));
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.celkem, 5 * 500); // 5 ks x skutečná DB cena
+  assert.equal(stav.sklad.find(r => r.produkt_id === 1).pocet_kusu, 0); // 5 - 5
+  assert.equal(stav.objednavkyPolozky.length, 1); // jeden agregovaný řádek, ne dva
+  assert.equal(stav.objednavkyPolozky[0].pocet, 5);
+  assert.equal(stav.objednavkyPolozky[0].cena, 500);
+});
+
 test('sklad se zamyká v pevném pořadí (produkt_id, velikost), ne v pořadí z požadavku - ochrana proti deadlocku', async () => {
   const stav = zakladniStav();
   stav.callLog = [];

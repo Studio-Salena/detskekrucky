@@ -133,6 +133,11 @@ function vytvoritMockClient(stav) {
         return {};
       }
 
+      if (s.startsWith('SELECT 1 FROM vratky WHERE objednavka_id')) {
+        const [objednavka_id] = params;
+        const existuje = (stav.vratky || []).some(v => String(v.objednavka_id) === String(objednavka_id));
+        return { rows: existuje ? [{}] : [] };
+      }
       if (s.startsWith('SELECT stav, poukaz_id, sleva FROM objednavky WHERE')) {
         const [id] = params;
         const o = stav.objednavky.find(o => o.id === Number(id));
@@ -168,7 +173,8 @@ function pocatecniStav() {
     zakaznici: [], dalsiZakaznikId: 1,
     sklad: [], poukazy: [],
     objednavky: [], dalsiObjednavkaId: 1,
-    objednavkyPolozky: [], pohybySkladu: [], poukazyPouziti: []
+    objednavkyPolozky: [], pohybySkladu: [], poukazyPouziti: [],
+    vratky: []
   };
 }
 
