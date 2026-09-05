@@ -179,6 +179,22 @@ test('duplicitní SKU v requestu (2+3, sklad má 5) se agreguje na jeden řádek
   assert.equal(stav.objednavkyPolozky[0].cena, 500);
 });
 
+test('stejné SKU se záporným řádkem (6 + -1) je odmítnuto, i když součet (5) je kladný', async () => {
+  const stav = pocatecniStav();
+  stav.sklad.push({ produkt_id: 1, velikost: 24, pocet_kusu: 5, dostupnost: 'skladem', cena: 500 });
+  const handler = pripravitHandler(stav);
+  const res = await zavolatHandler(handler, objednavkovyPozadavek({
+    polozky: [
+      { produkt_id: 1, velikost: 24, pocet: 6, cena: 500 },
+      { produkt_id: 1, velikost: 24, pocet: -1, cena: 500 }
+    ]
+  }));
+
+  assert.equal(res.statusCode, 400);
+  assert.equal(stav.objednavky.length, 0);
+  assert.equal(stav.sklad.find(r => r.produkt_id === 1).pocet_kusu, 5); // sklad nedotčen
+});
+
 test('sklad se zamyká v pevném pořadí (produkt_id, velikost), ne v pořadí z požadavku - ochrana proti deadlocku', async () => {
   const stav = zakladniStav();
   stav.callLog = [];

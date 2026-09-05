@@ -142,15 +142,27 @@ router.post('/vratky', async (req, res) => {
     // Bez vazby (ruční/historická oprava skladu bez zdroje) se ověřit nedá -
     // tam zůstává jen základní validace tvaru výše.
     if (prodej_id || objednavka_id) {
+      // FOR UPDATE na zdrojový řádek HNED po BEGIN a před čtením
+      // existujících vratek - jinak by dvě souběžné vratky ke stejnému
+      // prodeji/objednávce mohly obě vidět stejné "už vrácené množství" a
+      // obě projít kontrolou (typický lost update). Objednávka se zamyká
+      // stejným dotazem/pořadím jako při jejím zrušení (routes/objednavky.js),
+      // takže vratka a zrušení téže objednávky se navzájem serializují místo
+      // souběžné změny skladu.
       let zdrojovePolozky;
       if (prodej_id) {
-        const prodej = await client.query('SELECT polozky FROM prodejna_prodeje WHERE id=$1', [prodej_id]);
+        const prodej = await client.query('SELECT id, polozky FROM prodejna_prodeje WHERE id=$1 FOR UPDATE', [prodej_id]);
         if (!prodej.rows.length) {
           await client.query('ROLLBACK');
           return res.status(404).json({ chyba: 'Navázaný prodej nenalezen.' });
         }
         zdrojovePolozky = prodej.rows[0].polozky;
       } else {
+        const objednavka = await client.query('SELECT id FROM objednavky WHERE id = $1 FOR UPDATE', [objednavka_id]);
+        if (!objednavka.rows.length) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ chyba: 'Navázaná objednávka nenalezena.' });
+        }
         const obj = await client.query('SELECT produkt_id, velikost, pocet FROM objednavky_polozky WHERE objednavka_id=$1', [objednavka_id]);
         zdrojovePolozky = obj.rows;
       }

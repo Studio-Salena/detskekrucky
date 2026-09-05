@@ -8,10 +8,12 @@ const assert = require('node:assert/strict');
 function vytvoritStav() {
   return {
     prodejnaProdeje: [{ id: 10, polozky: [{ produkt_id: 1, velikost: 24, pocet: 3 }, { produkt_id: 2, velikost: 25, pocet: 1 }] }],
+    objednavky: [{ id: 20 }],
     objednavkyPolozky: [{ objednavka_id: 20, produkt_id: 5, velikost: 26, pocet: 2 }],
     vratky: [],
     dalsiVratkaId: 1,
-    sklad: new Map() // "produkt_id_velikost" -> pocet_kusu
+    sklad: new Map(), // "produkt_id_velikost" -> pocet_kusu
+    callLog: []
   };
 }
 
@@ -20,13 +22,19 @@ function vytvoritMockClient(stav) {
     release() {},
     async query(sql, params = []) {
       const s = sql.replace(/\s+/g, ' ').trim();
+      if (stav.callLog) stav.callLog.push({ sql: s, params });
       if (s.startsWith('BEGIN') || s.startsWith('COMMIT') || s.startsWith('ROLLBACK')) return {};
       if (s.startsWith('CREATE TABLE') || s.startsWith('ALTER TABLE')) return {};
 
-      if (s.startsWith('SELECT polozky FROM prodejna_prodeje WHERE id')) {
+      if (s.startsWith('SELECT id, polozky FROM prodejna_prodeje WHERE id')) {
         const [id] = params;
         const p = stav.prodejnaProdeje.find(p => p.id === id);
-        return { rows: p ? [{ polozky: p.polozky }] : [] };
+        return { rows: p ? [{ id: p.id, polozky: p.polozky }] : [] };
+      }
+      if (s.startsWith('SELECT id FROM objednavky WHERE id')) {
+        const [id] = params;
+        const o = stav.objednavky.find(o => o.id === id);
+        return { rows: o ? [{ id: o.id }] : [] };
       }
       if (s.startsWith('SELECT produkt_id, velikost, pocet FROM objednavky_polozky WHERE objednavka_id')) {
         const [id] = params;
@@ -163,6 +171,45 @@ test('vratka bez vazby na prodej/objednávku (ruční oprava skladu) stále proj
   await handler({ body: { polozky: [{ produkt_id: 1, velikost: 24, pocet: 1 }], castka: 500, duvod: 'ruční oprava' } }, res);
 
   assert.equal(res.statusCode, 200);
+});
+
+test('vratka navázaná na objednávku zamyká objednávku (FOR UPDATE) PŘED čtením existujících vratek', async () => {
+  const stav = vytvoritStav();
+  const router = nacistProdejnaSMockPoolem(stav);
+  const handler = najitHandler(router, 'post', '/vratky');
+  const res = vytvoritRes();
+  await handler({ body: { objednavka_id: 20, polozky: [{ produkt_id: 5, velikost: 26, pocet: 1 }], castka: 500 } }, res);
+
+  assert.equal(res.statusCode, 200);
+  const lockIdx = stav.callLog.findIndex(c => c.sql.startsWith('SELECT id FROM objednavky WHERE id') && c.sql.includes('FOR UPDATE'));
+  const vratkyIdx = stav.callLog.findIndex(c => c.sql.startsWith('SELECT polozky FROM vratky WHERE'));
+  assert.notEqual(lockIdx, -1);
+  assert.notEqual(vratkyIdx, -1);
+  assert.ok(lockIdx < vratkyIdx, 'zámek objednávky musí proběhnout před čtením existujících vratek');
+});
+
+test('vratka na neexistující objednávku vrací 404 a nevznikne', async () => {
+  const stav = vytvoritStav();
+  const router = nacistProdejnaSMockPoolem(stav);
+  const handler = najitHandler(router, 'post', '/vratky');
+  const res = vytvoritRes();
+  await handler({ body: { objednavka_id: 999, polozky: [{ produkt_id: 5, velikost: 26, pocet: 1 }], castka: 500 } }, res);
+
+  assert.equal(res.statusCode, 404);
+  assert.equal(stav.vratky.length, 0);
+});
+
+test('zdrojový prodej se při vratce zamyká FOR UPDATE (serializace souběžných vratek stejného prodeje)', async () => {
+  const stav = vytvoritStav();
+  const router = nacistProdejnaSMockPoolem(stav);
+  const handler = najitHandler(router, 'post', '/vratky');
+  const res = vytvoritRes();
+  await handler({ body: { prodej_id: 10, polozky: [{ produkt_id: 1, velikost: 24, pocet: 1 }], castka: 500 } }, res);
+
+  assert.equal(res.statusCode, 200);
+  const lockDotaz = stav.callLog.find(c => c.sql.startsWith('SELECT id, polozky FROM prodejna_prodeje WHERE id'));
+  assert.ok(lockDotaz, 'zdrojový prodej musí být načten');
+  assert.ok(lockDotaz.sql.includes('FOR UPDATE'), 'načtení zdrojového prodeje musí použít FOR UPDATE');
 });
 
 test('neplatný počet kusů (desetinný/záporný) je odmítnut i tady', async () => {

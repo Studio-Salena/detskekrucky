@@ -61,34 +61,47 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ chyba: 'Košík je prázdný.' });
   }
 
-  // Agregovat položky se stejným SKU (produkt_id + velikost) PŘED validací a
-  // zamykáním skladu. Bez agregace by dva řádky se stejným SKU v jednom
-  // requestu mohly při kontrole níže vidět stejný (ještě neodečtený) stav
-  // skladu a dohromady odečíst víc, než sklad má - FOR UPDATE řeší souběh
-  // MEZI požadavky, ne duplicitu UVNITŘ jednoho požadavku.
-  const agregovanaMapa = new Map(); // "produkt_id_velikost" -> agregovaná položka
+  // Každý vstupní řádek musí projít plnou validací tvaru SÁM O SOBĚ, ještě
+  // před agregací duplicitních SKU - jinak by např. jeden záporný a jeden
+  // kladný řádek stejného SKU mohly projít jen proto, že jejich součet vyjde
+  // kladně (a validní). Server nesmí věřit ničemu cenovému/skladovému, co
+  // pošle klient - z každé položky se dál používá jen produkt_id/velikost
+  // (k dohledání v DB) a pocet. Cena se vždy dopočítá z produkty.cena níže.
   for (const p of polozky) {
     if (!p || typeof p !== 'object') {
       return res.status(400).json({ chyba: 'Neplatná položka v košíku.' });
     }
-    const klic = `${p.produkt_id}_${p.velikost}`;
-    const existujici = agregovanaMapa.get(klic);
-    if (existujici) {
-      existujici.pocet += Number(p.pocet);
-    } else {
-      agregovanaMapa.set(klic, { produkt_id: p.produkt_id, velikost: p.velikost, pocet: Number(p.pocet) });
-    }
-  }
-  const polozkyAgregovane = [...agregovanaMapa.values()];
-
-  // Server nesmí věřit ničemu cenovému/skladovému, co pošle klient - z každé
-  // položky se dál používá jen produkt_id/velikost (k dohledání v DB) a pocet
-  // (ověřené jako kladné celé číslo). Cena se vždy dopočítá z produkty.cena níže.
-  for (const p of polozkyAgregovane) {
     if (!Number.isInteger(p.produkt_id) || p.velikost === undefined || p.velikost === null) {
       return res.status(400).json({ chyba: 'Neplatná položka v košíku.' });
     }
     if (!Number.isInteger(p.pocet) || p.pocet <= 0 || p.pocet > 1000) {
+      return res.status(400).json({ chyba: 'Neplatný počet kusů (musí být celé kladné číslo).' });
+    }
+  }
+
+  // Až TEĎ, po ověření každého jednotlivého řádku, agregovat položky se
+  // stejným SKU (produkt_id + velikost) - před zamykáním a kontrolou skladu.
+  // Bez agregace by dva řádky se stejným SKU v jednom requestu mohly při
+  // kontrole níže vidět stejný (ještě neodečtený) stav skladu a dohromady
+  // odečíst víc, než sklad má - FOR UPDATE řeší souběh MEZI požadavky, ne
+  // duplicitu UVNITŘ jednoho požadavku.
+  const agregovanaMapa = new Map(); // "produkt_id_velikost" -> agregovaná položka
+  for (const p of polozky) {
+    const klic = `${p.produkt_id}_${p.velikost}`;
+    const existujici = agregovanaMapa.get(klic);
+    if (existujici) {
+      existujici.pocet += p.pocet;
+    } else {
+      agregovanaMapa.set(klic, { produkt_id: p.produkt_id, velikost: p.velikost, pocet: p.pocet });
+    }
+  }
+  const polozkyAgregovane = [...agregovanaMapa.values()];
+
+  // Znovu ověřit agregovaný počet proti hornímu limitu - jednotlivé řádky
+  // mohly být v limitu, ale součet stejného SKU rozdělený do víc řádků ho
+  // mohl překročit.
+  for (const p of polozkyAgregovane) {
+    if (p.pocet > 1000) {
       return res.status(400).json({ chyba: 'Neplatný počet kusů (musí být celé kladné číslo).' });
     }
   }
