@@ -24,6 +24,7 @@ const prodejnaRoutes = require('./routes/prodejna');
 const vratkyZadostiRoutes = require('./routes/vratkyZadosti');
 const poradnaZadostiRoutes = require('./routes/poradnaZadosti');
 const poukazyRoutes = require('./routes/poukazy');
+const produktyImagesRoutes = require('./routes/produktyImages');
 const vyzadovatAdmina = require('./middleware/adminAuth');
 const { jeZablokovana, zaznamenatNeuspech, resetovat } = require('./middleware/loginLimiter');
 const { jeZablokovana: jeZablokovanaRezervace, zaznamenatRezervaci } = require('./middleware/rezervaceLimiter');
@@ -78,6 +79,9 @@ app.use('/api/auth', authRoutes);
 app.use('/api/platby', platbyRoutes);
 
 app.use('/api/produkty', skladRoutes);
+// Fotografie produktů - samostatný router mountnutý na stejné cestě, cesty
+// se nekříží (skladRoutes používá /produkty, /produkty/:id; tenhle /:id/images...).
+app.use('/api/produkty', produktyImagesRoutes);
 app.use('/api/kategorie', kategorieRoutes);
 app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/mobilni-sken', mobilniSkenRoutes);
