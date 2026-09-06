@@ -104,12 +104,12 @@ router.post('/:id/images', (req, res, next) => {
   const produktId = req.params.id;
   const soubory = req.files || [];
 
+  // 1) VALIDACE REQUESTU - čistě lokální, žádná DB, žádná síť. Každý soubor
+  // se validuje sám o sobě před jakýmkoliv uploadem - jeden špatný soubor v
+  // dávce zamítne celý request, ať nevznikají "napůl" nahrané dávky.
   if (!soubory.length) {
     return res.status(400).json({ chyba: 'Chybí soubor(y) k nahrání.' });
   }
-  // Každý soubor se validuje sám o sobě před jakýmkoliv uploadem - jeden
-  // špatný soubor v dávce zamítne celý request, ať nevznikají "napůl"
-  // nahrané dávky.
   for (const soubor of soubory) {
     if (soubor.size > MAX_BYTES) {
       return res.status(400).json({ chyba: `Soubor je příliš velký (max ${MAX_MB} MB na fotografii).` });
@@ -121,34 +121,61 @@ router.post('/:id/images', (req, res, next) => {
       return res.status(400).json({ chyba: 'Soubor nevypadá jako platný obrázek.' });
     }
   }
-
   if (!cloudinaryLib.jeNakonfigurovano()) {
     return res.status(503).json({ chyba: 'Nahrávání fotografií není momentálně nakonfigurováno.' });
   }
 
+  // 2) OVĚŘENÍ EXISTENCE PRODUKTU - obyčejný read, BEZ transakce a BEZ FOR
+  // UPDATE. Je to jen rychlý pre-check, ať se do Cloudinary vůbec nezačíná
+  // nahrávat, když produkt zjevně neexistuje - autoritativní je až druhý
+  // SELECT ... FOR UPDATE níže (krok 4), protože produkt může mezi téhle
+  // chvílí a koncem uploadu (klidně několik vteřin u víc/větších fotek)
+  // ještě zmizet (smazání produktu je jinde v adminu běžná operace).
+  const precheck = await pool.query('SELECT id FROM produkty WHERE id = $1', [produktId]);
+  if (!precheck.rows.length) {
+    return res.status(404).json({ chyba: 'Produkt nenalezen.' });
+  }
+
+  // 3) CLOUDINARY UPLOADY - ZÁMĚRNĚ BEZ otevřené DB transakce/zámku. Upload
+  // víc/větších fotek je pomalý síťový přenos (klidně vteřiny) - po tu dobu
+  // nesmí být obsazená DB connection ani FOR UPDATE na produktu, jinak by se
+  // po celou dobu přenosu zbytečně serializovaly i souběžné operace
+  // (upload/delete/změna primary) jiných požadavků nad TÍMTO produktem.
+  // Souběžné uploady různých requestů tak mohou běžet paralelně - serializuje
+  // se až krátká DB finalizace v kroku 4-5.
+  const nahraneAssety = []; // { secure_url, public_id } - vše, co se v tomto requestu skutečně nahrálo
+  for (const soubor of soubory) {
+    let vysledek;
+    try {
+      vysledek = await cloudinaryLib.nahratObrazek(soubor.buffer, { folder: `detskekrucky/products/${produktId}` });
+    } catch (e) {
+      // Žádný ROLLBACK - DB transakce ještě vůbec nezačala. Jen uklidit, co
+      // se případně stihlo nahrát před tímhle selháním.
+      await ukliditNahraneAssety(nahraneAssety.map(a => a.public_id));
+      return res.status(502).json({ chyba: 'Nahrání do úložiště fotografií selhalo.' });
+    }
+    nahraneAssety.push(vysledek);
+  }
+
+  // 4) TEPRVE TEĎ, PO úspěšném uploadu VŠECH souborů do Cloudinary, se
+  // otevírá DB transakce a zamyká produkt. Tohle FOR UPDATE je autoritativní
+  // (na rozdíl od pre-checku v kroku 2) - řeší jak souběh s jiným uploadem/
+  // delete/změnou primary nad stejným produktem, tak race, kdy produkt mezi
+  // krokem 2 a teď zmizel.
   const client = await pool.connect();
-  // Public_id všech souborů, které se v RÁMCI TOHOTO requestu skutečně
-  // nahrály do Cloudinary - když cokoliv potom selže (další soubor v dávce,
-  // nebo INSERT do DB), tyhle assety se musí best-effort smazat, ať
-  // nezůstanou v Cloudinary osiřelé bez odpovídajícího DB řádku.
-  const nahraneAssety = [];
   try {
     await client.query('BEGIN');
-    // FOR UPDATE na produktu serializuje souběžné operace s jeho fotkami
-    // (upload/delete/změna hlavní fotky) - stejný vzor jako zamykání
-    // objednávky před vratkou/zrušením jinde v projektu. Zámek proběhne
-    // JEŠTĚ PŘED výpočtem MAX(position)/kontrolou existující primární fotky
-    // i před prvním voláním Cloudinary, takže dva souběžné uploady stejného
-    // produktu se serializují a produkt musí existovat dřív, než se cokoliv
-    // pošle do externího úložiště.
     const produkt = await client.query('SELECT id, nazev FROM produkty WHERE id=$1 FOR UPDATE', [produktId]);
     if (!produkt.rows.length) {
       await client.query('ROLLBACK');
       client.release();
-      return res.status(404).json({ chyba: 'Produkt nenalezen.' });
+      await ukliditNahraneAssety(nahraneAssety.map(a => a.public_id));
+      return res.status(404).json({ chyba: 'Produkt mezitím zmizel - fotografie nebyly uloženy.' });
     }
     const nazevProduktu = produkt.rows[0].nazev;
 
+    // 5) UVNITŘ TRANSAKCE, AŽ PO ZÍSKÁNÍ ZÁMKU: current primary,
+    // MAX(position), INSERT jednoho řádku na každý už nahraný Cloudinary asset.
     const stav = await client.query(
       'SELECT COUNT(*)::int AS pocet, COALESCE(MAX(position), -1)::int AS max_pozice FROM product_images WHERE produkt_id=$1',
       [produktId]
@@ -157,17 +184,7 @@ router.post('/:id/images', (req, res, next) => {
     let jizMaPrimarni = stav.rows[0].pocet > 0;
 
     const vlozene = [];
-    for (const soubor of soubory) {
-      let vysledek;
-      try {
-        vysledek = await cloudinaryLib.nahratObrazek(soubor.buffer, { folder: `detskekrucky/products/${produktId}` });
-      } catch (e) {
-        await client.query('ROLLBACK');
-        client.release();
-        await ukliditNahraneAssety(nahraneAssety);
-        return res.status(502).json({ chyba: 'Nahrání do úložiště fotografií selhalo.' });
-      }
-      nahraneAssety.push(vysledek.public_id);
+    for (const vysledek of nahraneAssety) {
       const jePrimarni = !jizMaPrimarni;
       const alt = pozice === 0 ? nazevProduktu : `${nazevProduktu} – fotografie ${pozice + 1}`;
       const vlozeny = await client.query(
@@ -184,12 +201,12 @@ router.post('/:id/images', (req, res, next) => {
     client.release();
     return res.json(vlozene);
   } catch (err) {
+    // 6) DB FAILURE PO ÚSPĚŠNÉM CLOUDINARY UPLOADU - rollback a release
+    // proběhnou HNED, Cloudinary cleanup až PO nich (nikdy uvnitř otevřené
+    // transakce).
     await client.query('ROLLBACK');
     client.release();
-    // I při obecné DB chybě (např. INSERT selže) mohly už dřívější soubory
-    // v tétéž dávce doletět do Cloudinary úspěšně - DB rollback jejich
-    // fyzické uploady nijak nevrátí, takže se musí uklidit stejně jako výše.
-    await ukliditNahraneAssety(nahraneAssety);
+    await ukliditNahraneAssety(nahraneAssety.map(a => a.public_id));
     return res.status(500).json({ chyba: err.message });
   }
 });

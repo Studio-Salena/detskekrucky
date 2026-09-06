@@ -11,6 +11,11 @@ function pocatecniStav() {
     productImages: [],
     dalsiImageId: 1,
     callLog: [],
+    // Sdílená chronologická časová osa SQL dotazů I Cloudinary volání (viz
+    // vytvoritMockClient a vytvoritCloudinaryMock) - jen tady jde spolehlivě
+    // ověřit relativní POŘADÍ mezi DB prací a externími Cloudinary requesty
+    // (např. "Cloudinary upload proběhl PŘED BEGIN").
+    udalosti: [],
     insertSelzeNaPokusu: null // pořadové číslo INSERTu do product_images, které má vyhodit chybu (simulace DB failure PO úspěšném Cloudinary uploadu)
   };
 }
@@ -34,6 +39,7 @@ function vytvoritMockClient(stav) {
     async query(sql, params = []) {
       const s = sql.replace(/\s+/g, ' ').trim();
       stav.callLog.push({ sql: s, params });
+      stav.udalosti.push({ typ: 'sql', sql: s });
 
       if (s.startsWith('BEGIN')) {
         vTransakci = true;
@@ -148,7 +154,10 @@ function vytvoritMockPool(stav) {
 // uploadSelzeNaPokusu: pořadové číslo volání nahratObrazek (1 = první), které
 // má selhat (throw) - umožňuje simulovat "N-tý soubor v dávce selže po tom,
 // co předchozí už uspěly", bez ohledu na to, kolikátý je to test.
-function vytvoritCloudinaryMock({ nakonfigurovano = true, uploadSelzeNaPokusu = null, deleteSelze = false } = {}) {
+// smazatProduktPoUploadu: id produktu, který se z stav.produkty "za běhu"
+// odstraní hned po prvním úspěšném uploadu - simuluje race, kdy produkt mezi
+// pre-checkem (krok 2) a autoritativní FOR UPDATE kontrolou (krok 4) zmizí.
+function vytvoritCloudinaryMock(stav, { nakonfigurovano = true, uploadSelzeNaPokusu = null, deleteSelze = false, smazatProduktPoUploadu = null } = {}) {
   const volaniUpload = [];
   const volaniDelete = [];
   let citac = 0;
@@ -158,13 +167,18 @@ function vytvoritCloudinaryMock({ nakonfigurovano = true, uploadSelzeNaPokusu = 
     async nahratObrazek(buffer, opts) {
       citac++;
       volaniUpload.push({ opts, poradi: citac });
+      stav.udalosti.push({ typ: 'cloudinary-upload', poradi: citac });
       if (uploadSelzeNaPokusu === citac) {
         throw new Error(`cloudinary upload failed (mock, pokus #${citac})`);
+      }
+      if (smazatProduktPoUploadu != null && citac === 1) {
+        stav.produkty = stav.produkty.filter(p => String(p.id) !== String(smazatProduktPoUploadu));
       }
       return { secure_url: `https://res.cloudinary.com/demo/image/upload/v1/${opts.folder}/mock${citac}.jpg`, public_id: `${opts.folder}/mock${citac}` };
     },
     async smazatObrazek(publicId) {
       volaniDelete.push(publicId);
+      stav.udalosti.push({ typ: 'cloudinary-destroy', publicId });
       if (deleteSelze) return { ok: false, chyba: 'mock delete failed' };
       return { ok: true };
     }
@@ -203,7 +217,7 @@ function volatRouterJakoMiddleware(router, req) {
 
 test('upload první fotografie produktu ji nastaví jako primary, position 0', async () => {
   const stav = pocatecniStav();
-  const cloud = vytvoritCloudinaryMock();
+  const cloud = vytvoritCloudinaryMock(stav);
   const router = pripravitRouter(stav, cloud);
   const handler = najitHandler(router, 'post', '/:id/images');
   const res = vytvoritRes();
@@ -220,7 +234,7 @@ test('upload první fotografie produktu ji nastaví jako primary, position 0', a
 
 test('upload druhé fotografie NENÍ primary a má position 1 a odlišený ALT', async () => {
   const stav = pocatecniStav();
-  const cloud = vytvoritCloudinaryMock();
+  const cloud = vytvoritCloudinaryMock(stav);
   const router = pripravitRouter(stav, cloud);
   const handler = najitHandler(router, 'post', '/:id/images');
 
@@ -237,7 +251,7 @@ test('upload druhé fotografie NENÍ primary a má position 1 a odlišený ALT',
 
 test('multi-upload: druhý Cloudinary upload selže -> žádná fotka se neuloží a první úspěšně nahraný asset se best-effort smaže', async () => {
   const stav = pocatecniStav();
-  const cloud = vytvoritCloudinaryMock({ uploadSelzeNaPokusu: 2 }); // 1. soubor projde, 2. selže
+  const cloud = vytvoritCloudinaryMock(stav, { uploadSelzeNaPokusu: 2 }); // 1. soubor projde, 2. selže
   const router = pripravitRouter(stav, cloud);
   const handler = najitHandler(router, 'post', '/:id/images');
   const res = vytvoritRes();
@@ -254,7 +268,7 @@ test('multi-upload: druhý Cloudinary upload selže -> žádná fotka se neulož
 test('multi-upload: všechny Cloudinary uploady projdou, ale DB insert selže -> rollback a best-effort úklid VŠECH nahraných assetů', async () => {
   const stav = pocatecniStav();
   stav.insertSelzeNaPokusu = 2; // první INSERT projde, druhý (v rámci stejné dávky) selže
-  const cloud = vytvoritCloudinaryMock();
+  const cloud = vytvoritCloudinaryMock(stav);
   const router = pripravitRouter(stav, cloud);
   const handler = najitHandler(router, 'post', '/:id/images');
   const res = vytvoritRes();
@@ -269,7 +283,7 @@ test('multi-upload: všechny Cloudinary uploady projdou, ale DB insert selže ->
 
 test('cleanup failure po neúspěšném uploadu se jen zaloguje, request stále vrátí chybu z původního selhání', async () => {
   const stav = pocatecniStav();
-  const cloud = vytvoritCloudinaryMock({ uploadSelzeNaPokusu: 2, deleteSelze: true });
+  const cloud = vytvoritCloudinaryMock(stav, { uploadSelzeNaPokusu: 2, deleteSelze: true });
   const router = pripravitRouter(stav, cloud);
   const handler = najitHandler(router, 'post', '/:id/images');
   const res = vytvoritRes();
@@ -280,27 +294,94 @@ test('cleanup failure po neúspěšném uploadu se jen zaloguje, request stále 
   assert.equal(cloud.volaniDelete.length, 1); // o cleanup se pokusilo, i když selhal
 });
 
-test('CONCURRENCY: upload zamkne rodičovský produkt (FOR UPDATE) PŘED výpočtem MAX(position)/primary i před INSERTem', async () => {
+test('CONCURRENCY/POŘADÍ: Cloudinary upload proběhne PŘED BEGIN/FOR UPDATE, a FOR UPDATE proběhne PŘED MAX(position)/primary i před INSERTem', async () => {
   const stav = pocatecniStav();
-  const cloud = vytvoritCloudinaryMock();
+  const cloud = vytvoritCloudinaryMock(stav);
   const router = pripravitRouter(stav, cloud);
   const handler = najitHandler(router, 'post', '/:id/images');
   await handler({ params: { id: '1' }, files: [jpegSoubor('a.jpg')] }, vytvoritRes());
 
-  const lockIdx = stav.callLog.findIndex(c => c.sql.startsWith('SELECT id, nazev FROM produkty WHERE id') && c.sql.includes('FOR UPDATE'));
-  const maxPoziceIdx = stav.callLog.findIndex(c => c.sql.startsWith('SELECT COUNT(*)::int AS pocet'));
-  const insertIdx = stav.callLog.findIndex(c => c.sql.startsWith('INSERT INTO product_images'));
+  // Sdílená chronologická časová osa (stav.udalosti) obsahuje SQL dotazy I
+  // Cloudinary volání v pořadí, jak skutečně proběhly - jen tak jde dokázat,
+  // že Cloudinary upload NENÍ zavřený mezi BEGIN a COMMIT/ROLLBACK.
+  const uploadIdx = stav.udalosti.findIndex(u => u.typ === 'cloudinary-upload');
+  const beginIdx = stav.udalosti.findIndex(u => u.typ === 'sql' && u.sql.startsWith('BEGIN'));
+  const lockIdx = stav.udalosti.findIndex(u => u.typ === 'sql' && u.sql.startsWith('SELECT id, nazev FROM produkty WHERE id') && u.sql.includes('FOR UPDATE'));
+  const maxPoziceIdx = stav.udalosti.findIndex(u => u.typ === 'sql' && u.sql.startsWith('SELECT COUNT(*)::int AS pocet'));
+  const insertIdx = stav.udalosti.findIndex(u => u.typ === 'sql' && u.sql.startsWith('INSERT INTO product_images'));
 
+  assert.notEqual(uploadIdx, -1);
+  assert.notEqual(beginIdx, -1);
   assert.notEqual(lockIdx, -1);
   assert.notEqual(maxPoziceIdx, -1);
   assert.notEqual(insertIdx, -1);
+  assert.ok(uploadIdx < beginIdx, 'Cloudinary upload musí proběhnout PŘED otevřením DB transakce (BEGIN)');
+  assert.ok(beginIdx < lockIdx, 'BEGIN musí předcházet FOR UPDATE (je to první dotaz uvnitř transakce)');
   assert.ok(lockIdx < maxPoziceIdx, 'zámek produktu musí proběhnout před výpočtem MAX(position)/primary');
   assert.ok(maxPoziceIdx < insertIdx, 'MAX(position)/primary se musí spočítat před INSERTem');
 });
 
+test('POŘADÍ při selhání uploadu: v callLogu není žádný BEGIN ani FOR UPDATE, orphan Cloudinary asset se přesto uklidí', async () => {
+  const stav = pocatecniStav();
+  const cloud = vytvoritCloudinaryMock(stav, { uploadSelzeNaPokusu: 2 });
+  const router = pripravitRouter(stav, cloud);
+  const handler = najitHandler(router, 'post', '/:id/images');
+  const res = vytvoritRes();
+
+  await handler({ params: { id: '1' }, files: [jpegSoubor('a.jpg'), jpegSoubor('b.jpg')] }, res);
+
+  assert.equal(res.statusCode, 502);
+  // Selhání druhého uploadu nastane DŘÍV, než se vůbec otevře DB transakce -
+  // takže v CELÉM callLogu nesmí být žádný BEGIN ani FOR UPDATE (jen ten
+  // úvodní neautoritativní pre-check bez FOR UPDATE).
+  assert.equal(stav.callLog.some(c => c.sql.startsWith('BEGIN')), false);
+  assert.equal(stav.callLog.some(c => c.sql.includes('FOR UPDATE')), false);
+  assert.equal(cloud.volaniDelete.length, 1); // orphan (první úspěšný upload) se přesto uklidil
+});
+
+test('RACE: produkt zmizí MEZI pre-checkem a autoritativní DB finalizací - žádný řádek nevznikne, Cloudinary asset se uklidí', async () => {
+  const stav = pocatecniStav();
+  // Produkt "1" existuje při pre-checku, ale zmizí hned po prvním Cloudinary
+  // uploadu - simuluje souběžné smazání produktu, které proběhne v mezičase
+  // (během síťového uploadu), PŘED tím, než se stihne otevřít DB transakce.
+  const cloud = vytvoritCloudinaryMock(stav, { smazatProduktPoUploadu: 1 });
+  const router = pripravitRouter(stav, cloud);
+  const handler = najitHandler(router, 'post', '/:id/images');
+  const res = vytvoritRes();
+
+  await handler({ params: { id: '1' }, files: [jpegSoubor('a.jpg')] }, res);
+
+  assert.equal(res.statusCode, 404);
+  assert.equal(stav.productImages.length, 0); // žádný DB řádek nevznikl
+  assert.equal(cloud.volaniUpload.length, 1); // upload proběhl (pre-check produkt ještě našel)
+  assert.equal(cloud.volaniDelete.length, 1); // ale asset se pak best-effort uklidil
+  assert.equal(cloud.volaniDelete[0], cloud.volaniUpload[0].opts.folder + '/mock1');
+  // Autoritativní FOR UPDATE musí v tomhle requestu skutečně proběhnout
+  // (a najít produkt už smazaný) - jinak by test neověřoval to podstatné.
+  assert.ok(stav.callLog.some(c => c.sql.startsWith('SELECT id, nazev FROM produkty WHERE id') && c.sql.includes('FOR UPDATE')));
+});
+
+test('POŘADÍ při DB insert failure: ROLLBACK a release proběhnou PŘED Cloudinary cleanupem', async () => {
+  const stav = pocatecniStav();
+  stav.insertSelzeNaPokusu = 2;
+  const cloud = vytvoritCloudinaryMock(stav);
+  const router = pripravitRouter(stav, cloud);
+  const handler = najitHandler(router, 'post', '/:id/images');
+  const res = vytvoritRes();
+
+  await handler({ params: { id: '1' }, files: [jpegSoubor('a.jpg'), jpegSoubor('b.jpg')] }, res);
+
+  assert.equal(res.statusCode, 500);
+  const rollbackIdx = stav.udalosti.findIndex(u => u.typ === 'sql' && u.sql.startsWith('ROLLBACK'));
+  const prvniDestroyIdx = stav.udalosti.findIndex(u => u.typ === 'cloudinary-destroy');
+  assert.notEqual(rollbackIdx, -1);
+  assert.notEqual(prvniDestroyIdx, -1);
+  assert.ok(rollbackIdx < prvniDestroyIdx, 'ROLLBACK musí proběhnout před Cloudinary cleanupem, ne uvnitř otevřené transakce');
+});
+
 test('upload na neexistující produkt vrací 404 a NEVOLÁ Cloudinary', async () => {
   const stav = pocatecniStav();
-  const cloud = vytvoritCloudinaryMock();
+  const cloud = vytvoritCloudinaryMock(stav);
   const router = pripravitRouter(stav, cloud);
   const handler = najitHandler(router, 'post', '/:id/images');
   const res = vytvoritRes();
@@ -314,7 +395,7 @@ test('upload na neexistující produkt vrací 404 a NEVOLÁ Cloudinary', async (
 
 test('PRIMARY INVARIANT: přesně 0 primary při 0 fotkách, přesně 1 primary při >=1 fotce, napříč celým životním cyklem', async () => {
   const stav = pocatecniStav();
-  const cloud = vytvoritCloudinaryMock();
+  const cloud = vytvoritCloudinaryMock(stav);
   const router = pripravitRouter(stav, cloud);
   const uploadHandler = najitHandler(router, 'post', '/:id/images');
   const deleteHandler = najitHandler(router, 'delete', '/:id/images/:imageId');
@@ -349,7 +430,7 @@ test('PRIMARY INVARIANT: přesně 0 primary při 0 fotkách, přesně 1 primary 
 
 test('PATCH běžné fotografie nedovolí změnit is_primary přes tělo requestu - jen dedicated endpoint /primary to smí', async () => {
   const stav = pocatecniStav();
-  const cloud = vytvoritCloudinaryMock();
+  const cloud = vytvoritCloudinaryMock(stav);
   const router = pripravitRouter(stav, cloud);
   const uploadHandler = najitHandler(router, 'post', '/:id/images');
   await uploadHandler({ params: { id: '1' }, files: [jpegSoubor('a.jpg'), jpegSoubor('b.jpg')] }, vytvoritRes());
@@ -366,7 +447,7 @@ test('PATCH běžné fotografie nedovolí změnit is_primary přes tělo request
 
 test('PATCH position: záporná, neceločíselná i přehnaně vysoká hodnota jsou odmítnuty (400)', async () => {
   const stav = pocatecniStav();
-  const cloud = vytvoritCloudinaryMock();
+  const cloud = vytvoritCloudinaryMock(stav);
   const router = pripravitRouter(stav, cloud);
   const uploadHandler = najitHandler(router, 'post', '/:id/images');
   await uploadHandler({ params: { id: '1' }, files: [jpegSoubor('a.jpg')] }, vytvoritRes());
@@ -387,7 +468,7 @@ test('PATCH position: záporná, neceločíselná i přehnaně vysoká hodnota j
 
 test('seznam fotografií i výběr nové primary po smazání jsou řazené ORDER BY position, id (deterministicky i při shodné position)', async () => {
   const stav = pocatecniStav();
-  const cloud = vytvoritCloudinaryMock();
+  const cloud = vytvoritCloudinaryMock(stav);
   const router = pripravitRouter(stav, cloud);
   const uploadHandler = najitHandler(router, 'post', '/:id/images');
   await uploadHandler({ params: { id: '1' }, files: [jpegSoubor('a.jpg'), jpegSoubor('b.jpg')] }, vytvoritRes());
@@ -411,7 +492,7 @@ test('seznam fotografií i výběr nové primary po smazání jsou řazené ORDE
 
 test('změna hlavní fotografie je transakční - stará přestane být primary, zvolená se stane primary', async () => {
   const stav = pocatecniStav();
-  const cloud = vytvoritCloudinaryMock();
+  const cloud = vytvoritCloudinaryMock(stav);
   const router = pripravitRouter(stav, cloud);
   const uploadHandler = najitHandler(router, 'post', '/:id/images');
   await uploadHandler({ params: { id: '1' }, files: [jpegSoubor('a.jpg'), jpegSoubor('b.jpg')] }, vytvoritRes());
@@ -429,7 +510,7 @@ test('změna hlavní fotografie je transakční - stará přestane být primary,
 
 test('smazání nehlavní fotografie neovlivní hlavní fotku a zavolá Cloudinary cleanup', async () => {
   const stav = pocatecniStav();
-  const cloud = vytvoritCloudinaryMock();
+  const cloud = vytvoritCloudinaryMock(stav);
   const router = pripravitRouter(stav, cloud);
   const uploadHandler = najitHandler(router, 'post', '/:id/images');
   await uploadHandler({ params: { id: '1' }, files: [jpegSoubor('a.jpg'), jpegSoubor('b.jpg')] }, vytvoritRes());
@@ -448,7 +529,7 @@ test('smazání nehlavní fotografie neovlivní hlavní fotku a zavolá Cloudina
 
 test('smazání hlavní fotografie automaticky nastaví další (nejnižší position) jako hlavní', async () => {
   const stav = pocatecniStav();
-  const cloud = vytvoritCloudinaryMock();
+  const cloud = vytvoritCloudinaryMock(stav);
   const router = pripravitRouter(stav, cloud);
   const uploadHandler = najitHandler(router, 'post', '/:id/images');
   await uploadHandler({ params: { id: '1' }, files: [jpegSoubor('a.jpg'), jpegSoubor('b.jpg')] }, vytvoritRes());
@@ -467,7 +548,7 @@ test('smazání hlavní fotografie automaticky nastaví další (nejnižší pos
 test('pokus smazat fotografii jiného produktu (podvržené produkt_id v URL) je odmítnut', async () => {
   const stav = pocatecniStav();
   stav.produkty.push({ id: 2, nazev: 'Jiný produkt' });
-  const cloud = vytvoritCloudinaryMock();
+  const cloud = vytvoritCloudinaryMock(stav);
   const router = pripravitRouter(stav, cloud);
   const uploadHandler = najitHandler(router, 'post', '/:id/images');
   await uploadHandler({ params: { id: '1' }, files: [jpegSoubor('a.jpg')] }, vytvoritRes());
@@ -484,7 +565,7 @@ test('pokus smazat fotografii jiného produktu (podvržené produkt_id v URL) je
 
 test('neplatný MIME typ (např. PDF) je odmítnut', async () => {
   const stav = pocatecniStav();
-  const cloud = vytvoritCloudinaryMock();
+  const cloud = vytvoritCloudinaryMock(stav);
   const router = pripravitRouter(stav, cloud);
   const handler = najitHandler(router, 'post', '/:id/images');
   const res = vytvoritRes();
@@ -498,7 +579,7 @@ test('neplatný MIME typ (např. PDF) je odmítnut', async () => {
 
 test('příliš velký soubor (>10 MB) je odmítnut', async () => {
   const stav = pocatecniStav();
-  const cloud = vytvoritCloudinaryMock();
+  const cloud = vytvoritCloudinaryMock(stav);
   const router = pripravitRouter(stav, cloud);
   const handler = najitHandler(router, 'post', '/:id/images');
   const res = vytvoritRes();
@@ -512,7 +593,7 @@ test('příliš velký soubor (>10 MB) je odmítnut', async () => {
 
 test('soubor s podvrženým Content-Type (image/jpeg), ale bez platné signatury, je odmítnut', async () => {
   const stav = pocatecniStav();
-  const cloud = vytvoritCloudinaryMock();
+  const cloud = vytvoritCloudinaryMock(stav);
   const router = pripravitRouter(stav, cloud);
   const handler = najitHandler(router, 'post', '/:id/images');
   const res = vytvoritRes();
@@ -525,7 +606,7 @@ test('soubor s podvrženým Content-Type (image/jpeg), ale bez platné signatury
 
 test('všechny image endpointy vyžadují admin heslo (admin-only)', async () => {
   const stav = pocatecniStav();
-  const cloud = vytvoritCloudinaryMock();
+  const cloud = vytvoritCloudinaryMock(stav);
   const router = pripravitRouter(stav, cloud);
   const puvodni = process.env.ADMIN_HESLO;
   process.env.ADMIN_HESLO = 'tajne-heslo-pro-test';
