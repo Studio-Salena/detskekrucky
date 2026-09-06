@@ -33,6 +33,7 @@ initProductImagesTabulka();
 
 const MAX_MB = 10;
 const MAX_BYTES = MAX_MB * 1024 * 1024;
+const MAX_POZICE = 1000;
 const POVOLENE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif']);
 
 const upload = multer({
@@ -52,6 +53,24 @@ function zjistitSkutecnyTypObrazku(buffer) {
   // HEIC/HEIF (iPhone) - ISO base media file format, "ftyp" box na offsetu 4.
   if (buffer.slice(4, 8).toString('ascii') === 'ftyp') return 'heic';
   return null;
+}
+
+// Best-effort úklid Cloudinary assetů nahraných v RÁMCI JEDNOHO requestu,
+// který nakonec neuspěl (další soubor v dávce selhal, nebo selhal následný
+// DB zápis) - Cloudinary upload není součástí DB transakce, takže úspěšně
+// nahraný soubor po DB rollbacku zůstane v Cloudinary osiřelý, pokud se
+// aktivně nesmaže. Chyba mazání se jen zaloguje, nikdy nepadá dál.
+async function ukliditNahraneAssety(publicIdy) {
+  for (const publicId of publicIdy) {
+    try {
+      const vysledek = await cloudinaryLib.smazatObrazek(publicId);
+      if (!vysledek || vysledek.ok === false) {
+        console.error('Cloudinary cleanup po neúspěšném uploadu se nepovedl, storage_key pro ruční úklid:', publicId);
+      }
+    } catch (e) {
+      console.error('Cloudinary cleanup po neúspěšném uploadu se nepovedl, storage_key pro ruční úklid:', publicId, e.message);
+    }
+  }
 }
 
 // Vše v tomto souboru je admin-only - správa fotografií produktů není veřejná funkce.
@@ -108,14 +127,24 @@ router.post('/:id/images', (req, res, next) => {
   }
 
   const client = await pool.connect();
+  // Public_id všech souborů, které se v RÁMCI TOHOTO requestu skutečně
+  // nahrály do Cloudinary - když cokoliv potom selže (další soubor v dávce,
+  // nebo INSERT do DB), tyhle assety se musí best-effort smazat, ať
+  // nezůstanou v Cloudinary osiřelé bez odpovídajícího DB řádku.
+  const nahraneAssety = [];
   try {
     await client.query('BEGIN');
     // FOR UPDATE na produktu serializuje souběžné operace s jeho fotkami
     // (upload/delete/změna hlavní fotky) - stejný vzor jako zamykání
-    // objednávky před vratkou/zrušením jinde v projektu.
+    // objednávky před vratkou/zrušením jinde v projektu. Zámek proběhne
+    // JEŠTĚ PŘED výpočtem MAX(position)/kontrolou existující primární fotky
+    // i před prvním voláním Cloudinary, takže dva souběžné uploady stejného
+    // produktu se serializují a produkt musí existovat dřív, než se cokoliv
+    // pošle do externího úložiště.
     const produkt = await client.query('SELECT id, nazev FROM produkty WHERE id=$1 FOR UPDATE', [produktId]);
     if (!produkt.rows.length) {
       await client.query('ROLLBACK');
+      client.release();
       return res.status(404).json({ chyba: 'Produkt nenalezen.' });
     }
     const nazevProduktu = produkt.rows[0].nazev;
@@ -134,8 +163,11 @@ router.post('/:id/images', (req, res, next) => {
         vysledek = await cloudinaryLib.nahratObrazek(soubor.buffer, { folder: `detskekrucky/products/${produktId}` });
       } catch (e) {
         await client.query('ROLLBACK');
+        client.release();
+        await ukliditNahraneAssety(nahraneAssety);
         return res.status(502).json({ chyba: 'Nahrání do úložiště fotografií selhalo.' });
       }
+      nahraneAssety.push(vysledek.public_id);
       const jePrimarni = !jizMaPrimarni;
       const alt = pozice === 0 ? nazevProduktu : `${nazevProduktu} – fotografie ${pozice + 1}`;
       const vlozeny = await client.query(
@@ -149,12 +181,16 @@ router.post('/:id/images', (req, res, next) => {
     }
 
     await client.query('COMMIT');
-    res.json(vlozene);
+    client.release();
+    return res.json(vlozene);
   } catch (err) {
     await client.query('ROLLBACK');
-    res.status(500).json({ chyba: err.message });
-  } finally {
     client.release();
+    // I při obecné DB chybě (např. INSERT selže) mohly už dřívější soubory
+    // v tétéž dávce doletět do Cloudinary úspěšně - DB rollback jejich
+    // fyzické uploady nijak nevrátí, takže se musí uklidit stejně jako výše.
+    await ukliditNahraneAssety(nahraneAssety);
+    return res.status(500).json({ chyba: err.message });
   }
 });
 
@@ -228,8 +264,8 @@ router.patch('/:id/images/:imageId', async (req, res) => {
     let i = 1;
     if (alt !== undefined) { sloupce.push(`alt=$${i++}`); hodnoty.push(alt); }
     if (position !== undefined) {
-      if (!Number.isInteger(position) || position < 0) {
-        return res.status(400).json({ chyba: 'Neplatná pozice.' });
+      if (!Number.isInteger(position) || position < 0 || position > MAX_POZICE) {
+        return res.status(400).json({ chyba: `Neplatná pozice (musí být celé číslo 0 až ${MAX_POZICE}).` });
       }
       sloupce.push(`position=$${i++}`); hodnoty.push(position);
     }

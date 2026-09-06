@@ -10,18 +10,47 @@ function pocatecniStav() {
     produkty: [{ id: 1, nazev: 'Botička X' }],
     productImages: [],
     dalsiImageId: 1,
-    callLog: []
+    callLog: [],
+    insertSelzeNaPokusu: null // pořadové číslo INSERTu do product_images, které má vyhodit chybu (simulace DB failure PO úspěšném Cloudinary uploadu)
   };
 }
 
+// DŮLEŽITÉ: musí se skutečně chovat transakčně (ne jen no-op BEGIN/COMMIT/
+// ROLLBACK), jinak by testy na "DB rollback po částečném selhání" neuměly
+// odhalit chybu, kdy by první úspěšně vložený řádek zůstal viset i po
+// ROLLBACKu. Mimo transakci (pool.query přímo, autocommit) se píše rovnou
+// do sdíleného stav.productImages; uvnitř transakce se pracuje na lokální
+// kopii, která se do sdíleného stavu propíše až při COMMITu a při ROLLBACKu
+// se zahodí beze stopy.
 function vytvoritMockClient(stav) {
+  let vTransakci = false;
+  let obrazkyStaged = null;
+
+  function ziskatPole() { return vTransakci ? obrazkyStaged : stav.productImages; }
+  function nastavitPole(nove) { if (vTransakci) obrazkyStaged = nove; else stav.productImages = nove; }
+
   return {
     release() {},
     async query(sql, params = []) {
       const s = sql.replace(/\s+/g, ' ').trim();
       stav.callLog.push({ sql: s, params });
 
-      if (s.startsWith('BEGIN') || s.startsWith('COMMIT') || s.startsWith('ROLLBACK')) return {};
+      if (s.startsWith('BEGIN')) {
+        vTransakci = true;
+        obrazkyStaged = stav.productImages.map(i => ({ ...i }));
+        return {};
+      }
+      if (s.startsWith('COMMIT')) {
+        if (vTransakci) stav.productImages = obrazkyStaged;
+        vTransakci = false;
+        obrazkyStaged = null;
+        return {};
+      }
+      if (s.startsWith('ROLLBACK')) {
+        vTransakci = false;
+        obrazkyStaged = null; // zahodit staged změny - NIC z nich se nepropíše do stav.productImages
+        return {};
+      }
       if (s.startsWith('CREATE TABLE') || s.startsWith('CREATE INDEX') || s.startsWith('CREATE UNIQUE INDEX')) return {};
 
       if (s.startsWith('SELECT id, nazev FROM produkty WHERE id')) {
@@ -36,64 +65,73 @@ function vytvoritMockClient(stav) {
       }
       if (s.startsWith('SELECT COUNT(*)::int AS pocet')) {
         const [produktId] = params;
-        const obr = stav.productImages.filter(i => String(i.produkt_id) === String(produktId));
+        const obr = ziskatPole().filter(i => String(i.produkt_id) === String(produktId));
         const maxPoz = obr.length ? Math.max(...obr.map(i => i.position)) : -1;
         return { rows: [{ pocet: obr.length, max_pozice: maxPoz }] };
       }
       if (s.startsWith('INSERT INTO product_images')) {
+        stav.pocetInsertu = (stav.pocetInsertu || 0) + 1;
+        if (stav.insertSelzeNaPokusu === stav.pocetInsertu) {
+          throw new Error(`DB insert failed (mock, pokus #${stav.pocetInsertu})`);
+        }
         const [produkt_id, url, storage_key, alt, position, is_primary] = params;
         const zaznam = { id: stav.dalsiImageId++, produkt_id, url, storage_key, alt, position, is_primary, created_at: new Date().toISOString() };
-        stav.productImages.push(zaznam);
+        nastavitPole([...ziskatPole(), zaznam]);
         return { rows: [zaznam] };
       }
       if (s.startsWith('SELECT id, produkt_id, url, storage_key, alt, position, is_primary, created_at FROM product_images WHERE produkt_id')) {
         const [produktId] = params;
-        const radky = stav.productImages.filter(i => String(i.produkt_id) === String(produktId)).sort((a, b) => a.position - b.position || a.id - b.id);
+        const radky = ziskatPole().filter(i => String(i.produkt_id) === String(produktId)).sort((a, b) => a.position - b.position || a.id - b.id);
         return { rows: radky };
       }
       if (s.startsWith('SELECT * FROM product_images WHERE id')) {
         const [id] = params;
-        const img = stav.productImages.find(i => i.id === Number(id));
+        const img = ziskatPole().find(i => i.id === Number(id));
         return { rows: img ? [img] : [] };
       }
       if (s.startsWith('DELETE FROM product_images WHERE id')) {
         const [id] = params;
-        stav.productImages = stav.productImages.filter(i => i.id !== Number(id));
+        nastavitPole(ziskatPole().filter(i => i.id !== Number(id)));
         return {};
       }
       if (s.startsWith('SELECT id FROM product_images WHERE produkt_id') && s.includes('ORDER BY position')) {
         const [produktId] = params;
-        const radky = stav.productImages.filter(i => String(i.produkt_id) === String(produktId)).sort((a, b) => a.position - b.position || a.id - b.id);
+        const radky = ziskatPole().filter(i => String(i.produkt_id) === String(produktId)).sort((a, b) => a.position - b.position || a.id - b.id);
         return { rows: radky.length ? [{ id: radky[0].id }] : [] };
       }
       if (s.startsWith('UPDATE product_images SET is_primary=true WHERE id')) {
         const [id] = params;
-        stav.productImages.forEach(i => { if (i.id === Number(id)) i.is_primary = true; });
+        nastavitPole(ziskatPole().map(i => i.id === Number(id) ? { ...i, is_primary: true } : i));
         return {};
       }
       if (s.startsWith('UPDATE product_images SET is_primary=false WHERE produkt_id')) {
         const [produktId] = params;
-        stav.productImages.forEach(i => { if (String(i.produkt_id) === String(produktId)) i.is_primary = false; });
+        nastavitPole(ziskatPole().map(i => String(i.produkt_id) === String(produktId) ? { ...i, is_primary: false } : i));
         return {};
       }
       if (s.startsWith('SELECT id, produkt_id FROM product_images WHERE id')) {
         const [id] = params;
-        const img = stav.productImages.find(i => i.id === Number(id));
+        const img = ziskatPole().find(i => i.id === Number(id));
         return { rows: img ? [{ id: img.id, produkt_id: img.produkt_id }] : [] };
       }
       if (s.startsWith('SELECT produkt_id FROM product_images WHERE id')) {
         const [id] = params;
-        const img = stav.productImages.find(i => i.id === Number(id));
+        const img = ziskatPole().find(i => i.id === Number(id));
         return { rows: img ? [{ produkt_id: img.produkt_id }] : [] };
       }
       if (s.startsWith('UPDATE product_images SET')) {
         const id = Number(params[params.length - 1]);
-        const img = stav.productImages.find(i => i.id === id);
-        if (!img) return { rows: [] };
+        const pole = ziskatPole();
+        const idx = pole.findIndex(i => i.id === id);
+        if (idx === -1) return { rows: [] };
         const setCast = s.slice(s.indexOf('SET') + 3, s.indexOf('WHERE')).trim();
         const atributy = setCast.split(',').map(x => x.trim().split('=')[0].trim());
-        atributy.forEach((atrib, idx) => { img[atrib] = params[idx]; });
-        return { rows: [img] };
+        const novy = { ...pole[idx] };
+        atributy.forEach((atrib, i2) => { novy[atrib] = params[i2]; });
+        const novePole = [...pole];
+        novePole[idx] = novy;
+        nastavitPole(novePole);
+        return { rows: [novy] };
       }
       throw new Error('Mock nezná dotaz: ' + s);
     }
@@ -107,7 +145,10 @@ function vytvoritMockPool(stav) {
   };
 }
 
-function vytvoritCloudinaryMock({ nakonfigurovano = true, uploadSelze = false, deleteSelze = false } = {}) {
+// uploadSelzeNaPokusu: pořadové číslo volání nahratObrazek (1 = první), které
+// má selhat (throw) - umožňuje simulovat "N-tý soubor v dávce selže po tom,
+// co předchozí už uspěly", bez ohledu na to, kolikátý je to test.
+function vytvoritCloudinaryMock({ nakonfigurovano = true, uploadSelzeNaPokusu = null, deleteSelze = false } = {}) {
   const volaniUpload = [];
   const volaniDelete = [];
   let citac = 0;
@@ -115,9 +156,11 @@ function vytvoritCloudinaryMock({ nakonfigurovano = true, uploadSelze = false, d
     volaniUpload, volaniDelete,
     jeNakonfigurovano: () => nakonfigurovano,
     async nahratObrazek(buffer, opts) {
-      volaniUpload.push({ opts });
-      if (uploadSelze) throw new Error('cloudinary upload failed (mock)');
       citac++;
+      volaniUpload.push({ opts, poradi: citac });
+      if (uploadSelzeNaPokusu === citac) {
+        throw new Error(`cloudinary upload failed (mock, pokus #${citac})`);
+      }
       return { secure_url: `https://res.cloudinary.com/demo/image/upload/v1/${opts.folder}/mock${citac}.jpg`, public_id: `${opts.folder}/mock${citac}` };
     },
     async smazatObrazek(publicId) {
@@ -190,6 +233,180 @@ test('upload druhé fotografie NENÍ primary a má position 1 a odlišený ALT',
   assert.equal(res2.body[0].position, 1);
   assert.equal(res2.body[0].alt, 'Botička X – fotografie 2');
   assert.equal(stav.productImages.filter(i => i.is_primary).length, 1); // pořád jen jedna primární
+});
+
+test('multi-upload: druhý Cloudinary upload selže -> žádná fotka se neuloží a první úspěšně nahraný asset se best-effort smaže', async () => {
+  const stav = pocatecniStav();
+  const cloud = vytvoritCloudinaryMock({ uploadSelzeNaPokusu: 2 }); // 1. soubor projde, 2. selže
+  const router = pripravitRouter(stav, cloud);
+  const handler = najitHandler(router, 'post', '/:id/images');
+  const res = vytvoritRes();
+
+  await handler({ params: { id: '1' }, files: [jpegSoubor('a.jpg'), jpegSoubor('b.jpg')] }, res);
+
+  assert.equal(res.statusCode, 502);
+  assert.equal(stav.productImages.length, 0); // do DB se nevložilo vůbec nic
+  assert.equal(cloud.volaniUpload.length, 2); // první prošel, druhý selhal
+  assert.equal(cloud.volaniDelete.length, 1); // první (úspěšně nahraný) asset se uklidil
+  assert.equal(cloud.volaniDelete[0], cloud.volaniUpload[0].opts.folder + '/mock1');
+});
+
+test('multi-upload: všechny Cloudinary uploady projdou, ale DB insert selže -> rollback a best-effort úklid VŠECH nahraných assetů', async () => {
+  const stav = pocatecniStav();
+  stav.insertSelzeNaPokusu = 2; // první INSERT projde, druhý (v rámci stejné dávky) selže
+  const cloud = vytvoritCloudinaryMock();
+  const router = pripravitRouter(stav, cloud);
+  const handler = najitHandler(router, 'post', '/:id/images');
+  const res = vytvoritRes();
+
+  await handler({ params: { id: '1' }, files: [jpegSoubor('a.jpg'), jpegSoubor('b.jpg')] }, res);
+
+  assert.equal(res.statusCode, 500);
+  assert.equal(stav.productImages.length, 0); // DB rollback - žádný řádek nezůstal
+  assert.equal(cloud.volaniUpload.length, 2); // oba uploady do Cloudinary proběhly úspěšně
+  assert.equal(cloud.volaniDelete.length, 2); // oba osiřelé assety se best-effort uklidily
+});
+
+test('cleanup failure po neúspěšném uploadu se jen zaloguje, request stále vrátí chybu z původního selhání', async () => {
+  const stav = pocatecniStav();
+  const cloud = vytvoritCloudinaryMock({ uploadSelzeNaPokusu: 2, deleteSelze: true });
+  const router = pripravitRouter(stav, cloud);
+  const handler = najitHandler(router, 'post', '/:id/images');
+  const res = vytvoritRes();
+
+  await handler({ params: { id: '1' }, files: [jpegSoubor('a.jpg'), jpegSoubor('b.jpg')] }, res);
+
+  assert.equal(res.statusCode, 502); // pořád původní chyba, ne chyba z cleanupu
+  assert.equal(cloud.volaniDelete.length, 1); // o cleanup se pokusilo, i když selhal
+});
+
+test('CONCURRENCY: upload zamkne rodičovský produkt (FOR UPDATE) PŘED výpočtem MAX(position)/primary i před INSERTem', async () => {
+  const stav = pocatecniStav();
+  const cloud = vytvoritCloudinaryMock();
+  const router = pripravitRouter(stav, cloud);
+  const handler = najitHandler(router, 'post', '/:id/images');
+  await handler({ params: { id: '1' }, files: [jpegSoubor('a.jpg')] }, vytvoritRes());
+
+  const lockIdx = stav.callLog.findIndex(c => c.sql.startsWith('SELECT id, nazev FROM produkty WHERE id') && c.sql.includes('FOR UPDATE'));
+  const maxPoziceIdx = stav.callLog.findIndex(c => c.sql.startsWith('SELECT COUNT(*)::int AS pocet'));
+  const insertIdx = stav.callLog.findIndex(c => c.sql.startsWith('INSERT INTO product_images'));
+
+  assert.notEqual(lockIdx, -1);
+  assert.notEqual(maxPoziceIdx, -1);
+  assert.notEqual(insertIdx, -1);
+  assert.ok(lockIdx < maxPoziceIdx, 'zámek produktu musí proběhnout před výpočtem MAX(position)/primary');
+  assert.ok(maxPoziceIdx < insertIdx, 'MAX(position)/primary se musí spočítat před INSERTem');
+});
+
+test('upload na neexistující produkt vrací 404 a NEVOLÁ Cloudinary', async () => {
+  const stav = pocatecniStav();
+  const cloud = vytvoritCloudinaryMock();
+  const router = pripravitRouter(stav, cloud);
+  const handler = najitHandler(router, 'post', '/:id/images');
+  const res = vytvoritRes();
+
+  await handler({ params: { id: '999999' }, files: [jpegSoubor('a.jpg')] }, res);
+
+  assert.equal(res.statusCode, 404);
+  assert.equal(cloud.volaniUpload.length, 0); // produkt se ověří dřív, než se cokoliv pošle do Cloudinary
+  assert.equal(stav.productImages.length, 0);
+});
+
+test('PRIMARY INVARIANT: přesně 0 primary při 0 fotkách, přesně 1 primary při >=1 fotce, napříč celým životním cyklem', async () => {
+  const stav = pocatecniStav();
+  const cloud = vytvoritCloudinaryMock();
+  const router = pripravitRouter(stav, cloud);
+  const uploadHandler = najitHandler(router, 'post', '/:id/images');
+  const deleteHandler = najitHandler(router, 'delete', '/:id/images/:imageId');
+  const primaryHandler = najitHandler(router, 'patch', '/:id/images/:imageId/primary');
+
+  function pocetPrimary() { return stav.productImages.filter(i => i.is_primary).length; }
+
+  assert.equal(pocetPrimary(), 0); // start: 0 fotek, 0 primary
+
+  await uploadHandler({ params: { id: '1' }, files: [jpegSoubor('a.jpg')] }, vytvoritRes());
+  assert.equal(stav.productImages.length, 1);
+  assert.equal(pocetPrimary(), 1); // po prvním uploadu přesně 1 primary
+
+  await uploadHandler({ params: { id: '1' }, files: [jpegSoubor('b.jpg')] }, vytvoritRes());
+  assert.equal(stav.productImages.length, 2);
+  assert.equal(pocetPrimary(), 1); // po druhém uploadu pořád přesně 1 primary
+
+  const druha = stav.productImages.find(i => !i.is_primary);
+  await primaryHandler({ params: { id: '1', imageId: String(druha.id) } }, vytvoritRes());
+  assert.equal(pocetPrimary(), 1); // po změně primary pořád přesně 1
+
+  const nynejsiPrimarni = stav.productImages.find(i => i.is_primary);
+  await deleteHandler({ params: { id: '1', imageId: String(nynejsiPrimarni.id) } }, vytvoritRes());
+  assert.equal(stav.productImages.length, 1);
+  assert.equal(pocetPrimary(), 1); // smazání primary automaticky přeneslo primary na zbylou fotku
+
+  const posledni = stav.productImages[0];
+  await deleteHandler({ params: { id: '1', imageId: String(posledni.id) } }, vytvoritRes());
+  assert.equal(stav.productImages.length, 0);
+  assert.equal(pocetPrimary(), 0); // 0 fotek -> 0 primary
+});
+
+test('PATCH běžné fotografie nedovolí změnit is_primary přes tělo requestu - jen dedicated endpoint /primary to smí', async () => {
+  const stav = pocatecniStav();
+  const cloud = vytvoritCloudinaryMock();
+  const router = pripravitRouter(stav, cloud);
+  const uploadHandler = najitHandler(router, 'post', '/:id/images');
+  await uploadHandler({ params: { id: '1' }, files: [jpegSoubor('a.jpg'), jpegSoubor('b.jpg')] }, vytvoritRes());
+  const nehlavni = stav.productImages.find(i => !i.is_primary);
+
+  const patchHandler = najitHandler(router, 'patch', '/:id/images/:imageId');
+  const res = vytvoritRes();
+  await patchHandler({ params: { id: '1', imageId: String(nehlavni.id) }, body: { is_primary: true, alt: 'pokus o obejití' } }, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(stav.productImages.find(i => i.id === nehlavni.id).is_primary, false); // is_primary se NEZMĚNILO
+  assert.equal(stav.productImages.find(i => i.id === nehlavni.id).alt, 'pokus o obejití'); // alt se změnit smí
+});
+
+test('PATCH position: záporná, neceločíselná i přehnaně vysoká hodnota jsou odmítnuty (400)', async () => {
+  const stav = pocatecniStav();
+  const cloud = vytvoritCloudinaryMock();
+  const router = pripravitRouter(stav, cloud);
+  const uploadHandler = najitHandler(router, 'post', '/:id/images');
+  await uploadHandler({ params: { id: '1' }, files: [jpegSoubor('a.jpg')] }, vytvoritRes());
+  const fotka = stav.productImages[0];
+  const patchHandler = najitHandler(router, 'patch', '/:id/images/:imageId');
+
+  for (const spatnaPozice of [-1, 1.5, 100000, 'x']) {
+    const res = vytvoritRes();
+    await patchHandler({ params: { id: '1', imageId: String(fotka.id) }, body: { position: spatnaPozice } }, res);
+    assert.equal(res.statusCode, 400, `pozice ${JSON.stringify(spatnaPozice)} měla být odmítnuta`);
+  }
+
+  const resOk = vytvoritRes();
+  await patchHandler({ params: { id: '1', imageId: String(fotka.id) }, body: { position: 5 } }, resOk);
+  assert.equal(resOk.statusCode, 200);
+  assert.equal(stav.productImages[0].position, 5);
+});
+
+test('seznam fotografií i výběr nové primary po smazání jsou řazené ORDER BY position, id (deterministicky i při shodné position)', async () => {
+  const stav = pocatecniStav();
+  const cloud = vytvoritCloudinaryMock();
+  const router = pripravitRouter(stav, cloud);
+  const uploadHandler = najitHandler(router, 'post', '/:id/images');
+  await uploadHandler({ params: { id: '1' }, files: [jpegSoubor('a.jpg'), jpegSoubor('b.jpg')] }, vytvoritRes());
+
+  // Simulace nekonzistentního stavu (např. napůl dokončené přeuspořádání) -
+  // obě fotky se stejnou position - řazení se pak musí spolehnout na id.
+  stav.productImages.forEach(i => { i.position = 0; });
+
+  const getHandler = najitHandler(router, 'get', '/:id/images');
+  const res = vytvoritRes();
+  await getHandler({ params: { id: '1' } }, res);
+  assert.equal(res.body[0].id, stav.productImages.map(i => i.id).sort((a, b) => a - b)[0]);
+
+  const prvni = stav.productImages.find(i => i.is_primary);
+  const deleteHandler = najitHandler(router, 'delete', '/:id/images/:imageId');
+  const resDelete = vytvoritRes();
+  await deleteHandler({ params: { id: '1', imageId: String(prvni.id) } }, resDelete);
+  // Zbylá fotka (jediná) se stane primary bez ohledu na shodnou position.
+  assert.equal(resDelete.body.nova_primarni_id, stav.productImages[0].id);
 });
 
 test('změna hlavní fotografie je transakční - stará přestane být primary, zvolená se stane primary', async () => {
