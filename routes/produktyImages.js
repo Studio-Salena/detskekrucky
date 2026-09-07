@@ -34,12 +34,20 @@ initProductImagesTabulka();
 const MAX_MB = 10;
 const MAX_BYTES = MAX_MB * 1024 * 1024;
 const MAX_POZICE = 1000;
+const MAX_ALT_DELKA = 300;
 const POVOLENE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif']);
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_BYTES }
 });
+
+// Skutečné HEIC/HEIF major brandy (ISO-BMFF "ftyp" box, 4 ASCII znaky hned
+// po něm). Nestačí kontrolovat jen přítomnost "ftyp" - ten box má naprosto
+// každý ISO-BMFF soubor (i MP4/MOV video, i audio) - musí sedět konkrétní
+// brand, jinak by jako "HEIC obrázek" prošlo libovolné video přejmenované
+// na .jpg s podvrženým Content-Type.
+const HEIC_BRANDY = new Set(['heic', 'heix', 'heim', 'heis', 'hevc', 'hevx', 'hevm', 'hevs', 'mif1', 'msf1']);
 
 // Ověří skutečný obsah souboru podle magických bajtů na začátku - nespoléhá
 // jen na Content-Type/příponu, kterou klient (i omylem přejmenovaný soubor
@@ -50,10 +58,24 @@ function zjistitSkutecnyTypObrazku(buffer) {
   if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) return 'png';
   if (buffer.slice(0, 4).toString('ascii') === 'GIF8') return 'gif';
   if (buffer.slice(0, 4).toString('ascii') === 'RIFF' && buffer.slice(8, 12).toString('ascii') === 'WEBP') return 'webp';
-  // HEIC/HEIF (iPhone) - ISO base media file format, "ftyp" box na offsetu 4.
-  if (buffer.slice(4, 8).toString('ascii') === 'ftyp') return 'heic';
+  if (buffer.slice(4, 8).toString('ascii') === 'ftyp') {
+    const brand = buffer.slice(8, 12).toString('ascii');
+    return HEIC_BRANDY.has(brand) ? 'heic' : null;
+  }
   return null;
 }
+
+// Který skutečně detekovaný typ smí přijít s jakým deklarovaným Content-Type
+// - nestačí, že MIME je z povolené množiny A buffer vypadá jako "nějaký"
+// obrázek; deklarovaný MIME musí sedět na detekovaný typ (mimetype=image/jpeg
+// s GIF obsahem se odmítne).
+const TYP_NA_POVOLENE_MIME = {
+  jpeg: new Set(['image/jpeg']),
+  png: new Set(['image/png']),
+  gif: new Set(['image/gif']),
+  webp: new Set(['image/webp']),
+  heic: new Set(['image/heic', 'image/heif'])
+};
 
 // Best-effort úklid Cloudinary assetů nahraných v RÁMCI JEDNOHO requestu,
 // který nakonec neuspěl (další soubor v dávce selhal, nebo selhal následný
@@ -117,8 +139,15 @@ router.post('/:id/images', (req, res, next) => {
     if (!POVOLENE_MIME.has(soubor.mimetype)) {
       return res.status(400).json({ chyba: 'Nepovolený typ souboru. Nahrajte prosím fotografii (JPEG/PNG/WEBP/HEIC).' });
     }
-    if (!zjistitSkutecnyTypObrazku(soubor.buffer)) {
+    const skutecnyTyp = zjistitSkutecnyTypObrazku(soubor.buffer);
+    if (!skutecnyTyp) {
       return res.status(400).json({ chyba: 'Soubor nevypadá jako platný obrázek.' });
+    }
+    // Deklarovaný Content-Type musí odpovídat skutečně detekovanému typu -
+    // "mimetype je povolený" A "buffer vypadá jako nějaký obrázek" nestačí,
+    // obojí musí sedět na SEBE (mimetype=image/jpeg s GIF obsahem se odmítne).
+    if (!TYP_NA_POVOLENE_MIME[skutecnyTyp].has(soubor.mimetype)) {
+      return res.status(400).json({ chyba: 'Deklarovaný typ souboru neodpovídá jeho skutečnému obsahu.' });
     }
   }
   if (!cloudinaryLib.jeNakonfigurovano()) {
@@ -279,7 +308,12 @@ router.patch('/:id/images/:imageId', async (req, res) => {
     const sloupce = [];
     const hodnoty = [];
     let i = 1;
-    if (alt !== undefined) { sloupce.push(`alt=$${i++}`); hodnoty.push(alt); }
+    if (alt !== undefined) {
+      if (typeof alt !== 'string' || alt.length > MAX_ALT_DELKA) {
+        return res.status(400).json({ chyba: `Neplatný ALT text (musí být text, max ${MAX_ALT_DELKA} znaků).` });
+      }
+      sloupce.push(`alt=$${i++}`); hodnoty.push(alt);
+    }
     if (position !== undefined) {
       if (!Number.isInteger(position) || position < 0 || position > MAX_POZICE) {
         return res.status(400).json({ chyba: `Neplatná pozice (musí být celé číslo 0 až ${MAX_POZICE}).` });

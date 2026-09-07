@@ -199,6 +199,18 @@ function jpegSoubor(nazev) {
   const buf = jpegBuffer();
   return { buffer: buf, mimetype: 'image/jpeg', size: buf.length, originalname: nazev };
 }
+function gifBuffer() {
+  return Buffer.from('GIF89a' + '\0'.repeat(10), 'ascii');
+}
+// ISO-BMFF "ftyp" box s daným major brandem (4 ASCII znaky na offsetu 8-12).
+function ftypBuffer(brand) {
+  return Buffer.concat([
+    Buffer.from([0x00, 0x00, 0x00, 0x18]), // velikost boxu (nepodstatné pro detekci)
+    Buffer.from('ftyp', 'ascii'),
+    Buffer.from(brand, 'ascii'),
+    Buffer.from([0x00, 0x00, 0x00, 0x00])
+  ]);
+}
 
 // Volá celý router (včetně router.use(vyzadovatAdmina)) jako middleware -
 // na rozdíl od najitHandler, který kvůli testování byznys logiky bez auth
@@ -602,6 +614,88 @@ test('soubor s podvrženým Content-Type (image/jpeg), ale bez platné signatury
 
   assert.equal(res.statusCode, 400);
   assert.equal(cloud.volaniUpload.length, 0); // odmítnuto ještě před uploadem do Cloudinary
+});
+
+test('MIME neodpovídá skutečnému obsahu: mimetype=image/jpeg s GIF obsahem je odmítnut (400)', async () => {
+  const stav = pocatecniStav();
+  const cloud = vytvoritCloudinaryMock(stav);
+  const router = pripravitRouter(stav, cloud);
+  const handler = najitHandler(router, 'post', '/:id/images');
+  const res = vytvoritRes();
+  const buf = gifBuffer();
+
+  await handler({ params: { id: '1' }, files: [{ buffer: buf, mimetype: 'image/jpeg', size: buf.length, originalname: 'x.jpg' }] }, res);
+
+  assert.equal(res.statusCode, 400);
+  assert.equal(stav.productImages.length, 0);
+  assert.equal(cloud.volaniUpload.length, 0);
+});
+
+test('falešný ftyp/MP4 box (generický ISO-BMFF brand "isom") neprojde jako HEIC', async () => {
+  const stav = pocatecniStav();
+  const cloud = vytvoritCloudinaryMock(stav);
+  const router = pripravitRouter(stav, cloud);
+  const handler = najitHandler(router, 'post', '/:id/images');
+  const res = vytvoritRes();
+  const buf = ftypBuffer('isom');
+
+  await handler({ params: { id: '1' }, files: [{ buffer: buf, mimetype: 'image/heic', size: buf.length, originalname: 'video.heic' }] }, res);
+
+  assert.equal(res.statusCode, 400);
+  assert.equal(cloud.volaniUpload.length, 0);
+});
+
+test('skutečný HEIC major brand ("heic") s mimetype image/heic projde validací', async () => {
+  const stav = pocatecniStav();
+  const cloud = vytvoritCloudinaryMock(stav);
+  const router = pripravitRouter(stav, cloud);
+  const handler = najitHandler(router, 'post', '/:id/images');
+  const res = vytvoritRes();
+  const buf = ftypBuffer('heic');
+
+  await handler({ params: { id: '1' }, files: [{ buffer: buf, mimetype: 'image/heic', size: buf.length, originalname: 'foto.heic' }] }, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(cloud.volaniUpload.length, 1);
+});
+
+test('PATCH alt: hodnota, která není string (číslo/objekt/pole/boolean), je odmítnuta (400)', async () => {
+  const stav = pocatecniStav();
+  const cloud = vytvoritCloudinaryMock(stav);
+  const router = pripravitRouter(stav, cloud);
+  const uploadHandler = najitHandler(router, 'post', '/:id/images');
+  await uploadHandler({ params: { id: '1' }, files: [jpegSoubor('a.jpg')] }, vytvoritRes());
+  const fotka = stav.productImages[0];
+  const patchHandler = najitHandler(router, 'patch', '/:id/images/:imageId');
+
+  for (const spatnyAlt of [123, { x: 1 }, ['a'], true]) {
+    const res = vytvoritRes();
+    await patchHandler({ params: { id: '1', imageId: String(fotka.id) }, body: { alt: spatnyAlt } }, res);
+    assert.equal(res.statusCode, 400, `alt ${JSON.stringify(spatnyAlt)} měl být odmítnut`);
+  }
+});
+
+test('PATCH alt: delší než 300 znaků je odmítnut (400), prázdný string a přesně 300 znaků povoleno', async () => {
+  const stav = pocatecniStav();
+  const cloud = vytvoritCloudinaryMock(stav);
+  const router = pripravitRouter(stav, cloud);
+  const uploadHandler = najitHandler(router, 'post', '/:id/images');
+  await uploadHandler({ params: { id: '1' }, files: [jpegSoubor('a.jpg')] }, vytvoritRes());
+  const fotka = stav.productImages[0];
+  const patchHandler = najitHandler(router, 'patch', '/:id/images/:imageId');
+
+  const resDlouhy = vytvoritRes();
+  await patchHandler({ params: { id: '1', imageId: String(fotka.id) }, body: { alt: 'x'.repeat(301) } }, resDlouhy);
+  assert.equal(resDlouhy.statusCode, 400);
+
+  const resPrazdny = vytvoritRes();
+  await patchHandler({ params: { id: '1', imageId: String(fotka.id) }, body: { alt: '' } }, resPrazdny);
+  assert.equal(resPrazdny.statusCode, 200);
+  assert.equal(stav.productImages[0].alt, '');
+
+  const resPresne300 = vytvoritRes();
+  await patchHandler({ params: { id: '1', imageId: String(fotka.id) }, body: { alt: 'x'.repeat(300) } }, resPresne300);
+  assert.equal(resPresne300.statusCode, 200);
 });
 
 test('všechny image endpointy vyžadují admin heslo (admin-only)', async () => {

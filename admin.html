@@ -2159,7 +2159,8 @@ async function fotkyVybrany(files) {
 
 async function nastavitHlavniFotku(imageId) {
   try {
-    await adminFetch(API+'/produkty/'+fotkyProduktId+'/images/'+imageId+'/primary', {method:'PATCH'});
+    const res = await adminFetch(API+'/produkty/'+fotkyProduktId+'/images/'+imageId+'/primary', {method:'PATCH'});
+    if (!res.ok) { alert('Nepodařilo se nastavit hlavní fotografii.'); return; }
     await nacistFotkyProduktu(fotkyProduktId);
   } catch(e) { alert('Nepodařilo se nastavit hlavní fotografii.'); }
 }
@@ -2167,15 +2168,17 @@ async function nastavitHlavniFotku(imageId) {
 async function smazatFotku(imageId) {
   if (!confirm('Smazat tuto fotografii?')) return;
   try {
-    await adminFetch(API+'/produkty/'+fotkyProduktId+'/images/'+imageId, {method:'DELETE'});
+    const res = await adminFetch(API+'/produkty/'+fotkyProduktId+'/images/'+imageId, {method:'DELETE'});
+    if (!res.ok) { alert('Smazání se nepovedlo.'); return; }
     await nacistFotkyProduktu(fotkyProduktId);
   } catch(e) { alert('Smazání se nepovedlo.'); }
 }
 
 async function upravitAltFotky(imageId, alt) {
   try {
-    await adminFetch(API+'/produkty/'+fotkyProduktId+'/images/'+imageId, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({alt})});
-  } catch(e) {}
+    const res = await adminFetch(API+'/produkty/'+fotkyProduktId+'/images/'+imageId, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({alt})});
+    if (!res.ok) { alert('Uložení ALT textu se nepovedlo.'); }
+  } catch(e) { alert('Uložení ALT textu se nepovedlo.'); }
 }
 
 async function posunoutFotku(imageId, smer) {
@@ -2185,10 +2188,11 @@ async function posunoutFotku(imageId, smer) {
   if (cil < 0 || cil >= serazene.length) return;
   const a = serazene[idx], b = serazene[cil];
   try {
-    await Promise.all([
+    const [resA, resB] = await Promise.all([
       adminFetch(API+'/produkty/'+fotkyProduktId+'/images/'+a.id, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({position:b.position})}),
       adminFetch(API+'/produkty/'+fotkyProduktId+'/images/'+b.id, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({position:a.position})})
     ]);
+    if (!resA.ok || !resB.ok) { alert('Přeuspořádání se nepovedlo.'); await nacistFotkyProduktu(fotkyProduktId); return; }
     await nacistFotkyProduktu(fotkyProduktId);
   } catch(e) { alert('Přeuspořádání se nepovedlo.'); }
 }
