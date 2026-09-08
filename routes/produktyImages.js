@@ -192,15 +192,23 @@ router.post('/:id/images', (req, res, next) => {
   // delete/změnou primary nad stejným produktem, tak race, kdy produkt mezi
   // krokem 2 a teď zmizel.
   //
-  // Od tohohle bodu dál platí jeden klíčový invariant: ať selže cokoliv v DB
-  // vrstvě - samotné pool.connect(), BEGIN, FOR UPDATE, INSERT, COMMIT, nebo
-  // i samotný ROLLBACK/release - Cloudinary assety nahrané výše se MUSÍ
-  // best-effort uklidit. client se proto drží v proměnné VENKU try bloku (aby
-  // ho catch měl k dispozici, i kdyby selhalo samotné pool.connect()) a
-  // rollback/release jsou uvnitř catch obalené vlastním try/catch, ať jejich
-  // případné selhání nezablokuje ani jedno, ani cleanup za nimi.
+  // Od tohohle bodu dál platí dva klíčové invarianty:
+  //   1) DOKUD COMMIT ještě neproběhl: ať selže cokoliv v DB vrstvě - samotné
+  //      pool.connect(), BEGIN, FOR UPDATE, INSERT, COMMIT, nebo i samotný
+  //      ROLLBACK/release - Cloudinary assety nahrané výše se MUSÍ best-effort
+  //      uklidit (nesmí zůstat osiřelé, když k nim není žádný DB řádek).
+  //   2) JAKMILE COMMIT úspěšně proběhne: DB řádky jsou trvale uložené a
+  //      odkazují na tyhle Cloudinary assety - ty se NIKDY nesmí smazat, ani
+  //      kdyby cokoliv selhalo PO COMMITu (typicky jen client.release()).
+  //      Cleanup po úspěšném commitu by byl datová nekonzistence (DB řádek
+  //      ukazující na smazanou fotku), horší než mírně unikající DB připojení.
+  // client se drží v proměnné VENKU try bloku (aby ho catch měl k dispozici,
+  // i kdyby selhalo samotné pool.connect()); commitHotov rozlišuje, který
+  // invariant právě platí.
   let client = null;
   let transakceOtevrena = false;
+  let commitHotov = false;
+  let vlozene = [];
   try {
     client = await pool.connect();
     await client.query('BEGIN');
@@ -221,7 +229,6 @@ router.post('/:id/images', (req, res, next) => {
     let pozice = stav.rows[0].max_pozice + 1;
     let jizMaPrimarni = stav.rows[0].pocet > 0;
 
-    const vlozene = [];
     for (const vysledek of nahraneAssety) {
       const jePrimarni = !jizMaPrimarni;
       const alt = pozice === 0 ? nazevProduktu : `${nazevProduktu} – fotografie ${pozice + 1}`;
@@ -237,14 +244,11 @@ router.post('/:id/images', (req, res, next) => {
 
     await client.query('COMMIT');
     transakceOtevrena = false;
-    client.release();
-    client = null;
-    return res.json(vlozene);
+    commitHotov = true;
   } catch (err) {
-    // 6) DB FAILURE PO ÚSPĚŠNÉM CLOUDINARY UPLOADU (včetně pool.connect()
-    // samotného, který ještě před tímhle blokem nemá kam selhat - proto je
-    // teď uvnitř try) - rollback i release jsou best-effort, jejich případné
-    // selhání se jen zaloguje a NIKDY nezablokuje Cloudinary cleanup níže.
+    // 6) DB FAILURE (včetně samotného pool.connect(), proto je uvnitř try) -
+    // rollback i release jsou best-effort, jejich případné selhání se jen
+    // zaloguje a NIKDY nezablokuje krok níže.
     if (client && transakceOtevrena) {
       try {
         await client.query('ROLLBACK');
@@ -262,13 +266,33 @@ router.post('/:id/images', (req, res, next) => {
       client = null;
     }
 
-    await ukliditNahraneAssety(nahraneAssety.map(a => a.public_id));
+    // Cleanup jen pokud COMMIT ještě neproběhl - viz invarianty výše. Pokud
+    // se sem dostal request, kde COMMIT už úspěšně proběhl (výjimka nastala
+    // až za ním - v praxi jen při chybě z předchozího client.release() volání
+    // výše), commitHotov je true a assety se záměrně nechají být.
+    if (!commitHotov) {
+      await ukliditNahraneAssety(nahraneAssety.map(a => a.public_id));
+    }
 
     if (err.produktZmizel) {
       return res.status(404).json({ chyba: err.message });
     }
     return res.status(500).json({ chyba: err.message });
   }
+
+  // Sem se dostane VÝHRADNĚ po úspěšném COMMITu. Release je záměrně úplně
+  // MIMO kompenzační try/catch výše - jeho případné selhání (spojení se
+  // nepodaří vrátit do poolu) tak nemůže žádnou cestou spustit Cloudinary
+  // cleanup, protože DB řádky už jsou v tuhle chvíli trvale uložené.
+  if (client) {
+    try {
+      client.release();
+    } catch (releaseErr) {
+      console.error('Uvolnění DB připojení po úspěšném uploadu fotografií selhalo:', releaseErr.message);
+    }
+    client = null;
+  }
+  return res.json(vlozene);
 });
 
 // DELETE /:id/images/:imageId - smazání fotografie. Vlastnictví (fotka

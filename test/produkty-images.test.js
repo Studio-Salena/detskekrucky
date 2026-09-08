@@ -18,7 +18,8 @@ function pocatecniStav() {
     udalosti: [],
     insertSelzeNaPokusu: null, // pořadové číslo INSERTu do product_images, které má vyhodit chybu (simulace DB failure PO úspěšném Cloudinary uploadu)
     connectSelze: false, // pool.connect() vyhodí chybu (simulace výpadku DB PO úspěšném Cloudinary uploadu)
-    rollbackSelze: false // ROLLBACK sám vyhodí chybu (rollback nesmí zablokovat release/cleanup)
+    rollbackSelze: false, // ROLLBACK sám vyhodí chybu (rollback nesmí zablokovat release/cleanup)
+    releaseSelze: false // client.release() vyhodí chybu - i PO úspěšném COMMITu nesmí spustit Cloudinary cleanup
   };
 }
 
@@ -41,6 +42,9 @@ function vytvoritMockClient(stav) {
       // Zaznamenat POKUS o release do sdílené časové osy - testy na pořadí
       // (rollback -> release -> Cloudinary cleanup) na tohle spoléhají.
       stav.udalosti.push({ typ: 'release' });
+      if (stav.releaseSelze) {
+        throw new Error('release failed (mock)');
+      }
     },
     async query(sql, params = []) {
       const s = sql.replace(/\s+/g, ' ').trim();
@@ -465,6 +469,28 @@ test('C) Cloudinary upload OK, produkt zmizí při FOR UPDATE A ROLLBACK selže:
   assert.equal(cloud.volaniUpload.length, 1);
   assert.equal(cloud.volaniDelete.length, 1); // cleanup proběhl I PŘES neúspěšný ROLLBACK
   assert.equal(stav.udalosti.some(u => u.typ === 'release'), true);
+});
+
+test('D) Cloudinary upload OK, COMMIT OK, ale client.release() PO commitu selže: DB řádky ZŮSTANOU, Cloudinary cleanup se NIKDY nezavolá', async () => {
+  const stav = pocatecniStav();
+  stav.releaseSelze = true;
+  const cloud = vytvoritCloudinaryMock(stav);
+  const router = pripravitRouter(stav, cloud);
+  const handler = najitHandler(router, 'post', '/:id/images');
+  const res = vytvoritRes();
+
+  await handler({ params: { id: '1' }, files: [jpegSoubor('a.jpg')] }, res);
+
+  // Request musí uspět - COMMIT proběhl, DB řádky existují. Release, který
+  // selhal AŽ PO commitu, nesmí tohle nijak zvrátit ani vést ke smazání
+  // fotky, na kterou už committnutý řádek odkazuje.
+  assert.equal(res.statusCode, 200);
+  assert.equal(stav.productImages.length, 1);
+  assert.equal(stav.productImages[0].is_primary, true);
+  assert.equal(cloud.volaniUpload.length, 1);
+  assert.equal(cloud.volaniDelete.length, 0); // Cloudinary cleanup se NIKDY nezavolal
+  assert.equal(stav.callLog.some(c => c.sql.startsWith('ROLLBACK')), false); // žádný ROLLBACK po úspěšném COMMITu
+  assert.equal(stav.udalosti.some(u => u.typ === 'release'), true); // release se přesto zkusil
 });
 
 test('upload na neexistující produkt vrací 404 a NEVOLÁ Cloudinary', async () => {
