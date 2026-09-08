@@ -191,15 +191,24 @@ router.post('/:id/images', (req, res, next) => {
   // (na rozdíl od pre-checku v kroku 2) - řeší jak souběh s jiným uploadem/
   // delete/změnou primary nad stejným produktem, tak race, kdy produkt mezi
   // krokem 2 a teď zmizel.
-  const client = await pool.connect();
+  //
+  // Od tohohle bodu dál platí jeden klíčový invariant: ať selže cokoliv v DB
+  // vrstvě - samotné pool.connect(), BEGIN, FOR UPDATE, INSERT, COMMIT, nebo
+  // i samotný ROLLBACK/release - Cloudinary assety nahrané výše se MUSÍ
+  // best-effort uklidit. client se proto drží v proměnné VENKU try bloku (aby
+  // ho catch měl k dispozici, i kdyby selhalo samotné pool.connect()) a
+  // rollback/release jsou uvnitř catch obalené vlastním try/catch, ať jejich
+  // případné selhání nezablokuje ani jedno, ani cleanup za nimi.
+  let client = null;
+  let transakceOtevrena = false;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
+    transakceOtevrena = true;
+
     const produkt = await client.query('SELECT id, nazev FROM produkty WHERE id=$1 FOR UPDATE', [produktId]);
     if (!produkt.rows.length) {
-      await client.query('ROLLBACK');
-      client.release();
-      await ukliditNahraneAssety(nahraneAssety.map(a => a.public_id));
-      return res.status(404).json({ chyba: 'Produkt mezitím zmizel - fotografie nebyly uloženy.' });
+      throw Object.assign(new Error('Produkt mezitím zmizel - fotografie nebyly uloženy.'), { produktZmizel: true });
     }
     const nazevProduktu = produkt.rows[0].nazev;
 
@@ -227,15 +236,37 @@ router.post('/:id/images', (req, res, next) => {
     }
 
     await client.query('COMMIT');
+    transakceOtevrena = false;
     client.release();
+    client = null;
     return res.json(vlozene);
   } catch (err) {
-    // 6) DB FAILURE PO ÚSPĚŠNÉM CLOUDINARY UPLOADU - rollback a release
-    // proběhnou HNED, Cloudinary cleanup až PO nich (nikdy uvnitř otevřené
-    // transakce).
-    await client.query('ROLLBACK');
-    client.release();
+    // 6) DB FAILURE PO ÚSPĚŠNÉM CLOUDINARY UPLOADU (včetně pool.connect()
+    // samotného, který ještě před tímhle blokem nemá kam selhat - proto je
+    // teď uvnitř try) - rollback i release jsou best-effort, jejich případné
+    // selhání se jen zaloguje a NIKDY nezablokuje Cloudinary cleanup níže.
+    if (client && transakceOtevrena) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackErr) {
+        console.error('ROLLBACK po neúspěšném uploadu fotografií selhal:', rollbackErr.message);
+      }
+      transakceOtevrena = false;
+    }
+    if (client) {
+      try {
+        client.release();
+      } catch (releaseErr) {
+        console.error('Uvolnění DB připojení po neúspěšném uploadu fotografií selhalo:', releaseErr.message);
+      }
+      client = null;
+    }
+
     await ukliditNahraneAssety(nahraneAssety.map(a => a.public_id));
+
+    if (err.produktZmizel) {
+      return res.status(404).json({ chyba: err.message });
+    }
     return res.status(500).json({ chyba: err.message });
   }
 });

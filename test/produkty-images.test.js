@@ -16,7 +16,9 @@ function pocatecniStav() {
     // ověřit relativní POŘADÍ mezi DB prací a externími Cloudinary requesty
     // (např. "Cloudinary upload proběhl PŘED BEGIN").
     udalosti: [],
-    insertSelzeNaPokusu: null // pořadové číslo INSERTu do product_images, které má vyhodit chybu (simulace DB failure PO úspěšném Cloudinary uploadu)
+    insertSelzeNaPokusu: null, // pořadové číslo INSERTu do product_images, které má vyhodit chybu (simulace DB failure PO úspěšném Cloudinary uploadu)
+    connectSelze: false, // pool.connect() vyhodí chybu (simulace výpadku DB PO úspěšném Cloudinary uploadu)
+    rollbackSelze: false // ROLLBACK sám vyhodí chybu (rollback nesmí zablokovat release/cleanup)
   };
 }
 
@@ -35,7 +37,11 @@ function vytvoritMockClient(stav) {
   function nastavitPole(nove) { if (vTransakci) obrazkyStaged = nove; else stav.productImages = nove; }
 
   return {
-    release() {},
+    release() {
+      // Zaznamenat POKUS o release do sdílené časové osy - testy na pořadí
+      // (rollback -> release -> Cloudinary cleanup) na tohle spoléhají.
+      stav.udalosti.push({ typ: 'release' });
+    },
     async query(sql, params = []) {
       const s = sql.replace(/\s+/g, ' ').trim();
       stav.callLog.push({ sql: s, params });
@@ -55,6 +61,9 @@ function vytvoritMockClient(stav) {
       if (s.startsWith('ROLLBACK')) {
         vTransakci = false;
         obrazkyStaged = null; // zahodit staged změny - NIC z nich se nepropíše do stav.productImages
+        if (stav.rollbackSelze) {
+          throw new Error('ROLLBACK failed (mock)');
+        }
         return {};
       }
       if (s.startsWith('CREATE TABLE') || s.startsWith('CREATE INDEX') || s.startsWith('CREATE UNIQUE INDEX')) return {};
@@ -146,7 +155,12 @@ function vytvoritMockClient(stav) {
 
 function vytvoritMockPool(stav) {
   return {
-    async connect() { return vytvoritMockClient(stav); },
+    async connect() {
+      if (stav.connectSelze) {
+        throw new Error('pool.connect() failed (mock)');
+      }
+      return vytvoritMockClient(stav);
+    },
     async query(sql, params) { return vytvoritMockClient(stav).query(sql, params); }
   };
 }
@@ -373,7 +387,7 @@ test('RACE: produkt zmizí MEZI pre-checkem a autoritativní DB finalizací - ž
   assert.ok(stav.callLog.some(c => c.sql.startsWith('SELECT id, nazev FROM produkty WHERE id') && c.sql.includes('FOR UPDATE')));
 });
 
-test('POŘADÍ při DB insert failure: ROLLBACK a release proběhnou PŘED Cloudinary cleanupem', async () => {
+test('POŘADÍ při DB insert failure: ROLLBACK -> release -> Cloudinary cleanup, přesně v tomhle pořadí', async () => {
   const stav = pocatecniStav();
   stav.insertSelzeNaPokusu = 2;
   const cloud = vytvoritCloudinaryMock(stav);
@@ -385,10 +399,72 @@ test('POŘADÍ při DB insert failure: ROLLBACK a release proběhnou PŘED Cloud
 
   assert.equal(res.statusCode, 500);
   const rollbackIdx = stav.udalosti.findIndex(u => u.typ === 'sql' && u.sql.startsWith('ROLLBACK'));
+  const releaseIdx = stav.udalosti.findIndex(u => u.typ === 'release');
   const prvniDestroyIdx = stav.udalosti.findIndex(u => u.typ === 'cloudinary-destroy');
   assert.notEqual(rollbackIdx, -1);
+  assert.notEqual(releaseIdx, -1);
   assert.notEqual(prvniDestroyIdx, -1);
-  assert.ok(rollbackIdx < prvniDestroyIdx, 'ROLLBACK musí proběhnout před Cloudinary cleanupem, ne uvnitř otevřené transakce');
+  assert.ok(rollbackIdx < releaseIdx, 'ROLLBACK musí proběhnout před release');
+  assert.ok(releaseIdx < prvniDestroyIdx, 'release musí proběhnout před Cloudinary cleanupem');
+});
+
+test('A) Cloudinary upload OK, ale pool.connect() selže: žádný DB řádek, VŠECHNY nahrané assety se best-effort uklidí', async () => {
+  const stav = pocatecniStav();
+  const cloud = vytvoritCloudinaryMock(stav);
+  const router = pripravitRouter(stav, cloud);
+  const handler = najitHandler(router, 'post', '/:id/images');
+  const res = vytvoritRes();
+
+  // Cloudinary uploady proběhnou úspěšně (stav.connectSelze se týká jen
+  // pool.connect(), volaného až PO nich) - pak selže samotné připojení k DB.
+  stav.connectSelze = true;
+  await handler({ params: { id: '1' }, files: [jpegSoubor('a.jpg'), jpegSoubor('b.jpg')] }, res);
+
+  assert.equal(res.statusCode, 500);
+  assert.equal(stav.productImages.length, 0); // žádný DB řádek nevznikl
+  assert.equal(cloud.volaniUpload.length, 2); // oba uploady do Cloudinary proběhly úspěšně
+  assert.equal(cloud.volaniDelete.length, 2); // oba se best-effort uklidily i bez otevřené DB transakce
+  // Bez úspěšného pool.connect() nikdy nevznikl DB client - v callLogu tedy
+  // nesmí být žádný BEGIN ani ROLLBACK (nebylo co začínat/vracet).
+  assert.equal(stav.callLog.some(c => c.sql.startsWith('BEGIN')), false);
+});
+
+test('B) Cloudinary upload OK, DB INSERT selže A ROLLBACK TAKÉ selže: cleanup i release se přesto zkusí', async () => {
+  const stav = pocatecniStav();
+  stav.insertSelzeNaPokusu = 2;
+  stav.rollbackSelze = true;
+  const cloud = vytvoritCloudinaryMock(stav);
+  const router = pripravitRouter(stav, cloud);
+  const handler = najitHandler(router, 'post', '/:id/images');
+  const res = vytvoritRes();
+
+  await handler({ params: { id: '1' }, files: [jpegSoubor('a.jpg'), jpegSoubor('b.jpg')] }, res);
+
+  assert.equal(res.statusCode, 500);
+  assert.equal(stav.productImages.length, 0);
+  assert.equal(cloud.volaniDelete.length, 2); // cleanup proběhl I PŘES to, že ROLLBACK selhal
+  assert.equal(stav.udalosti.some(u => u.typ === 'release'), true); // release se přesto zkusil
+  const rollbackIdx = stav.udalosti.findIndex(u => u.typ === 'sql' && u.sql.startsWith('ROLLBACK'));
+  const releaseIdx = stav.udalosti.findIndex(u => u.typ === 'release');
+  const destroyIdx = stav.udalosti.findIndex(u => u.typ === 'cloudinary-destroy');
+  assert.ok(rollbackIdx < releaseIdx, 'release se musí zkusit i po neúspěšném ROLLBACKu');
+  assert.ok(releaseIdx < destroyIdx, 'release musí proběhnout před Cloudinary cleanupem i v téhle chybové větvi');
+});
+
+test('C) Cloudinary upload OK, produkt zmizí při FOR UPDATE A ROLLBACK selže: Cloudinary cleanup se přesto zavolá', async () => {
+  const stav = pocatecniStav();
+  stav.rollbackSelze = true;
+  const cloud = vytvoritCloudinaryMock(stav, { smazatProduktPoUploadu: 1 });
+  const router = pripravitRouter(stav, cloud);
+  const handler = najitHandler(router, 'post', '/:id/images');
+  const res = vytvoritRes();
+
+  await handler({ params: { id: '1' }, files: [jpegSoubor('a.jpg')] }, res);
+
+  assert.equal(stav.productImages.length, 0);
+  assert.equal(cloud.volaniUpload.length, 1);
+  assert.equal(cloud.volaniDelete.length, 1); // cleanup proběhl I PŘES neúspěšný ROLLBACK
+  assert.equal(stav.udalosti.some(u => u.typ === 'release'), true);
 });
 
 test('upload na neexistující produkt vrací 404 a NEVOLÁ Cloudinary', async () => {
