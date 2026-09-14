@@ -155,6 +155,21 @@ function vytvoritMockClient(stav) {
         if (o) o.stav = novyStav;
         return {};
       }
+      if (s.startsWith('SELECT stav FROM objednavky WHERE')) {
+        const [id] = params;
+        const o = stav.objednavky.find(o => o.id === Number(id));
+        return { rows: o ? [{ stav: o.stav }] : [] };
+      }
+      if (s.startsWith('DELETE FROM objednavky_polozky WHERE')) {
+        const [objednavka_id] = params;
+        stav.objednavkyPolozky = stav.objednavkyPolozky.filter(p => String(p.objednavka_id) !== String(objednavka_id));
+        return {};
+      }
+      if (s.startsWith('DELETE FROM objednavky WHERE id')) {
+        const [id] = params;
+        stav.objednavky = stav.objednavky.filter(o => o.id !== Number(id));
+        return {};
+      }
 
       throw new Error('Mock nezná dotaz: ' + s);
     }

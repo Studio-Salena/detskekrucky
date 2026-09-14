@@ -1456,8 +1456,21 @@ function renderObjednavky(data) {
       <td style="display:flex;gap:4px">
         <button class="btn btn-blue btn-sm" onclick="detailObjednavky(${o.id})">Detail</button>
         <button class="btn btn-print btn-sm no-print" onclick="tiskObjednavkyId(${o.id})">🖨️</button>
+        ${o.stav==='zrusena'?`<button class="btn btn-red btn-sm" onclick="smazatObjednavku(${o.id})">🗑️</button>`:''}
       </td>
     </tr>`).join('')}</tbody></table>`;
+}
+
+// Trvale smazat objednávku - jen zrušené (backend to i tak vynucuje), tlačítko
+// se proto zobrazuje jen u stavu "zrušena".
+async function smazatObjednavku(id) {
+  if (!confirm(`Opravdu trvale smazat objednávku #${id}? Tuto akci nelze vrátit.`)) return;
+  try {
+    const res = await adminFetch(API+'/objednavky/'+id, { method: 'DELETE' });
+    const data = await res.json();
+    if (res.ok) { loadObjednavky(); }
+    else { alert(data.chyba || 'Smazání se nepovedlo.'); }
+  } catch(e) { alert('Chyba při mazání.'); }
 }
 
 function hledatObjednavky(q) {

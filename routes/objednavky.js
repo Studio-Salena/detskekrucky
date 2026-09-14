@@ -418,4 +418,36 @@ router.patch('/:id/stav', vyzadovatAdmina, async (req, res) => {
   }
 });
 
+// Trvale smazat objednávku (jen admin) - povoleno POUZE pro už zrušenou
+// objednávku. Zrušení (PATCH .../stav) se už postaralo o vrácení skladu a
+// případného dárkového poukazu - smazání samo žádný obchodní stav nemění,
+// jen maže záznam z přehledu. objednavky_polozky nemá ON DELETE CASCADE
+// (FK delete_rule = NO ACTION), takže se musí smazat ručně před řádkem
+// objednávky, jinak by DELETE selhal na porušení cizího klíče.
+router.delete('/:id', vyzadovatAdmina, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const objednavka = await client.query('SELECT stav FROM objednavky WHERE id=$1 FOR UPDATE', [req.params.id]);
+    if (!objednavka.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ chyba: 'Objednávka nenalezena.' });
+    }
+    if (objednavka.rows[0].stav !== 'zrusena') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ chyba: 'Smazat lze jen již zrušenou objednávku.' });
+    }
+    await client.query('DELETE FROM objednavky_polozky WHERE objednavka_id=$1', [req.params.id]);
+    await client.query('DELETE FROM poukazy_pouziti WHERE objednavka_id=$1', [req.params.id]);
+    await client.query('DELETE FROM objednavky WHERE id=$1', [req.params.id]);
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ chyba: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 module.exports = router;
