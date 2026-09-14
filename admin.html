@@ -1137,10 +1137,9 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <div class="form-group"><label>Název *</label><input type="text" id="pNazev" placeholder="Softshellové boty"></div>
       <div class="form-group"><label>Značka *</label><input type="text" id="pZnacka" placeholder="Superfit"></div>
     </div>
-    <div class="form-grid-3">
+    <div class="form-grid-2">
       <div class="form-group"><label>Cena (Kč) *</label><input type="number" id="pCena" placeholder="1290"></div>
       <div class="form-group"><label>Původní cena</label><input type="number" id="pCenaPuvodni" placeholder="volitelné"></div>
-      <div class="form-group"><label>URL fotky</label><input type="text" id="pEmoji" placeholder="https://i.imgur.com/...jpg"></div>
     </div>
     <div class="form-group"><label>Kategorie</label>
       <select id="pKategorie"></select>
@@ -1206,7 +1205,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <div class="form-group"><label>Cena (Kč)</label><input type="number" id="upCena"></div>
       <div class="form-group"><label>Původní cena</label><input type="number" id="upCenaPuvodni"></div>
     </div>
-    <div class="form-group"><label>URL fotky</label><input type="text" id="upEmoji" placeholder="https://i.imgur.com/...jpg"></div>
+    <input type="hidden" id="upEmoji">
     <div class="form-group"><label>Kategorie</label>
       <select id="upKategorie"></select>
     </div>
@@ -2041,7 +2040,7 @@ async function ulozitProdukt() {
       body:JSON.stringify({nazev,znacka:document.getElementById('pZnacka').value,cena:parseInt(cena),
       cena_puvodni:document.getElementById('pCenaPuvodni').value||null,
       kategorie:document.getElementById('pKategorie').value,
-      emoji:document.getElementById('pEmoji').value,
+      emoji:'',
       popis:document.getElementById('pPopis').value,
       typ_nohy:document.getElementById('pTypNohy').value||null,
       velikost: velikost?parseInt(velikost):null,
