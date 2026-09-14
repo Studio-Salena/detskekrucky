@@ -472,6 +472,14 @@ footer {
 #back-to-top.visible { opacity: 1; transform: translateY(0); }
 #back-to-top:hover { transform: translateY(-4px) scale(1.1); box-shadow: 0 8px 24px rgba(176,94,42,0.45); }
 
+/* Plovoucí tlačítka mají vyšší z-index než modaly (checkout, detail produktu...)
+   - bez tohohle by na mobilu ležela NAD otevřeným oknem a chytala kliky/ťuknutí
+   místo prvků pod sebou (typicky checkbox souhlasu dole ve formuláři). */
+body:has(.modal-overlay.open) .float-contact,
+body:has(.modal-overlay.open) #back-to-top {
+  display: none;
+}
+
 </style>
 </head>
 <body>
