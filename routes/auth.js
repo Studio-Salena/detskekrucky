@@ -110,7 +110,7 @@ router.get('/moje-objednavky', async (req, res) => {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     const result = await pool.query(`
-      SELECT o.id, o.stav, o.celkem, o.vytvoreno, o.doprava
+      SELECT o.id, o.cislo, o.stav, o.celkem, o.vytvoreno, o.doprava
       FROM objednavky o
       JOIN zakaznici z ON o.zakaznik_id = z.id
       WHERE z.id = $1

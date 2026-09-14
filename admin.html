@@ -1405,7 +1405,7 @@ async function loadPrehled() {
     document.getElementById('prehledNovaTable').innerHTML = noveObj.length === 0
       ? '<div class="empty">Žádné nové objednávky ✅</div>'
       : `<table><thead><tr><th>ID</th><th>Zákazník</th><th>Celkem</th><th>Akce</th></tr></thead><tbody>
-        ${noveObj.map(o=>`<tr><td><strong>#${o.id}</strong></td><td>${escH(o.jmeno)||'—'}</td><td><strong>${o.celkem.toLocaleString('cs-CZ')} Kč</strong></td>
+        ${noveObj.map(o=>`<tr><td><strong>#${escH(o.cislo||o.id)}</strong></td><td>${escH(o.jmeno)||'—'}</td><td><strong>${o.celkem.toLocaleString('cs-CZ')} Kč</strong></td>
         <td style="display:flex;gap:4px"><button class="btn btn-blue btn-sm" onclick="detailObjednavky(${o.id})">Detail</button>
         <button class="btn btn-green btn-sm" onclick="zmenitStav(${o.id},'vyrizuje').then(loadPrehled)">Vyřídit</button></td></tr>`).join('')}
         </tbody></table>`;
@@ -1439,7 +1439,7 @@ function renderObjednavky(data) {
   document.getElementById('objednavkyTable').innerHTML = `
     <table><thead><tr><th>ID</th><th>Zákazník</th><th>Celkem</th><th>Doprava</th><th>Platba</th><th>Stav</th><th>Datum</th><th>Akce</th></tr></thead>
     <tbody>${data.map(o=>`<tr>
-      <td><strong>#${o.id}</strong></td>
+      <td><strong>#${escH(o.cislo || o.id)}</strong></td>
       <td>${escH(o.jmeno)||'—'}<br><small style="color:var(--text-light)">${escH(o.email)}</small></td>
       <td><strong>${o.celkem.toLocaleString('cs-CZ')} Kč</strong></td>
       <td style="font-size:0.78rem">${escH(o.doprava)||'—'}</td>
@@ -1477,7 +1477,8 @@ function hledatObjednavky(q) {
   renderObjednavky(vsechnyObjednavky.filter(o =>
     (o.jmeno||'').toLowerCase().includes(q.toLowerCase()) ||
     (o.email||'').toLowerCase().includes(q.toLowerCase()) ||
-    String(o.id).includes(q)
+    String(o.id).includes(q) ||
+    (o.cislo||'').includes(q)
   ));
 }
 
@@ -1525,7 +1526,7 @@ async function detailObjednavky(id) {
   try {
     aktivniDetailObjId = id;
     const data = await adminFetch(API+'/objednavky/'+id).then(r=>r.json());
-    document.getElementById('detailObjTitle').textContent = '📦 Objednávka #'+id;
+    document.getElementById('detailObjTitle').textContent = '📦 Objednávka #'+(data.cislo || id);
     const polozky = data.polozky || [];
     document.getElementById('detailObjContent').innerHTML = `
       <div class="info-box"><strong>${escH(data.jmeno)||'—'}</strong><br>
@@ -1596,7 +1597,7 @@ async function tiskObjednavkyId(id) {
           <h1>Faktura ${escH(faktura.faktura_cislo)||'—'}</h1>
         </div>
         <div class="order-meta">
-          Objednávka #${id}<br>
+          Objednávka #${escH(data.cislo || id)}<br>
           Datum vystavení: ${datumVystaveni}
         </div>
       </div>
@@ -2511,7 +2512,7 @@ async function exportUcetnictviPDF() {
       startY: 24,
       head: [['ID', 'Datum', 'Zákazník', 'Celkem', 'Platba', 'Stav']],
       body: objAktivni.map(o => [
-        '#'+o.id,
+        '#'+(o.cislo||o.id),
         new Date(o.vytvoreno).toLocaleDateString('cs-CZ'),
         o.jmeno || '—',
         Number(o.celkem).toLocaleString('cs-CZ')+' Kč',
@@ -2664,7 +2665,7 @@ async function exportCSV(typ) {
     if (typ==='objednavky') {
       const d=await adminFetch(API+'/objednavky').then(r=>r.json());
       rows=[['ID','Datum','Zákazník','Email','Telefon','Ulice','Město','PSČ','Doprava','Platba','Celkem Kč','Stav']];
-      d.forEach(o=>rows.push([o.id,new Date(o.vytvoreno).toLocaleDateString('cs-CZ'),o.jmeno||'',o.email||'',o.telefon||'',o.ulice||'',o.mesto||'',o.psc||'',o.doprava||'',o.platba||'',o.celkem,o.stav||'']));
+      d.forEach(o=>rows.push([o.cislo||o.id,new Date(o.vytvoreno).toLocaleDateString('cs-CZ'),o.jmeno||'',o.email||'',o.telefon||'',o.ulice||'',o.mesto||'',o.psc||'',o.doprava||'',o.platba||'',o.celkem,o.stav||'']));
     } else if (typ==='zakaznici') {
       const d=await adminFetch(API+'/auth/zakaznici').then(r=>r.json());
       rows=[['ID','Jméno','Email','Telefon','Ulice','Město','PSČ','Registrace']];
@@ -2692,7 +2693,7 @@ async function exportCSV(typ) {
     } else if (typ==='ucetnictvi') {
       const d=await adminFetch(API+'/objednavky').then(r=>r.json());
       rows=[['ID','Datum','Zákazník','Email','Celkem Kč','Platba','Doprava','Stav']];
-      d.filter(o=>o.stav!=='zrusena').forEach(o=>rows.push([o.id,new Date(o.vytvoreno).toLocaleDateString('cs-CZ'),o.jmeno||'',o.email||'',o.celkem,o.platba||'',o.doprava||'',o.stav||'']));
+      d.filter(o=>o.stav!=='zrusena').forEach(o=>rows.push([o.cislo||o.id,new Date(o.vytvoreno).toLocaleDateString('cs-CZ'),o.jmeno||'',o.email||'',o.celkem,o.platba||'',o.doprava||'',o.stav||'']));
       nazev='trzby';
     } else if (typ==='newsletter') {
       const d=await adminFetch(API+'/newsletter').then(r=>r.json());

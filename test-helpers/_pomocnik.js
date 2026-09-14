@@ -107,6 +107,24 @@ function vytvoritMockClient(stav) {
         return { rows: [{ id }] };
       }
 
+      if (s.startsWith('INSERT INTO objednavky_cislovani')) {
+        const [rok] = params;
+        if (!stav.objednavkyCislovani.find(f => f.rok === rok)) stav.objednavkyCislovani.push({ rok, posledni_cislo: 0 });
+        return {};
+      }
+      if (s.startsWith('UPDATE objednavky_cislovani SET posledni_cislo')) {
+        const [rok] = params;
+        const f = stav.objednavkyCislovani.find(f => f.rok === rok);
+        f.posledni_cislo++;
+        return { rows: [{ posledni_cislo: f.posledni_cislo }] };
+      }
+      if (s.startsWith('UPDATE objednavky SET cislo=')) {
+        const [cislo, id] = params;
+        const o = stav.objednavky.find(o => o.id === Number(id));
+        if (o) o.cislo = cislo;
+        return {};
+      }
+
       if (s.startsWith('INSERT INTO objednavky_polozky')) {
         const [objednavka_id, produkt_id, velikost, pocet, cena] = params;
         stav.objednavkyPolozky.push({ objednavka_id, produkt_id, velikost, pocet, cena });
@@ -170,11 +188,11 @@ function vytvoritMockClient(stav) {
         stav.objednavky = stav.objednavky.filter(o => o.id !== Number(id));
         return {};
       }
-      if (s.startsWith('SELECT z.jmeno, z.email FROM objednavky o JOIN zakaznici z')) {
+      if (s.startsWith('SELECT o.cislo, z.jmeno, z.email FROM objednavky o JOIN zakaznici z')) {
         const [id] = params;
         const o = stav.objednavky.find(o => o.id === Number(id));
         const z = o && stav.zakaznici.find(z => z.id === o.zakaznik_id);
-        return { rows: z ? [{ jmeno: z.jmeno, email: z.email }] : [] };
+        return { rows: z ? [{ cislo: o.cislo || null, jmeno: z.jmeno, email: z.email }] : [] };
       }
       if (s.startsWith('SELECT faktura_cislo, faktura_datum FROM objednavky WHERE')) {
         const [id] = params;
@@ -217,7 +235,7 @@ function pocatecniStav() {
     sklad: [], poukazy: [],
     objednavky: [], dalsiObjednavkaId: 1,
     objednavkyPolozky: [], pohybySkladu: [], poukazyPouziti: [],
-    vratky: [], fakturyCislovani: []
+    vratky: [], fakturyCislovani: [], objednavkyCislovani: []
   };
 }
 

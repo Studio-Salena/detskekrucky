@@ -47,23 +47,28 @@ router.post('/overit', async (req, res) => {
   }
   zaznamenatZadost(req.ip);
   try {
+    // Zákazník zadává "číslo objednávky" (cislo, RRMMNN) - ne interní DB id.
+    // Přijme se ale i syrové id, ať fungují i staré objednávky z doby před
+    // zavedením cisla. Dál v handleru se VŽDY používá jen skutečné interní
+    // id (objednavka.rows[0].id), ne to, co zákazník zadal.
     const objednavka = await pool.query(`
       SELECT o.id, o.stav, o.celkem, o.vytvoreno, z.email
       FROM objednavky o
       JOIN zakaznici z ON o.zakaznik_id = z.id
-      WHERE o.id = $1
-    `, [objednavka_id]);
+      WHERE o.cislo = $1 OR o.id::text = $1
+    `, [String(objednavka_id).trim()]);
 
     if (objednavka.rows.length === 0 || objednavka.rows[0].email.toLowerCase() !== String(email).toLowerCase().trim()) {
       return res.status(404).json({ chyba: 'Objednávka s tímto číslem a e-mailem nebyla nalezena.' });
     }
+    const skutecneId = objednavka.rows[0].id;
 
     const polozky = await pool.query(`
       SELECT op.produkt_id, op.velikost, op.pocet, op.cena, p.nazev
       FROM objednavky_polozky op
       JOIN produkty p ON op.produkt_id = p.id
       WHERE op.objednavka_id = $1
-    `, [objednavka_id]);
+    `, [skutecneId]);
 
     res.json({ objednavka: objednavka.rows[0], polozky: polozky.rows });
   } catch (err) {
@@ -90,16 +95,20 @@ router.post('/', async (req, res) => {
   }
 
   try {
-    // Znovu ověřit, že objednávka a e-mail sedí (nespoléhat jen na frontend)
+    // Znovu ověřit, že objednávka a e-mail sedí (nespoléhat jen na frontend).
+    // objednavka_id od klienta je "hezké" číslo objednávky (cislo) - přijme
+    // se i syrové interní id (staré objednávky bez cisla). Dál v handleru se
+    // VŽDY používá jen skutecneId (reálný interní id), ne to, co přišlo v requestu.
     const objednavka = await pool.query(`
       SELECT o.id, z.email FROM objednavky o
       JOIN zakaznici z ON o.zakaznik_id = z.id
-      WHERE o.id = $1
-    `, [objednavka_id]);
+      WHERE o.cislo = $1 OR o.id::text = $1
+    `, [String(objednavka_id).trim()]);
 
     if (objednavka.rows.length === 0 || objednavka.rows[0].email.toLowerCase() !== String(email).toLowerCase().trim()) {
       return res.status(404).json({ chyba: 'Objednávka s tímto číslem a e-mailem nebyla nalezena.' });
     }
+    const skutecneId = objednavka.rows[0].id;
 
     // Položky k vrácení se nikdy neukládají tak, jak je poslal klient (to by
     // znamenalo věřit i vymyšlenému produktu/názvu/množství) - ověří se proti
@@ -109,7 +118,7 @@ router.post('/', async (req, res) => {
       FROM objednavky_polozky op
       JOIN produkty p ON op.produkt_id = p.id
       WHERE op.objednavka_id = $1
-    `, [objednavka_id]);
+    `, [skutecneId]);
     const mapaObjednanych = new Map(skutecnePolozky.rows.map(r => [`${r.produkt_id}_${r.velikost}`, r]));
 
     const pozadovaneSoucty = new Map(); // klíč -> součet požadovaného počtu (kdyby klient poslal položku vícekrát)
@@ -136,7 +145,7 @@ router.post('/', async (req, res) => {
 
     const result = await pool.query(
       'INSERT INTO vratky_zadosti (objednavka_id, jmeno, email, telefon, polozky, duvod) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
-      [objednavka_id, jmeno || null, email, telefon || null, JSON.stringify(overenePolozky), duvod || null]
+      [skutecneId, jmeno || null, email, telefon || null, JSON.stringify(overenePolozky), duvod || null]
     );
 
     zaznamenatZadost(req.ip);

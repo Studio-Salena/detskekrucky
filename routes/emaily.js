@@ -62,6 +62,10 @@ const BARVA_RAMECEK = '#E6DFD6';
 const BARVA_TEXT_TLUMENY = '#6B5E5B';
 
 async function odeslat_potvrzeni(objednavka) {
+  // Zákaznicky viditelné "číslo objednávky" - cislo (RRMMNN, přidělené hned
+  // při vzniku). Fallback na interní objednavka_id jen pro jistotu, kdyby ho
+  // volající nedodal (nemělo by nastat, cislo se přiděluje vždy).
+  const cisloZobrazit = objednavka.cislo || objednavka.objednavka_id;
   // dopravaCena není v objektu zvlášť (jen celkem) - dopočítá se, ať jde
   // zobrazit doprava jako vlastní řádek v tabulce se správným součtem.
   const mezisoucet = objednavka.polozky.reduce((s, p) => s + p.cena * p.pocet, 0);
@@ -86,18 +90,18 @@ async function odeslat_potvrzeni(objednavka) {
         <td style="padding:16px 20px;vertical-align:top">
           <h3 style="margin:0 0 8px 0;font-size:13px;color:${BARVA_ZNACKA};text-transform:uppercase;letter-spacing:0.05em">Pokyny k platbě</h3>
           <p style="margin:0 0 4px 0;font-size:14px">Číslo účtu: <strong>2003533776/2010</strong></p>
-          <p style="margin:0 0 4px 0;font-size:14px">Variabilní symbol: <strong>${objednavka.objednavka_id}</strong></p>
+          <p style="margin:0 0 4px 0;font-size:14px">Variabilní symbol: <strong>${escH(cisloZobrazit)}</strong></p>
           <p style="margin:0;font-size:14px">Částka: <strong>${objednavka.celkem} Kč</strong></p>
         </td>
         <td style="padding:16px 20px 16px 0;text-align:right;vertical-align:top">
-          <img src="${qrPlatbaUrl(objednavka.celkem, objednavka.objednavka_id, 'Eshop Detske krucky')}" width="120" height="120" alt="QR platba" style="border-radius:6px">
+          <img src="${qrPlatbaUrl(objednavka.celkem, cisloZobrazit, 'Eshop Detske krucky')}" width="120" height="120" alt="QR platba" style="border-radius:6px">
         </td>
       </tr>
     </table>` : '';
 
   await odeslatEmail({
     to: objednavka.email,
-    subject: `Potvrzení objednávky #${objednavka.objednavka_id}`,
+    subject: `Potvrzení objednávky #${cisloZobrazit}`,
     html: `
       <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#2D2422;background:#F4F1EA;padding:30px 16px">
       <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;border:1px solid ${BARVA_RAMECEK};overflow:hidden">
@@ -106,7 +110,7 @@ async function odeslat_potvrzeni(objednavka) {
         </div>
         <div style="background:${BARVA_ZNACKA};color:#fff;padding:20px 30px 28px 30px;margin-top:16px">
           <div style="font-size:13px;letter-spacing:0.05em;text-transform:uppercase;opacity:0.85">Dětské krůčky</div>
-          <h1 style="font-size:22px;margin:4px 0 0 0;font-weight:600">Objednávka #${objednavka.objednavka_id}</h1>
+          <h1 style="font-size:22px;margin:4px 0 0 0;font-weight:600">Objednávka #${escH(cisloZobrazit)}</h1>
         </div>
         <div style="padding:30px">
           <p style="margin:0 0 4px 0;font-size:15px">Ahoj ${escH(objednavka.jmeno)},</p>
@@ -160,6 +164,7 @@ async function odeslat_potvrzeni(objednavka) {
 
 // Upozornění majitelce o nové objednávce z e-shopu
 async function odeslat_upozorneni_objednavky(objednavka) {
+  const cisloZobrazit = objednavka.cislo || objednavka.objednavka_id;
   const polozky_html = objednavka.polozky.map(p => `
     <tr>
       <td style="padding:8px;border-bottom:1px solid #eee">${p.nazev ? escH(p.nazev) : ('produkt #' + p.produkt_id)} - vel. ${escH(p.velikost)}</td>
@@ -170,10 +175,10 @@ async function odeslat_upozorneni_objednavky(objednavka) {
 
   await odeslatEmail({
     to: MAJITELKA_EMAIL,
-    subject: `🛒 Nová objednávka #${objednavka.objednavka_id} – ${objednavka.jmeno}`,
+    subject: `🛒 Nová objednávka #${cisloZobrazit} – ${objednavka.jmeno}`,
     html: `
       <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-        <h2 style="color:#FF6B35">🛒 Nová objednávka #${objednavka.objednavka_id}</h2>
+        <h2 style="color:#FF6B35">🛒 Nová objednávka #${escH(cisloZobrazit)}</h2>
         <table style="width:100%;border-collapse:collapse">
           <thead>
             <tr style="background:#f5f5f5">
@@ -287,16 +292,17 @@ const STAV_OBJEDNAVKY_EMAIL = {
 async function odeslat_email_zmena_stavu(objednavka, stav) {
   const obsah = STAV_OBJEDNAVKY_EMAIL[stav];
   if (!obsah) return;
+  const cisloZobrazit = objednavka.cislo || objednavka.objednavka_id;
 
   await odeslatEmail({
     to: objednavka.email,
-    subject: obsah.predmet(objednavka.objednavka_id),
+    subject: obsah.predmet(cisloZobrazit),
     html: `
       <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
         <h1 style="color:#FF6B35">${obsah.nadpis}</h1>
         <p>Ahoj ${escH(objednavka.jmeno)},</p>
         <p>${obsah.text}</p>
-        <p style="color:#666;font-size:0.9rem">Objednávka #${objednavka.objednavka_id}</p>
+        <p style="color:#666;font-size:0.9rem">Objednávka #${escH(cisloZobrazit)}</p>
         <hr>
         <p style="color:#666;font-size:13px">
           Dětské krůčky | 773 517 733 | info@detskekrucky.cz

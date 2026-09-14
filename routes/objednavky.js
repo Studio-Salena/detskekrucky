@@ -9,17 +9,31 @@ const pool = require('../db/pool');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const { jeZablokovana, zaznamenatObjednavku } = require('../middleware/objednavkyLimiter');
 
-// Idempotentní migrace - vazba objednávky na uplatněný dárkový poukaz a
-// číslo/datum vystavení faktury. faktury_cislovani drží poslední použité
-// pořadové číslo PER ROK - číslování se má každý nový rok resetovat na 1
-// (výsledný tvar faktura_cislo je RRRRNNN, viz ziskatFakturuCislo níže).
+// Idempotentní migrace - vazba objednávky na uplatněný dárkový poukaz, číslo
+// objednávky a číslo/datum vystavení faktury.
+//
+// Dvě NEZÁVISLÁ číslování, záměrně oddělená (viz konverzace se zákaznicí):
+//   - cislo (RRMMNN, např. 261001) - "hezké" zákaznicko-účetní číslo
+//     objednávky. Přiděluje se HNED při vzniku objednávky (viditelné okamžitě
+//     všude - admin, e-maily, "Moje objednávky"), RR/MM je rok/měsíc vzniku,
+//     NN je pořadí v rámci CELÉHO ROKU (nerestartuje se každý měsíc).
+//     objednavky_cislovani drží poslední použité pořadí PER ROK.
+//   - faktura_cislo (RRRRNNN, např. 2026001) - čistě účetní číslo faktury,
+//     přiděluje se AŽ při prvním vytištění (ne při vzniku objednávky), ať
+//     testovací/zrušené objednávky nezpůsobí díry v účetní řadě. Nezávislé
+//     počítadlo faktury_cislovani, RESETUJE se každý rok na 1.
 async function initObjednavkySloupce() {
   try {
     await pool.query(`
       ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS poukaz_id INTEGER;
       ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS sleva NUMERIC NOT NULL DEFAULT 0;
+      ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS cislo TEXT UNIQUE;
       ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS faktura_cislo TEXT UNIQUE;
       ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS faktura_datum TIMESTAMPTZ;
+      CREATE TABLE IF NOT EXISTS objednavky_cislovani (
+        rok INTEGER PRIMARY KEY,
+        posledni_cislo INTEGER NOT NULL DEFAULT 0
+      );
       CREATE TABLE IF NOT EXISTS faktury_cislovani (
         rok INTEGER PRIMARY KEY,
         posledni_cislo INTEGER NOT NULL DEFAULT 0
@@ -31,6 +45,23 @@ async function initObjednavkySloupce() {
   }
 }
 initObjednavkySloupce();
+
+// Přidělí "hezké" číslo objednávky (RRMMNN) - volá se uvnitř JIŽ OTEVŘENÉ
+// transakce hned po INSERT INTO objednavky (viz POST / níže), ne lazy jako
+// faktura_cislo. RR/MM je rok/měsíc PRÁVĚ TEĎ (vznik objednávky), NN je
+// pořadové číslo v rámci roku (points to objednavky_cislovani, klíčované
+// 4místným rokem - i když zobrazený tvar má rok jen 2místný).
+async function pridelitCisloObjednavky(client, objednavkaId) {
+  const ted = new Date();
+  const rok4 = ted.getFullYear();
+  const rok2 = String(rok4).slice(-2);
+  const mesic2 = String(ted.getMonth() + 1).padStart(2, '0');
+  await client.query('INSERT INTO objednavky_cislovani (rok, posledni_cislo) VALUES ($1, 0) ON CONFLICT (rok) DO NOTHING', [rok4]);
+  const pocitadlo = await client.query('UPDATE objednavky_cislovani SET posledni_cislo = posledni_cislo + 1 WHERE rok=$1 RETURNING posledni_cislo', [rok4]);
+  const cislo = `${rok2}${mesic2}${String(pocitadlo.rows[0].posledni_cislo).padStart(2, '0')}`;
+  await client.query('UPDATE objednavky SET cislo=$1 WHERE id=$2', [cislo, objednavkaId]);
+  return cislo;
+}
 
 // Vrátí číslo faktury pro objednávku - pokud ještě žádné nemá, PRVNÍ volání
 // (typicky při prvním tisku/zobrazení faktury) jí ho tady vystaví a natrvalo
@@ -266,6 +297,7 @@ router.post('/', async (req, res) => {
       [zakaznik_id, doprava, platba, celkem, poznamka, poukaz_id, sleva]
     );
     const objednavka_id = objednavka.rows[0].id;
+    const cislo = await pridelitCisloObjednavky(client, objednavka_id);
 
     // Pokud byl uplatněn poukaz, teď skutečně odečíst zůstatek
     if (poukaz_id) {
@@ -314,6 +346,7 @@ router.post('/', async (req, res) => {
 try {
   await odeslat_potvrzeni({
     objednavka_id,
+    cislo,
     celkem,
     jmeno,
     email,
@@ -330,12 +363,12 @@ try {
   console.error('Chyba pri odesilani emailu:', emailErr.message);
 }
 
-res.json({ zprava: 'Objednavka uspesne vytvorena', objednavka_id, celkem });
+res.json({ zprava: 'Objednavka uspesne vytvorena', objednavka_id, cislo, celkem });
 
 // Upozornění majitelce se posílá až po odpovědi zákazníkovi, ať prodleva/chyba
 // s odesláním objednávku nezablokuje (stejný vzor jako u rezervací).
 odeslat_upozorneni_objednavky({
-  objednavka_id, celkem, jmeno, email, telefon, ulice, mesto, psc, doprava, platba, polozky: polozkySkutecne, sleva
+  objednavka_id, cislo, celkem, jmeno, email, telefon, ulice, mesto, psc, doprava, platba, polozky: polozkySkutecne, sleva
 }).catch(e => console.error('Upozorneni majitelce o objednavce se nepodarilo odeslat:', e.message));
 
   } catch (err) {
@@ -350,7 +383,7 @@ odeslat_upozorneni_objednavky({
 router.get('/', vyzadovatAdmina, async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT o.id, o.stav, o.doprava, o.platba, o.celkem, o.vytvoreno,
+      SELECT o.id, o.cislo, o.stav, o.doprava, o.platba, o.celkem, o.vytvoreno,
              z.jmeno, z.email, z.telefon, z.mesto
       FROM objednavky o
       JOIN zakaznici z ON o.zakaznik_id = z.id
@@ -488,11 +521,11 @@ router.patch('/:id/stav', vyzadovatAdmina, async (req, res) => {
     // stav znovu) a jen pro stavy z STAVY_S_EMAILEM.
     if (STAVY_S_EMAILEM.includes(stav) && puvodniStav !== stav) {
       pool.query(
-        `SELECT z.jmeno, z.email FROM objednavky o JOIN zakaznici z ON o.zakaznik_id = z.id WHERE o.id = $1`,
+        `SELECT o.cislo, z.jmeno, z.email FROM objednavky o JOIN zakaznici z ON o.zakaznik_id = z.id WHERE o.id = $1`,
         [req.params.id]
       ).then(r => {
         if (!r.rows.length) return;
-        return odeslat_email_zmena_stavu({ objednavka_id: req.params.id, jmeno: r.rows[0].jmeno, email: r.rows[0].email }, stav);
+        return odeslat_email_zmena_stavu({ objednavka_id: req.params.id, cislo: r.rows[0].cislo, jmeno: r.rows[0].jmeno, email: r.rows[0].email }, stav);
       }).catch(e => console.error('Email o zmene stavu objednavky se nepodarilo odeslat:', e.message));
     }
   } catch (err) {
