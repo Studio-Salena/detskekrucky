@@ -40,54 +40,115 @@ async function odeslatEmail({ to, subject, html }) {
   return res.json();
 }
 
+// Stejný formát (SPD) a stejný účet jako QR kód v checkoutu (eshop.html,
+// qrPlatbaUrl/UCET_IBAN) - na rozdíl od checkoutu (kde objednávka ještě
+// neexistuje) tady navíc jde přidat X-VS (variabilní symbol), protože
+// objednavka_id už v tuhle chvíli známe.
+const UCET_IBAN = 'CZ4620100000002003533776';
+function qrPlatbaUrl(castka, variabilniSymbol, zprava) {
+  const spd = `SPD*1.0*ACC:${UCET_IBAN}*AM:${Number(castka).toFixed(2)}*CC:CZK*X-VS:${variabilniSymbol}*MSG:${zprava}`;
+  return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(spd)}`;
+}
+
+const DOPRAVA_LABELY = { zasilkovna: 'Zásilkovna', ceska_posta: 'Česká pošta', osobni_odber: 'Osobní odběr' };
+const PLATBA_LABELY = { dobirka: 'Dobírka', prevod: 'Bankovní převod' };
+
+// Barvy podle skutečné palety webu (eshop.html :root) - ne odhadnuté, ať
+// e-mail opravdu vizuálně ladí s e-shopem.
+const BARVA_ZNACKA = '#AE6965';       // --brown
+const BARVA_ZNACKA_TMAVA = '#8a4a46'; // --brown-dark
+const BARVA_POZADI_BOX = '#FAF6F1';   // světlý odstín --cream
+const BARVA_RAMECEK = '#E6DFD6';
+const BARVA_TEXT_TLUMENY = '#6B5E5B';
+
 async function odeslat_potvrzeni(objednavka) {
-  const dopravaLabely = { zasilkovna: 'Zásilkovna', ceska_posta: 'Česká pošta', osobni_odber: 'Osobní odběr' };
-  const platbaLabely = { dobirka: 'Dobírka', prevod: 'Bankovní převod' };
+  // dopravaCena není v objektu zvlášť (jen celkem) - dopočítá se, ať jde
+  // zobrazit doprava jako vlastní řádek v tabulce se správným součtem.
+  const mezisoucet = objednavka.polozky.reduce((s, p) => s + p.cena * p.pocet, 0);
+  const dopravaCena = objednavka.celkem - mezisoucet + Number(objednavka.sleva || 0);
+  const dopravaLabel = DOPRAVA_LABELY[objednavka.doprava] || objednavka.doprava || '—';
+  const platbaLabel = PLATBA_LABELY[objednavka.platba] || objednavka.platba || '—';
 
   const polozky_html = objednavka.polozky.map(p => `
     <tr>
-      <td style="padding:8px;border-bottom:1px solid #eee">${escH(p.nazev || ('produkt #' + p.produkt_id))} - vel. ${escH(p.velikost)}</td>
-      <td style="padding:8px;border-bottom:1px solid #eee">${p.pocet} ks</td>
-      <td style="padding:8px;border-bottom:1px solid #eee">${p.cena * p.pocet} Kč</td>
+      <td style="padding:12px 8px;border-bottom:1px solid ${BARVA_RAMECEK};font-size:14px">${escH(p.nazev || ('produkt #' + p.produkt_id))}</td>
+      <td style="padding:12px 8px;border-bottom:1px solid ${BARVA_RAMECEK};font-size:14px;text-align:right">${escH(p.velikost)}</td>
+      <td style="padding:12px 8px;border-bottom:1px solid ${BARVA_RAMECEK};font-size:14px;text-align:right">${p.pocet}</td>
+      <td style="padding:12px 8px;border-bottom:1px solid ${BARVA_RAMECEK};font-size:14px;text-align:right">${p.cena * p.pocet} Kč</td>
     </tr>
   `).join('');
+
+  const adresa = [objednavka.ulice, [objednavka.psc, objednavka.mesto].filter(Boolean).join(' ')].filter(Boolean).map(escH).join(', ');
+
+  const platebniBox = objednavka.platba === 'prevod' ? `
+    <table role="presentation" style="width:100%;background:#FFF9F5;border-left:4px solid ${BARVA_ZNACKA};border-radius:0 8px 8px 0;margin-bottom:24px">
+      <tr>
+        <td style="padding:16px 20px;vertical-align:top">
+          <h3 style="margin:0 0 8px 0;font-size:13px;color:${BARVA_ZNACKA};text-transform:uppercase;letter-spacing:0.05em">Pokyny k platbě</h3>
+          <p style="margin:0 0 4px 0;font-size:14px">Číslo účtu: <strong>2003533776/2010</strong></p>
+          <p style="margin:0 0 4px 0;font-size:14px">Variabilní symbol: <strong>${objednavka.objednavka_id}</strong></p>
+          <p style="margin:0;font-size:14px">Částka: <strong>${objednavka.celkem} Kč</strong></p>
+        </td>
+        <td style="padding:16px 20px 16px 0;text-align:right;vertical-align:top">
+          <img src="${qrPlatbaUrl(objednavka.celkem, objednavka.objednavka_id, 'Eshop Detske krucky')}" width="120" height="120" alt="QR platba" style="border-radius:6px">
+        </td>
+      </tr>
+    </table>` : '';
 
   await odeslatEmail({
     to: objednavka.email,
     subject: `Potvrzení objednávky #${objednavka.objednavka_id}`,
     html: `
-      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-        <h1 style="color:#FF6B35">Děkujeme za objednávku!</h1>
-        <p>Ahoj ${escH(objednavka.jmeno)},</p>
-        <p>Vaši objednávku jsme přijali a brzy ji zpracujeme.</p>
-        <h3>Souhrn objednávky #${objednavka.objednavka_id}</h3>
-        <table style="width:100%;border-collapse:collapse">
-          <thead>
-            <tr style="background:#f5f5f5">
-              <th style="padding:8px;text-align:left">Produkt</th>
-              <th style="padding:8px;text-align:left">Počet</th>
-              <th style="padding:8px;text-align:left">Cena</th>
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#2D2422;background:#F4F1EA;padding:30px 16px">
+      <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;border:1px solid ${BARVA_RAMECEK};overflow:hidden">
+        <div style="background:${BARVA_ZNACKA};color:#fff;padding:28px 30px">
+          <div style="font-size:13px;letter-spacing:0.05em;text-transform:uppercase;opacity:0.85">Dětské krůčky</div>
+          <h1 style="font-size:22px;margin:4px 0 0 0;font-weight:600">Objednávka #${objednavka.objednavka_id}</h1>
+        </div>
+        <div style="padding:30px">
+          <p style="margin:0 0 4px 0;font-size:15px">Ahoj ${escH(objednavka.jmeno)},</p>
+          <p style="margin:0 0 24px 0;font-size:14px;color:${BARVA_TEXT_TLUMENY}">děkujeme za objednávku, brzy ji zpracujeme. Níže posíláme její přehled.</p>
+
+          <table role="presentation" style="width:100%;background:${BARVA_POZADI_BOX};border:1px solid ${BARVA_RAMECEK};border-radius:8px;margin-bottom:24px">
+            <tr>
+              <td style="padding:20px;width:50%;vertical-align:top">
+                <h3 style="margin:0 0 8px 0;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY}">Zákazník</h3>
+                <p style="margin:0 0 4px 0;font-size:14px"><strong>${escH(objednavka.jmeno)}</strong></p>
+                ${adresa ? `<p style="margin:0 0 4px 0;font-size:14px">${adresa}</p>` : ''}
+                <p style="margin:0;font-size:14px;color:${BARVA_TEXT_TLUMENY}">${escH(objednavka.email)}</p>
+                ${objednavka.telefon ? `<p style="margin:0;font-size:14px;color:${BARVA_TEXT_TLUMENY}">${escH(objednavka.telefon)}</p>` : ''}
+              </td>
+              <td style="padding:20px;width:50%;vertical-align:top">
+                <h3 style="margin:0 0 8px 0;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY}">Doprava a platba</h3>
+                <p style="margin:0 0 4px 0;font-size:14px"><strong>Doprava:</strong> ${escH(dopravaLabel)}</p>
+                <p style="margin:0;font-size:14px"><strong>Platba:</strong> ${escH(platbaLabel)}</p>
+              </td>
             </tr>
-          </thead>
-          <tbody>${polozky_html}</tbody>
-        </table>
-        ${objednavka.sleva > 0 ? `<p style="color:#27ae60">Sleva (dárkový poukaz): −${objednavka.sleva} Kč</p>` : ''}
-        <p style="font-size:18px;font-weight:bold;margin-top:16px">
-          Celkem: ${objednavka.celkem} Kč
-        </p>
-        <p>Doprava: ${escH(dopravaLabely[objednavka.doprava] || objednavka.doprava)}</p>
-        <p>Platba: ${escH(platbaLabely[objednavka.platba] || objednavka.platba)}</p>
-        ${objednavka.platba === 'prevod' ? `
-        <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-top:12px">
-          <p style="margin:0 0 6px 0"><strong>Údaje pro platbu převodem:</strong></p>
-          <p style="margin:0">Číslo účtu: <strong>2003533776/2010</strong></p>
-          <p style="margin:0">Částka: <strong>${objednavka.celkem} Kč</strong></p>
-          <p style="margin:0">Variabilní symbol: <strong>${objednavka.objednavka_id}</strong></p>
-        </div>` : ''}
-        <hr>
-        <p style="color:#666;font-size:13px">
-          Detske krucky | 773 517 733 | info@detskekrucky.cz
-        </p>
+          </table>
+
+          ${platebniBox}
+
+          <table style="width:100%;border-collapse:collapse;margin-bottom:8px">
+            <thead>
+              <tr>
+                <th style="text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY};border-bottom:2px solid ${BARVA_RAMECEK};padding:10px 8px">Produkt</th>
+                <th style="text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY};border-bottom:2px solid ${BARVA_RAMECEK};padding:10px 8px">Vel.</th>
+                <th style="text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY};border-bottom:2px solid ${BARVA_RAMECEK};padding:10px 8px">Ks</th>
+                <th style="text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY};border-bottom:2px solid ${BARVA_RAMECEK};padding:10px 8px">Celkem</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${polozky_html}
+              ${objednavka.sleva > 0 ? `<tr><td colspan="3" style="padding:10px 8px;font-size:14px">Poukaz (sleva)</td><td style="padding:10px 8px;font-size:14px;text-align:right;color:#5a8a5a">−${objednavka.sleva} Kč</td></tr>` : ''}
+              <tr><td colspan="3" style="padding:10px 8px;font-size:14px">${escH(dopravaLabel)} (doprava)</td><td style="padding:10px 8px;font-size:14px;text-align:right">${dopravaCena === 0 ? 'Zdarma' : dopravaCena + ' Kč'}</td></tr>
+              <tr><td colspan="3" style="padding:14px 8px 0 8px;font-size:15px;font-weight:bold;color:${BARVA_ZNACKA};border-top:2px solid ${BARVA_ZNACKA_TMAVA}">CELKEM K ÚHRADĚ</td><td style="padding:14px 8px 0 8px;font-size:15px;font-weight:bold;color:${BARVA_ZNACKA};text-align:right;border-top:2px solid ${BARVA_ZNACKA_TMAVA}">${objednavka.celkem} Kč</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="text-align:center;font-size:12px;color:${BARVA_TEXT_TLUMENY};padding:18px 30px;background:${BARVA_POZADI_BOX};border-top:1px solid ${BARVA_RAMECEK}">
+          Dětské krůčky | 773 517 733 | <a href="https://www.detskekrucky.cz" style="color:${BARVA_ZNACKA};text-decoration:none">www.detskekrucky.cz</a>
+        </div>
+      </div>
       </div>
     `
   });
