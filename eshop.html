@@ -1358,6 +1358,12 @@ function validovatCheckoutFormular({ jmeno, email, telefon, ulice, mesto, psc })
   return null;
 }
 
+function zobrazitChybuCheckoutu(html) {
+  const msg = document.getElementById('checkoutMsg');
+  msg.innerHTML = html;
+  msg.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
 async function odeslatObjednavku() {
   const jmeno = document.getElementById('chJmeno').value.trim();
   const email = document.getElementById('chEmail').value.trim();
@@ -1371,11 +1377,11 @@ async function odeslatObjednavku() {
 
   const chybaValidace = validovatCheckoutFormular({ jmeno, email, telefon, ulice, mesto, psc });
   if (chybaValidace) {
-    document.getElementById('checkoutMsg').innerHTML = `<div class="msg msg-error">${chybaValidace}</div>`;
+    zobrazitChybuCheckoutu(`<div class="msg msg-error">${chybaValidace}</div>`);
     return;
   }
   if (!document.getElementById('chSouhlas').checked) {
-    document.getElementById('checkoutMsg').innerHTML = '<div class="msg msg-error">Pro odeslání objednávky je potřeba souhlasit s obchodními podmínkami.</div>';
+    zobrazitChybuCheckoutu('<div class="msg msg-error">Pro odeslání objednávky je potřeba souhlasit s obchodními podmínkami.</div>');
     return;
   }
 
@@ -1411,12 +1417,12 @@ async function odeslatObjednavku() {
         document.getElementById('checkoutMsg').innerHTML = '';
       }, 3000);
     } else {
-      document.getElementById('checkoutMsg').innerHTML = `<div class="msg msg-error">${data.chyba || 'Chyba serveru. Zkuste to prosím znovu.'}</div>`;
+      zobrazitChybuCheckoutu(`<div class="msg msg-error">${data.chyba || 'Chyba serveru. Zkuste to prosím znovu.'}</div>`);
       btn.disabled = false;
       btn.textContent = 'Odeslat objednávku &#128230;';
     }
   } catch(e) {
-    document.getElementById('checkoutMsg').innerHTML = '<div class="msg msg-error">Chyba při odesílání. Zkuste to prosím znovu.</div>';
+    zobrazitChybuCheckoutu('<div class="msg msg-error">Chyba při odesílání. Zkuste to prosím znovu.</div>');
     btn.disabled = false;
     btn.textContent = 'Odeslat objednávku &#128230;';
   }

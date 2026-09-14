@@ -145,6 +145,7 @@ router.post('/', async (req, res) => {
     let celkem = 0;
     const dostupnostMap = new Map(); // "produkt_id_velikost" -> 'skladem' | 'dodavatel'
     const cenaMap = new Map(); // "produkt_id_velikost" -> aktuální cena z DB (autoritativní, klientovi se nevěří)
+    const nazevMap = new Map(); // "produkt_id_velikost" -> název produktu (pro e-maily s potvrzením)
     // Zamyká se v pevném pořadí (produkt_id, velikost), ne v pořadí, v jakém
     // je poslal klient - jinak by dvě souběžné objednávky se stejnými dvěma
     // položkami v opačném pořadí mohly skončit v deadlocku.
@@ -153,7 +154,7 @@ router.post('/', async (req, res) => {
     );
     for (const p of polozkyKZamceni) {
       const sklad = await client.query(
-        'SELECT s.pocet_kusu, s.dostupnost, p.cena FROM sklad s JOIN produkty p ON p.id = s.produkt_id WHERE s.produkt_id = $1 AND s.velikost = $2 FOR UPDATE',
+        'SELECT s.pocet_kusu, s.dostupnost, p.cena, p.nazev FROM sklad s JOIN produkty p ON p.id = s.produkt_id WHERE s.produkt_id = $1 AND s.velikost = $2 FOR UPDATE',
         [p.produkt_id, p.velikost]
       );
       if (sklad.rows.length === 0) {
@@ -170,6 +171,7 @@ router.post('/', async (req, res) => {
       const cenaSkutecna = Number(radek.cena);
       dostupnostMap.set(klic, radek.dostupnost);
       cenaMap.set(klic, cenaSkutecna);
+      nazevMap.set(klic, radek.nazev);
       celkem += cenaSkutecna * p.pocet;
     }
 
@@ -250,7 +252,11 @@ router.post('/', async (req, res) => {
     zaznamenatObjednavku(req.ip);
 
     // Do emailu jde vždy jen skutečná (DB) cena, ne to, co poslal klient.
-    const polozkySkutecne = polozkyAgregovane.map(p => ({ ...p, cena: cenaMap.get(`${p.produkt_id}_${p.velikost}`) }));
+    const polozkySkutecne = polozkyAgregovane.map(p => ({
+      ...p,
+      cena: cenaMap.get(`${p.produkt_id}_${p.velikost}`),
+      nazev: nazevMap.get(`${p.produkt_id}_${p.velikost}`)
+    }));
 
     // Odeslat potvrzovaci email
 try {

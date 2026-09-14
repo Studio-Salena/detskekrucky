@@ -41,45 +41,48 @@ async function odeslatEmail({ to, subject, html }) {
 }
 
 async function odeslat_potvrzeni(objednavka) {
+  const dopravaLabely = { zasilkovna: 'Zásilkovna', ceska_posta: 'Česká pošta', osobni_odber: 'Osobní odběr' };
+  const platbaLabely = { dobirka: 'Dobírka', prevod: 'Bankovní převod' };
+
   const polozky_html = objednavka.polozky.map(p => `
     <tr>
-      <td style="padding:8px;border-bottom:1px solid #eee">${escH(p.nazev)} - vel. ${escH(p.velikost)}</td>
+      <td style="padding:8px;border-bottom:1px solid #eee">${escH(p.nazev || ('produkt #' + p.produkt_id))} - vel. ${escH(p.velikost)}</td>
       <td style="padding:8px;border-bottom:1px solid #eee">${p.pocet} ks</td>
-      <td style="padding:8px;border-bottom:1px solid #eee">${p.cena * p.pocet} Kc</td>
+      <td style="padding:8px;border-bottom:1px solid #eee">${p.cena * p.pocet} Kč</td>
     </tr>
   `).join('');
 
   await odeslatEmail({
     to: objednavka.email,
-    subject: `Potvrzeni objednavky #${objednavka.objednavka_id}`,
+    subject: `Potvrzení objednávky #${objednavka.objednavka_id}`,
     html: `
       <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-        <h1 style="color:#FF6B35">Dekujeme za objednavku!</h1>
+        <h1 style="color:#FF6B35">Děkujeme za objednávku!</h1>
         <p>Ahoj ${escH(objednavka.jmeno)},</p>
-        <p>Vasi objednavku jsme prijali a brzy ji zpracujeme.</p>
-        <h3>Souhrn objednavky #${objednavka.objednavka_id}</h3>
+        <p>Vaši objednávku jsme přijali a brzy ji zpracujeme.</p>
+        <h3>Souhrn objednávky #${objednavka.objednavka_id}</h3>
         <table style="width:100%;border-collapse:collapse">
           <thead>
             <tr style="background:#f5f5f5">
               <th style="padding:8px;text-align:left">Produkt</th>
-              <th style="padding:8px;text-align:left">Pocet</th>
+              <th style="padding:8px;text-align:left">Počet</th>
               <th style="padding:8px;text-align:left">Cena</th>
             </tr>
           </thead>
           <tbody>${polozky_html}</tbody>
         </table>
-        ${objednavka.sleva > 0 ? `<p style="color:#27ae60">Sleva (dárkový poukaz): −${objednavka.sleva} Kc</p>` : ''}
+        ${objednavka.sleva > 0 ? `<p style="color:#27ae60">Sleva (dárkový poukaz): −${objednavka.sleva} Kč</p>` : ''}
         <p style="font-size:18px;font-weight:bold;margin-top:16px">
-          Celkem: ${objednavka.celkem} Kc
+          Celkem: ${objednavka.celkem} Kč
         </p>
-        <p>Doprava: ${escH(objednavka.doprava)}</p>
-        <p>Platba: ${escH(objednavka.platba)}</p>
+        <p>Doprava: ${escH(dopravaLabely[objednavka.doprava] || objednavka.doprava)}</p>
+        <p>Platba: ${escH(platbaLabely[objednavka.platba] || objednavka.platba)}</p>
         ${objednavka.platba === 'prevod' ? `
         <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-top:12px">
-          <p style="margin:0 0 6px 0"><strong>Udaje pro platbu prevodem:</strong></p>
-          <p style="margin:0">Cislo uctu: <strong>2003533776/2010</strong></p>
-          <p style="margin:0">Castka: <strong>${objednavka.celkem} Kc</strong></p>
-          <p style="margin:0">Variabilni symbol: <strong>${objednavka.objednavka_id}</strong></p>
+          <p style="margin:0 0 6px 0"><strong>Údaje pro platbu převodem:</strong></p>
+          <p style="margin:0">Číslo účtu: <strong>2003533776/2010</strong></p>
+          <p style="margin:0">Částka: <strong>${objednavka.celkem} Kč</strong></p>
+          <p style="margin:0">Variabilní symbol: <strong>${objednavka.objednavka_id}</strong></p>
         </div>` : ''}
         <hr>
         <p style="color:#666;font-size:13px">
