@@ -195,6 +195,54 @@ async function odeslat_potvrzeni_terminu(rezervace, slot) {
   console.log('Email o potvrzeni terminu odeslan na:', rezervace.email);
 }
 
+// Obsah e-mailu zákazníkovi při změně stavu objednávky - jen pro stavy, kde
+// dává smysl zákazníka informovat. Ostatní stavy (nova - ta má svůj vlastní
+// potvrzovací e-mail, dorucena, zrusena) tu záměrně nejsou, e-mail se pro ně
+// neposílá.
+const STAV_OBJEDNAVKY_EMAIL = {
+  vyrizuje: {
+    predmet: id => `Objednávka #${id} se zpracovává`,
+    nadpis: 'Vaše objednávka se zpracovává',
+    text: 'Začali jsme zpracovávat vaši objednávku. Jakmile bude na cestě, dáme vám vědět.'
+  },
+  zaplacena: {
+    predmet: id => `Platba k objednávce #${id} přijata`,
+    nadpis: 'Platbu jsme přijali',
+    text: 'Vaši platbu jsme úspěšně přijali. Objednávku teď připravíme k odeslání.'
+  },
+  odeslana: {
+    predmet: id => `Objednávka #${id} byla odeslána`,
+    nadpis: 'Objednávka je na cestě!',
+    text: 'Vaše objednávka byla právě odeslána a brzy dorazí.'
+  }
+};
+
+// Informace zákazníkovi o změně stavu objednávky (vyřizuje se / zaplaceno /
+// odesláno). Pro stavy mimo STAV_OBJEDNAVKY_EMAIL se nic neposílá - volající
+// (routes/objednavky.js) tuhle funkci pro ně vůbec nevolá.
+async function odeslat_email_zmena_stavu(objednavka, stav) {
+  const obsah = STAV_OBJEDNAVKY_EMAIL[stav];
+  if (!obsah) return;
+
+  await odeslatEmail({
+    to: objednavka.email,
+    subject: obsah.predmet(objednavka.objednavka_id),
+    html: `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+        <h1 style="color:#FF6B35">${obsah.nadpis}</h1>
+        <p>Ahoj ${escH(objednavka.jmeno)},</p>
+        <p>${obsah.text}</p>
+        <p style="color:#666;font-size:0.9rem">Objednávka #${objednavka.objednavka_id}</p>
+        <hr>
+        <p style="color:#666;font-size:13px">
+          Dětské krůčky | 773 517 733 | info@detskekrucky.cz
+        </p>
+      </div>
+    `
+  });
+  console.log('Email o zmene stavu objednavky odeslan:', stav, '#', objednavka.objednavka_id);
+}
+
 // Upozornění majitelce, že si někdo udělal (nebo sám zrušil) rezervaci
 async function odeslat_upozorneni_rezervace(rezervace, slot, typ = 'nova') {
   const datum = new Date(slot.datum).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -358,4 +406,4 @@ async function odeslat_test(komu) {
   });
 }
 
-module.exports = { odeslat_potvrzeni, odeslat_upozorneni_objednavky, odeslat_potvrzeni_rezervace, odeslat_potvrzeni_terminu, odeslat_upozorneni_rezervace, odeslat_potvrzeni_vratky, odeslat_upozorneni_vratky, odeslat_potvrzeni_poradna, odeslat_upozorneni_poradna, odeslat_test, escH };
+module.exports = { odeslat_potvrzeni, odeslat_upozorneni_objednavky, odeslat_email_zmena_stavu, odeslat_potvrzeni_rezervace, odeslat_potvrzeni_terminu, odeslat_upozorneni_rezervace, odeslat_potvrzeni_vratky, odeslat_upozorneni_vratky, odeslat_potvrzeni_poradna, odeslat_upozorneni_poradna, odeslat_test, escH };

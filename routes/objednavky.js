@@ -1,4 +1,8 @@
-const { odeslat_potvrzeni, odeslat_upozorneni_objednavky } = require('./emaily');
+const { odeslat_potvrzeni, odeslat_upozorneni_objednavky, odeslat_email_zmena_stavu } = require('./emaily');
+
+// Stavy, u kterých se zákazníkovi posílá informační e-mail o změně stavu
+// (viz STAV_OBJEDNAVKY_EMAIL v routes/emaily.js).
+const STAVY_S_EMAILEM = ['vyrizuje', 'zaplacena', 'odeslana'];
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
@@ -410,6 +414,20 @@ router.patch('/:id/stav', vyzadovatAdmina, async (req, res) => {
     await client.query('UPDATE objednavky SET stav = $1 WHERE id = $2', [stav, req.params.id]);
     await client.query('COMMIT');
     res.json({ zprava: 'Stav aktualizovan' });
+
+    // E-mail zákazníkovi o změně stavu - až po COMMITu, ať prodleva/chyba s
+    // odesláním neblokuje odpověď adminovi (stejný vzor jako u potvrzení
+    // objednávky/rezervace). Jen pro skutečnou změnu (ne když se uloží stejný
+    // stav znovu) a jen pro stavy z STAVY_S_EMAILEM.
+    if (STAVY_S_EMAILEM.includes(stav) && puvodniStav !== stav) {
+      pool.query(
+        `SELECT z.jmeno, z.email FROM objednavky o JOIN zakaznici z ON o.zakaznik_id = z.id WHERE o.id = $1`,
+        [req.params.id]
+      ).then(r => {
+        if (!r.rows.length) return;
+        return odeslat_email_zmena_stavu({ objednavka_id: req.params.id, jmeno: r.rows[0].jmeno, email: r.rows[0].email }, stav);
+      }).catch(e => console.error('Email o zmene stavu objednavky se nepodarilo odeslat:', e.message));
+    }
   } catch (err) {
     await client.query('ROLLBACK');
     res.status(500).json({ chyba: err.message });

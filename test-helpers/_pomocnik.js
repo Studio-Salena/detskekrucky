@@ -170,6 +170,12 @@ function vytvoritMockClient(stav) {
         stav.objednavky = stav.objednavky.filter(o => o.id !== Number(id));
         return {};
       }
+      if (s.startsWith('SELECT z.jmeno, z.email FROM objednavky o JOIN zakaznici z')) {
+        const [id] = params;
+        const o = stav.objednavky.find(o => o.id === Number(id));
+        const z = o && stav.zakaznici.find(z => z.id === o.zakaznik_id);
+        return { rows: z ? [{ jmeno: z.jmeno, email: z.email }] : [] };
+      }
 
       throw new Error('Mock nezná dotaz: ' + s);
     }
