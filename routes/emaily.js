@@ -61,6 +61,30 @@ const BARVA_POZADI_BOX = '#FAF6F1';   // světlý odstín --cream
 const BARVA_RAMECEK = '#E6DFD6';
 const BARVA_TEXT_TLUMENY = '#6B5E5B';
 
+// Společná "obálka" pro zákaznické e-maily v brandu e-shopu (logo, barevný
+// pruh s nadpisem, patička) - používá potvrzení objednávky i e-maily o
+// změně stavu, ať vypadají jednotně (viz požadavek zákaznice).
+function obalitBrandovanyEmail({ nadpis, obsahHtml }) {
+  return `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#2D2422;background:#F4F1EA;padding:30px 16px">
+    <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;border:1px solid ${BARVA_RAMECEK};overflow:hidden">
+      <div style="text-align:center;padding:20px 0 0 0">
+        <img src="https://www.detskekrucky.cz/logo.jpg" alt="Dětské krůčky" width="64" height="64" style="border-radius:50%">
+      </div>
+      <div style="background:${BARVA_ZNACKA};color:#fff;padding:20px 30px 28px 30px;margin-top:16px">
+        <div style="font-size:13px;letter-spacing:0.05em;text-transform:uppercase;opacity:0.85">Dětské krůčky</div>
+        <h1 style="font-size:22px;margin:4px 0 0 0;font-weight:600">${nadpis}</h1>
+      </div>
+      <div style="padding:30px">
+        ${obsahHtml}
+      </div>
+      <div style="text-align:center;font-size:12px;color:${BARVA_TEXT_TLUMENY};padding:18px 30px;background:${BARVA_POZADI_BOX};border-top:1px solid ${BARVA_RAMECEK}">
+        Dětské krůčky | 773 517 733 | <a href="https://www.detskekrucky.cz" style="color:${BARVA_ZNACKA};text-decoration:none">www.detskekrucky.cz</a>
+      </div>
+    </div>
+    </div>`;
+}
+
 async function odeslat_potvrzeni(objednavka) {
   // Zákaznicky viditelné "číslo objednávky" - cislo (RRMMNN, přidělené hned
   // při vzniku). Fallback na interní objednavka_id jen pro jistotu, kdyby ho
@@ -99,65 +123,50 @@ async function odeslat_potvrzeni(objednavka) {
       </tr>
     </table>` : '';
 
+  const obsahHtml = `
+    <p style="margin:0 0 4px 0;font-size:15px">Ahoj ${escH(objednavka.jmeno)},</p>
+    <p style="margin:0 0 24px 0;font-size:14px;color:${BARVA_TEXT_TLUMENY}">děkujeme za objednávku, brzy ji zpracujeme. Níže posíláme její přehled.</p>
+
+    <table role="presentation" style="width:100%;background:${BARVA_POZADI_BOX};border:1px solid ${BARVA_RAMECEK};border-radius:8px;margin-bottom:24px">
+      <tr>
+        <td style="padding:20px;width:50%;vertical-align:top">
+          <h3 style="margin:0 0 8px 0;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY}">Zákazník</h3>
+          <p style="margin:0 0 4px 0;font-size:14px"><strong>${escH(objednavka.jmeno)}</strong></p>
+          ${adresa ? `<p style="margin:0 0 4px 0;font-size:14px">${adresa}</p>` : ''}
+          <p style="margin:0;font-size:14px;color:${BARVA_TEXT_TLUMENY}">${escH(objednavka.email)}</p>
+          ${objednavka.telefon ? `<p style="margin:0;font-size:14px;color:${BARVA_TEXT_TLUMENY}">${escH(objednavka.telefon)}</p>` : ''}
+        </td>
+        <td style="padding:20px;width:50%;vertical-align:top">
+          <h3 style="margin:0 0 8px 0;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY}">Doprava a platba</h3>
+          <p style="margin:0 0 4px 0;font-size:14px"><strong>Doprava:</strong> ${escH(dopravaLabel)}</p>
+          <p style="margin:0;font-size:14px"><strong>Platba:</strong> ${escH(platbaLabel)}</p>
+        </td>
+      </tr>
+    </table>
+
+    ${platebniBox}
+
+    <table style="width:100%;border-collapse:collapse;margin-bottom:8px">
+      <thead>
+        <tr>
+          <th style="text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY};border-bottom:2px solid ${BARVA_RAMECEK};padding:10px 8px">Produkt</th>
+          <th style="text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY};border-bottom:2px solid ${BARVA_RAMECEK};padding:10px 8px">Vel.</th>
+          <th style="text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY};border-bottom:2px solid ${BARVA_RAMECEK};padding:10px 8px">Ks</th>
+          <th style="text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY};border-bottom:2px solid ${BARVA_RAMECEK};padding:10px 8px">Celkem</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${polozky_html}
+        ${objednavka.sleva > 0 ? `<tr><td colspan="3" style="padding:10px 8px;font-size:14px">Poukaz (sleva)</td><td style="padding:10px 8px;font-size:14px;text-align:right;color:#5a8a5a">−${objednavka.sleva} Kč</td></tr>` : ''}
+        <tr><td colspan="3" style="padding:10px 8px;font-size:14px">${escH(dopravaLabel)} (doprava)</td><td style="padding:10px 8px;font-size:14px;text-align:right">${dopravaCena === 0 ? 'Zdarma' : dopravaCena + ' Kč'}</td></tr>
+        <tr><td colspan="3" style="padding:14px 8px 0 8px;font-size:15px;font-weight:bold;color:${BARVA_ZNACKA};border-top:2px solid ${BARVA_ZNACKA_TMAVA}">CELKEM K ÚHRADĚ</td><td style="padding:14px 8px 0 8px;font-size:15px;font-weight:bold;color:${BARVA_ZNACKA};text-align:right;border-top:2px solid ${BARVA_ZNACKA_TMAVA}">${objednavka.celkem} Kč</td></tr>
+      </tbody>
+    </table>`;
+
   await odeslatEmail({
     to: objednavka.email,
     subject: `Potvrzení objednávky #${cisloZobrazit}`,
-    html: `
-      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#2D2422;background:#F4F1EA;padding:30px 16px">
-      <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;border:1px solid ${BARVA_RAMECEK};overflow:hidden">
-        <div style="text-align:center;padding:20px 0 0 0">
-          <img src="https://www.detskekrucky.cz/logo.jpg" alt="Dětské krůčky" width="64" height="64" style="border-radius:50%">
-        </div>
-        <div style="background:${BARVA_ZNACKA};color:#fff;padding:20px 30px 28px 30px;margin-top:16px">
-          <div style="font-size:13px;letter-spacing:0.05em;text-transform:uppercase;opacity:0.85">Dětské krůčky</div>
-          <h1 style="font-size:22px;margin:4px 0 0 0;font-weight:600">Objednávka #${escH(cisloZobrazit)}</h1>
-        </div>
-        <div style="padding:30px">
-          <p style="margin:0 0 4px 0;font-size:15px">Ahoj ${escH(objednavka.jmeno)},</p>
-          <p style="margin:0 0 24px 0;font-size:14px;color:${BARVA_TEXT_TLUMENY}">děkujeme za objednávku, brzy ji zpracujeme. Níže posíláme její přehled.</p>
-
-          <table role="presentation" style="width:100%;background:${BARVA_POZADI_BOX};border:1px solid ${BARVA_RAMECEK};border-radius:8px;margin-bottom:24px">
-            <tr>
-              <td style="padding:20px;width:50%;vertical-align:top">
-                <h3 style="margin:0 0 8px 0;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY}">Zákazník</h3>
-                <p style="margin:0 0 4px 0;font-size:14px"><strong>${escH(objednavka.jmeno)}</strong></p>
-                ${adresa ? `<p style="margin:0 0 4px 0;font-size:14px">${adresa}</p>` : ''}
-                <p style="margin:0;font-size:14px;color:${BARVA_TEXT_TLUMENY}">${escH(objednavka.email)}</p>
-                ${objednavka.telefon ? `<p style="margin:0;font-size:14px;color:${BARVA_TEXT_TLUMENY}">${escH(objednavka.telefon)}</p>` : ''}
-              </td>
-              <td style="padding:20px;width:50%;vertical-align:top">
-                <h3 style="margin:0 0 8px 0;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY}">Doprava a platba</h3>
-                <p style="margin:0 0 4px 0;font-size:14px"><strong>Doprava:</strong> ${escH(dopravaLabel)}</p>
-                <p style="margin:0;font-size:14px"><strong>Platba:</strong> ${escH(platbaLabel)}</p>
-              </td>
-            </tr>
-          </table>
-
-          ${platebniBox}
-
-          <table style="width:100%;border-collapse:collapse;margin-bottom:8px">
-            <thead>
-              <tr>
-                <th style="text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY};border-bottom:2px solid ${BARVA_RAMECEK};padding:10px 8px">Produkt</th>
-                <th style="text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY};border-bottom:2px solid ${BARVA_RAMECEK};padding:10px 8px">Vel.</th>
-                <th style="text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY};border-bottom:2px solid ${BARVA_RAMECEK};padding:10px 8px">Ks</th>
-                <th style="text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY};border-bottom:2px solid ${BARVA_RAMECEK};padding:10px 8px">Celkem</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${polozky_html}
-              ${objednavka.sleva > 0 ? `<tr><td colspan="3" style="padding:10px 8px;font-size:14px">Poukaz (sleva)</td><td style="padding:10px 8px;font-size:14px;text-align:right;color:#5a8a5a">−${objednavka.sleva} Kč</td></tr>` : ''}
-              <tr><td colspan="3" style="padding:10px 8px;font-size:14px">${escH(dopravaLabel)} (doprava)</td><td style="padding:10px 8px;font-size:14px;text-align:right">${dopravaCena === 0 ? 'Zdarma' : dopravaCena + ' Kč'}</td></tr>
-              <tr><td colspan="3" style="padding:14px 8px 0 8px;font-size:15px;font-weight:bold;color:${BARVA_ZNACKA};border-top:2px solid ${BARVA_ZNACKA_TMAVA}">CELKEM K ÚHRADĚ</td><td style="padding:14px 8px 0 8px;font-size:15px;font-weight:bold;color:${BARVA_ZNACKA};text-align:right;border-top:2px solid ${BARVA_ZNACKA_TMAVA}">${objednavka.celkem} Kč</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div style="text-align:center;font-size:12px;color:${BARVA_TEXT_TLUMENY};padding:18px 30px;background:${BARVA_POZADI_BOX};border-top:1px solid ${BARVA_RAMECEK}">
-          Dětské krůčky | 773 517 733 | <a href="https://www.detskekrucky.cz" style="color:${BARVA_ZNACKA};text-decoration:none">www.detskekrucky.cz</a>
-        </div>
-      </div>
-      </div>
-    `
+    html: obalitBrandovanyEmail({ nadpis: `Objednávka #${escH(cisloZobrazit)}`, obsahHtml })
   });
   console.log('Email odoslan na:', objednavka.email);
 }
@@ -264,31 +273,40 @@ async function odeslat_potvrzeni_terminu(rezervace, slot) {
   console.log('Email o potvrzeni terminu odeslan na:', rezervace.email);
 }
 
-// Obsah e-mailu zákazníkovi při změně stavu objednávky - jen pro stavy, kde
-// dává smysl zákazníka informovat. Ostatní stavy (nova - ta má svůj vlastní
-// potvrzovací e-mail, dorucena, zrusena) tu záměrně nejsou, e-mail se pro ně
-// neposílá.
+// Obsah e-mailu zákazníkovi při změně stavu objednávky - pro každý stav
+// kromě "nova" (ta má svůj vlastní potvrzovací e-mail hned při objednání).
 const STAV_OBJEDNAVKY_EMAIL = {
   vyrizuje: {
-    predmet: id => `Objednávka #${id} se zpracovává`,
+    predmet: cislo => `Objednávka #${cislo} se zpracovává`,
     nadpis: 'Vaše objednávka se zpracovává',
     text: 'Začali jsme zpracovávat vaši objednávku. Jakmile bude na cestě, dáme vám vědět.'
   },
   zaplacena: {
-    predmet: id => `Platba k objednávce #${id} přijata`,
+    predmet: cislo => `Platba k objednávce #${cislo} přijata`,
     nadpis: 'Platbu jsme přijali',
     text: 'Vaši platbu jsme úspěšně přijali. Objednávku teď připravíme k odeslání.'
   },
   odeslana: {
-    predmet: id => `Objednávka #${id} byla odeslána`,
+    predmet: cislo => `Objednávka #${cislo} byla odeslána`,
     nadpis: 'Objednávka je na cestě!',
     text: 'Vaše objednávka byla právě odeslána a brzy dorazí.'
+  },
+  dorucena: {
+    predmet: cislo => `Objednávka #${cislo} byla doručena`,
+    nadpis: 'Objednávka doručena!',
+    text: 'Vaše objednávka byla doručena. Děkujeme za nákup a budeme se těšit zase příště!'
+  },
+  zrusena: {
+    predmet: cislo => `Objednávka #${cislo} byla zrušena`,
+    nadpis: 'Objednávka zrušena',
+    text: 'Vaše objednávka byla zrušena. Pokud jste za ni již zaplatili, částku vám v nejbližší době vrátíme. V případě dotazů nás neváhejte kontaktovat.'
   }
 };
 
-// Informace zákazníkovi o změně stavu objednávky (vyřizuje se / zaplaceno /
-// odesláno). Pro stavy mimo STAV_OBJEDNAVKY_EMAIL se nic neposílá - volající
-// (routes/objednavky.js) tuhle funkci pro ně vůbec nevolá.
+// Informace zákazníkovi o změně stavu objednávky - stejný branding jako
+// potvrzení objednávky (viz obalitBrandovanyEmail). Pro stavy mimo
+// STAV_OBJEDNAVKY_EMAIL se nic neposílá - volající (routes/objednavky.js)
+// tuhle funkci pro ně vůbec nevolá.
 async function odeslat_email_zmena_stavu(objednavka, stav) {
   const obsah = STAV_OBJEDNAVKY_EMAIL[stav];
   if (!obsah) return;
@@ -297,18 +315,16 @@ async function odeslat_email_zmena_stavu(objednavka, stav) {
   await odeslatEmail({
     to: objednavka.email,
     subject: obsah.predmet(cisloZobrazit),
-    html: `
-      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-        <h1 style="color:#FF6B35">${obsah.nadpis}</h1>
-        <p>Ahoj ${escH(objednavka.jmeno)},</p>
-        <p>${obsah.text}</p>
-        <p style="color:#666;font-size:0.9rem">Objednávka #${escH(cisloZobrazit)}</p>
-        <hr>
-        <p style="color:#666;font-size:13px">
-          Dětské krůčky | 773 517 733 | info@detskekrucky.cz
-        </p>
-      </div>
-    `
+    html: obalitBrandovanyEmail({
+      nadpis: obsah.nadpis,
+      obsahHtml: `
+        <p style="margin:0 0 4px 0;font-size:15px">Ahoj ${escH(objednavka.jmeno)},</p>
+        <p style="margin:0 0 20px 0;font-size:14px;color:${BARVA_TEXT_TLUMENY}">${obsah.text}</p>
+        <table role="presentation" style="width:100%;background:${BARVA_POZADI_BOX};border:1px solid ${BARVA_RAMECEK};border-radius:8px">
+          <tr><td style="padding:16px 20px;font-size:14px">Objednávka <strong>#${escH(cisloZobrazit)}</strong></td></tr>
+        </table>
+      `
+    })
   });
   console.log('Email o zmene stavu objednavky odeslan:', stav, '#', objednavka.objednavka_id);
 }

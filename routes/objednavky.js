@@ -2,7 +2,7 @@ const { odeslat_potvrzeni, odeslat_upozorneni_objednavky, odeslat_email_zmena_st
 
 // Stavy, u kterých se zákazníkovi posílá informační e-mail o změně stavu
 // (viz STAV_OBJEDNAVKY_EMAIL v routes/emaily.js).
-const STAVY_S_EMAILEM = ['vyrizuje', 'zaplacena', 'odeslana'];
+const STAVY_S_EMAILEM = ['vyrizuje', 'zaplacena', 'odeslana', 'dorucena', 'zrusena'];
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');

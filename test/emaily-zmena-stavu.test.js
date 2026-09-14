@@ -1,6 +1,6 @@
-// Zákazník má dostat informační e-mail při přechodu objednávky do stavu
-// "vyrizuje" / "zaplacena" / "odeslana" - ne u ostatních stavů, a ne když se
-// uloží stejný stav znovu (žádné duplicitní e-maily).
+// Zákazník má dostat informační e-mail při přechodu objednávky do jakéhokoli
+// sledovaného stavu (vyrizuje/zaplacena/odeslana/dorucena/zrusena) - ne když
+// se uloží stejný stav znovu (žádné duplicitní e-maily).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { nacistRouterSMocky, najitHandler, vytvoritRes, vytvoritMockPool, pocatecniStav } = require('../test-helpers/_pomocnik');
@@ -56,14 +56,23 @@ test('přechod do "zaplacena" a "odeslana" taky pošle e-mail', async () => {
   assert.deepEqual(zachycene.map(z => z.stav), ['zaplacena', 'odeslana']);
 });
 
-test('přechod do "dorucena" e-mail nepošle', async () => {
+test('přechod do "dorucena" a "zrusena" taky pošle e-mail', async () => {
   const stav = pripravitStav();
   const zachycene = [];
   const handler = pripravitHandler(stav, zachycene);
 
   await zavolatHandler(handler, 1, 'dorucena');
 
-  assert.equal(zachycene.length, 0);
+  assert.equal(zachycene.length, 1);
+  assert.equal(zachycene[0].stav, 'dorucena');
+
+  const stav2 = pripravitStav();
+  const zachycene2 = [];
+  const handler2 = pripravitHandler(stav2, zachycene2);
+  await zavolatHandler(handler2, 1, 'zrusena');
+
+  assert.equal(zachycene2.length, 1);
+  assert.equal(zachycene2[0].stav, 'zrusena');
 });
 
 test('opakované uložení stejného stavu nepošle e-mail podruhé', async () => {
