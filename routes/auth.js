@@ -37,7 +37,7 @@ router.post('/registrace', async (req, res) => {
         [hash, jmeno, telefon, ulice, mesto, psc, id]
       );
       const token = jwt.sign({ id, email }, JWT_SECRET, { expiresIn: '7d' });
-      return res.json({ zprava: 'Registrace uspesna', token });
+      return res.json({ zprava: 'Registrace uspesna', token, jmeno, email });
     }
     const hash = await bcrypt.hash(heslo, 10);
     const result = await pool.query(
@@ -45,7 +45,7 @@ router.post('/registrace', async (req, res) => {
       [jmeno, email, hash, telefon, ulice, mesto, psc]
     );
     const token = jwt.sign({ id: result.rows[0].id, email }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ zprava: 'Registrace uspesna', token });
+    res.json({ zprava: 'Registrace uspesna', token, jmeno, email });
   } catch (err) {
     res.status(500).json({ chyba: err.message });
   }

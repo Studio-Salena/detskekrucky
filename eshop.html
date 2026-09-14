@@ -1689,7 +1689,7 @@ async function prihlasit() {
     });
     const data = await res.json();
     if (res.ok) {
-      prihlasenyUzivatel = data.uzivatel;
+      prihlasenyUzivatel = { jmeno: data.jmeno, email: data.email };
       sessionStorage.setItem('uzivatel', JSON.stringify(prihlasenyUzivatel));
       sessionStorage.setItem('token', data.token);
       closeModal('modalLogin');
@@ -1716,7 +1716,7 @@ async function registrovat() {
     });
     const data = await res.json();
     if (res.ok) {
-      prihlasenyUzivatel = data.uzivatel;
+      prihlasenyUzivatel = { jmeno: data.jmeno, email: data.email };
       sessionStorage.setItem('uzivatel', JSON.stringify(prihlasenyUzivatel));
       sessionStorage.setItem('token', data.token);
       closeModal('modalLogin');
