@@ -182,35 +182,34 @@ async function odeslat_upozorneni_objednavky(objednavka) {
     </tr>
   `).join('');
 
+  const obsahHtml = `
+    <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
+      <thead>
+        <tr>
+          <th style="text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY};border-bottom:2px solid ${BARVA_RAMECEK};padding:10px 8px">Produkt</th>
+          <th style="text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY};border-bottom:2px solid ${BARVA_RAMECEK};padding:10px 8px">Počet</th>
+          <th style="text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY};border-bottom:2px solid ${BARVA_RAMECEK};padding:10px 8px">Cena</th>
+        </tr>
+      </thead>
+      <tbody>${polozky_html}</tbody>
+    </table>
+    ${objednavka.sleva > 0 ? `<p style="margin:0 0 8px 0;font-size:14px;color:#5a8a5a">🎁 Uplatněný dárkový poukaz: −${objednavka.sleva} Kč</p>` : ''}
+    <p style="margin:0 0 16px 0;font-size:18px;font-weight:bold;color:${BARVA_ZNACKA}">Celkem: ${objednavka.celkem} Kč</p>
+    <table role="presentation" style="width:100%;background:${BARVA_POZADI_BOX};border:1px solid ${BARVA_RAMECEK};border-radius:8px">
+      <tr><td style="padding:16px 20px">
+        <p style="margin:0 0 6px 0;font-size:14px"><strong>Doprava:</strong> ${escH(objednavka.doprava)} &nbsp; <strong>Platba:</strong> ${escH(objednavka.platba)}</p>
+        <p style="margin:0 0 6px 0;font-size:14px"><strong>Zákazník:</strong> ${escH(objednavka.jmeno)}</p>
+        <p style="margin:0 0 6px 0;font-size:14px"><strong>E-mail:</strong> ${escH(objednavka.email)}</p>
+        <p style="margin:0 0 6px 0;font-size:14px"><strong>Telefon:</strong> ${escH(objednavka.telefon)}</p>
+        <p style="margin:0;font-size:14px">${escH(objednavka.ulice)}, ${escH(objednavka.psc)} ${escH(objednavka.mesto)}</p>
+      </td></tr>
+    </table>
+    <p style="margin:16px 0 0 0;font-size:13px;color:${BARVA_TEXT_TLUMENY}">Detail objednávky je v adminu.</p>`;
+
   await odeslatEmail({
     to: MAJITELKA_EMAIL,
     subject: `🛒 Nová objednávka #${cisloZobrazit} – ${objednavka.jmeno}`,
-    html: `
-      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-        <h2 style="color:#FF6B35">🛒 Nová objednávka #${escH(cisloZobrazit)}</h2>
-        <table style="width:100%;border-collapse:collapse">
-          <thead>
-            <tr style="background:#f5f5f5">
-              <th style="padding:8px;text-align:left">Produkt</th>
-              <th style="padding:8px;text-align:left">Počet</th>
-              <th style="padding:8px;text-align:left">Cena</th>
-            </tr>
-          </thead>
-          <tbody>${polozky_html}</tbody>
-        </table>
-        ${objednavka.sleva > 0 ? `<p style="color:#27ae60">🎁 Uplatněný dárkový poukaz: −${objednavka.sleva} Kč</p>` : ''}
-        <p style="font-size:18px;font-weight:bold;margin-top:16px">Celkem: ${objednavka.celkem} Kč</p>
-        <p><strong>Doprava:</strong> ${escH(objednavka.doprava)} &nbsp; <strong>Platba:</strong> ${escH(objednavka.platba)}</p>
-        <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-top:12px">
-          <p style="margin:0 0 6px 0"><strong>Zákazník:</strong> ${escH(objednavka.jmeno)}</p>
-          <p style="margin:0 0 6px 0"><strong>E-mail:</strong> ${escH(objednavka.email)}</p>
-          <p style="margin:0 0 6px 0"><strong>Telefon:</strong> ${escH(objednavka.telefon)}</p>
-          <p style="margin:0">${escH(objednavka.ulice)}, ${escH(objednavka.psc)} ${escH(objednavka.mesto)}</p>
-        </div>
-        <hr>
-        <p style="color:#666;font-size:13px">Detail objednávky je v adminu.</p>
-      </div>
-    `
+    html: obalitBrandovanyEmail({ nadpis: `Nová objednávka #${escH(cisloZobrazit)}`, obsahHtml })
   });
   console.log('Upozorneni na objednavku odeslano majitelce, #', objednavka.objednavka_id);
 }
@@ -335,22 +334,23 @@ async function odeslat_upozorneni_rezervace(rezervace, slot, typ = 'nova') {
   const cas = `${slot.cas_od.slice(0,5)} – ${slot.cas_do.slice(0,5)}`;
   const jeZruseni = typ === 'zrusena';
 
+  const obsahHtml = `
+    <table role="presentation" style="width:100%;background:${BARVA_POZADI_BOX};border:1px solid ${BARVA_RAMECEK};border-radius:8px">
+      <tr><td style="padding:16px 20px">
+        <p style="margin:0 0 6px 0;font-size:14px"><strong>Termín:</strong> ${datum}, ${cas}</p>
+        <p style="margin:0 0 6px 0;font-size:14px"><strong>Jméno:</strong> ${escH(rezervace.jmeno)}</p>
+        <p style="margin:0 0 6px 0;font-size:14px"><strong>Telefon:</strong> ${escH(rezervace.telefon)}</p>
+        <p style="margin:0;font-size:14px"><strong>E-mail:</strong> ${escH(rezervace.email)}</p>
+        ${rezervace.vek_dite ? `<p style="margin:6px 0 0 0;font-size:14px"><strong>Věk dítěte:</strong> ${escH(rezervace.vek_dite)}</p>` : ''}
+        ${rezervace.poznamka ? `<p style="margin:6px 0 0 0;font-size:14px"><strong>Poznámka:</strong> ${escH(rezervace.poznamka)}</p>` : ''}
+      </td></tr>
+    </table>
+    <p style="margin:16px 0 0 0;font-size:13px;color:${BARVA_TEXT_TLUMENY}">Přehled rezervací je v adminu.</p>`;
+
   await odeslatEmail({
     to: MAJITELKA_EMAIL,
     subject: jeZruseni ? `Rezervace zrušena – ${rezervace.jmeno}` : `Nová rezervace – ${rezervace.jmeno}`,
-    html: `
-      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-        <h2 style="color:#FF6B35">${jeZruseni ? '❌ Zákazník zrušil rezervaci' : '📅 Nová rezervace'}</h2>
-        <p><strong>Termín:</strong> ${datum}, ${cas}</p>
-        <p><strong>Jméno:</strong> ${escH(rezervace.jmeno)}</p>
-        <p><strong>Telefon:</strong> ${escH(rezervace.telefon)}</p>
-        <p><strong>E-mail:</strong> ${escH(rezervace.email)}</p>
-        ${rezervace.vek_dite ? `<p><strong>Věk dítěte:</strong> ${escH(rezervace.vek_dite)}</p>` : ''}
-        ${rezervace.poznamka ? `<p><strong>Poznámka:</strong> ${escH(rezervace.poznamka)}</p>` : ''}
-        <hr>
-        <p style="color:#666;font-size:13px">Přehled rezervací je v adminu.</p>
-      </div>
-    `
+    html: obalitBrandovanyEmail({ nadpis: jeZruseni ? 'Zákazník zrušil rezervaci' : 'Nová rezervace', obsahHtml })
   });
   console.log('Upozorneni na rezervaci odeslano majitelce, typ:', typ);
 }
@@ -400,27 +400,29 @@ async function odeslat_upozorneni_vratky(zadost) {
     </tr>
   `).join('');
 
+  const obsahHtml = `
+    <p style="margin:0 0 16px 0;font-size:14px"><strong>Objednávka:</strong> #${escH(zadost.objednavka_id)}</p>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
+      <thead><tr>
+        <th style="text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY};border-bottom:2px solid ${BARVA_RAMECEK};padding:10px 8px">Produkt</th>
+        <th style="text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY};border-bottom:2px solid ${BARVA_RAMECEK};padding:10px 8px">Počet</th>
+      </tr></thead>
+      <tbody>${polozky_html}</tbody>
+    </table>
+    ${zadost.duvod ? `<p style="margin:0 0 16px 0;font-size:14px"><strong>Důvod:</strong> ${escH(zadost.duvod)}</p>` : ''}
+    <table role="presentation" style="width:100%;background:${BARVA_POZADI_BOX};border:1px solid ${BARVA_RAMECEK};border-radius:8px">
+      <tr><td style="padding:16px 20px">
+        <p style="margin:0 0 6px 0;font-size:14px"><strong>Zákazník:</strong> ${zadost.jmeno ? escH(zadost.jmeno) : '—'}</p>
+        <p style="margin:0 0 6px 0;font-size:14px"><strong>E-mail:</strong> ${escH(zadost.email)}</p>
+        <p style="margin:0;font-size:14px"><strong>Telefon:</strong> ${zadost.telefon ? escH(zadost.telefon) : '—'}</p>
+      </td></tr>
+    </table>
+    <p style="margin:16px 0 0 0;font-size:13px;color:${BARVA_TEXT_TLUMENY}">Přehled žádostí o vrácení je v adminu.</p>`;
+
   await odeslatEmail({
     to: MAJITELKA_EMAIL,
     subject: `↩️ Žádost o vrácení – objednávka #${zadost.objednavka_id}`,
-    html: `
-      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-        <h2 style="color:#FF6B35">↩️ Nová žádost o vrácení / odstoupení</h2>
-        <p><strong>Objednávka:</strong> #${zadost.objednavka_id}</p>
-        <table style="width:100%;border-collapse:collapse">
-          <thead><tr style="background:#f5f5f5"><th style="padding:8px;text-align:left">Produkt</th><th style="padding:8px;text-align:left">Počet</th></tr></thead>
-          <tbody>${polozky_html}</tbody>
-        </table>
-        ${zadost.duvod ? `<p style="margin-top:12px"><strong>Důvod:</strong> ${escH(zadost.duvod)}</p>` : ''}
-        <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-top:12px">
-          <p style="margin:0 0 6px 0"><strong>Zákazník:</strong> ${zadost.jmeno ? escH(zadost.jmeno) : '—'}</p>
-          <p style="margin:0 0 6px 0"><strong>E-mail:</strong> ${escH(zadost.email)}</p>
-          <p style="margin:0"><strong>Telefon:</strong> ${zadost.telefon ? escH(zadost.telefon) : '—'}</p>
-        </div>
-        <hr>
-        <p style="color:#666;font-size:13px">Přehled žádostí o vrácení je v adminu.</p>
-      </div>
-    `
+    html: obalitBrandovanyEmail({ nadpis: 'Nová žádost o vrácení / odstoupení', obsahHtml })
   });
   console.log('Upozorneni na zadost o vratku odeslano majitelce, objednavka #', zadost.objednavka_id);
 }
@@ -453,26 +455,73 @@ async function odeslat_potvrzeni_poradna(zadost) {
 
 // Upozornění majitelce o novém dotazu z "Poradny velikostí"
 async function odeslat_upozorneni_poradna(zadost) {
+  const obsahHtml = `
+    ${zadost.vek_dite ? `<p style="margin:0 0 8px 0;font-size:14px"><strong>Věk dítěte:</strong> ${escH(zadost.vek_dite)}</p>` : ''}
+    ${zadost.delka_mm ? `<p style="margin:0 0 8px 0;font-size:14px"><strong>Naměřená délka nožičky:</strong> ${escH(zadost.delka_mm)} mm</p>` : ''}
+    ${zadost.sirka_mm ? `<p style="margin:0 0 8px 0;font-size:14px"><strong>Naměřená šířka nožičky:</strong> ${escH(zadost.sirka_mm)} mm</p>` : ''}
+    ${zadost.poznamka ? `<p style="margin:0 0 8px 0;font-size:14px"><strong>Poznámka k nožičce:</strong> ${escH(zadost.poznamka)}</p>` : ''}
+    <table role="presentation" style="width:100%;background:${BARVA_POZADI_BOX};border:1px solid ${BARVA_RAMECEK};border-radius:8px;margin-top:8px">
+      <tr><td style="padding:16px 20px">
+        <p style="margin:0 0 6px 0;font-size:14px"><strong>E-mail:</strong> ${zadost.email ? escH(zadost.email) : '—'}</p>
+        <p style="margin:0;font-size:14px"><strong>Telefon:</strong> ${zadost.telefon ? escH(zadost.telefon) : '—'}</p>
+      </td></tr>
+    </table>
+    <p style="margin:16px 0 0 0;font-size:13px;color:${BARVA_TEXT_TLUMENY}">Přehled dotazů je v adminu.</p>`;
+
   await odeslatEmail({
     to: MAJITELKA_EMAIL,
     subject: '👣 Nový dotaz z poradny velikostí',
-    html: `
-      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-        <h2 style="color:#FF6B35">👣 Nový dotaz na velikost</h2>
-        ${zadost.vek_dite ? `<p><strong>Věk dítěte:</strong> ${escH(zadost.vek_dite)}</p>` : ''}
-        ${zadost.delka_mm ? `<p><strong>Naměřená délka nožičky:</strong> ${escH(zadost.delka_mm)} mm</p>` : ''}
-        ${zadost.sirka_mm ? `<p><strong>Naměřená šířka nožičky:</strong> ${escH(zadost.sirka_mm)} mm</p>` : ''}
-        ${zadost.poznamka ? `<p><strong>Poznámka k nožičce:</strong> ${escH(zadost.poznamka)}</p>` : ''}
-        <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-top:12px">
-          <p style="margin:0 0 6px 0"><strong>E-mail:</strong> ${zadost.email ? escH(zadost.email) : '—'}</p>
-          <p style="margin:0"><strong>Telefon:</strong> ${zadost.telefon ? escH(zadost.telefon) : '—'}</p>
-        </div>
-        <hr>
-        <p style="color:#666;font-size:13px">Přehled dotazů je v adminu.</p>
-      </div>
-    `
+    html: obalitBrandovanyEmail({ nadpis: 'Nový dotaz na velikost', obsahHtml })
   });
   console.log('Upozorneni na dotaz z poradny odeslano majitelce, #', zadost.id);
+}
+
+// Upozornění majitelce o nové žádosti o dárkový poukaz z e-shopu
+async function odeslat_upozorneni_zadost_poukaz(zadost) {
+  const obsahHtml = `
+    <table role="presentation" style="width:100%;background:${BARVA_POZADI_BOX};border:1px solid ${BARVA_RAMECEK};border-radius:8px">
+      <tr><td style="padding:16px 20px">
+        <p style="margin:0 0 6px 0;font-size:14px"><strong>Hodnota:</strong> ${Number(zadost.hodnota).toLocaleString('cs-CZ')} Kč</p>
+        <p style="margin:0 0 6px 0;font-size:14px"><strong>Kupující:</strong> ${escH(zadost.kupujici_jmeno)}</p>
+        <p style="margin:0 0 6px 0;font-size:14px"><strong>E-mail:</strong> ${escH(zadost.kupujici_email)}</p>
+        ${zadost.kupujici_telefon ? `<p style="margin:0 0 6px 0;font-size:14px"><strong>Telefon:</strong> ${escH(zadost.kupujici_telefon)}</p>` : ''}
+        ${zadost.pro_koho ? `<p style="margin:0 0 6px 0;font-size:14px"><strong>Pro koho:</strong> ${escH(zadost.pro_koho)}</p>` : ''}
+        ${zadost.vzkaz ? `<p style="margin:0;font-size:14px"><strong>Vzkaz:</strong> ${escH(zadost.vzkaz)}</p>` : ''}
+      </td></tr>
+    </table>
+    <p style="margin:16px 0 0 0;font-size:13px;color:${BARVA_TEXT_TLUMENY}">Zpracování žádosti (potvrzení platby a vydání poukazu) najdeš v adminu v záložce Poukazy.</p>`;
+
+  await odeslatEmail({
+    to: MAJITELKA_EMAIL,
+    subject: `🎁 Nová žádost o dárkový poukaz – ${zadost.kupujici_jmeno}`,
+    html: obalitBrandovanyEmail({ nadpis: 'Nová žádost o dárkový poukaz', obsahHtml })
+  });
+  console.log('Upozorneni na zadost o poukaz odeslano majitelce, #', zadost.id);
+}
+
+// Kód a údaje vydaného dárkového poukazu zákazníkovi - posílá se jen když
+// máme kupujici_email (u přímého prodeje na prodejně bez e-mailu se neposílá nic).
+async function odeslat_poukaz_zakaznikovi(poukaz) {
+  const platnost = new Date(poukaz.platnost_do).toLocaleDateString('cs-CZ');
+  const obsahHtml = `
+    <p style="margin:0 0 4px 0;font-size:15px">Ahoj${poukaz.kupujici_jmeno ? ' ' + escH(poukaz.kupujici_jmeno) : ''},</p>
+    <p style="margin:0 0 20px 0;font-size:14px;color:${BARVA_TEXT_TLUMENY}">děkujeme za nákup dárkového poukazu! Tady je jeho kód - uplatnit ho lze na e-shopu i na prodejně.</p>
+    <table role="presentation" style="width:100%;background:${BARVA_POZADI_BOX};border:1px solid ${BARVA_RAMECEK};border-radius:8px">
+      <tr><td style="padding:24px;text-align:center">
+        <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY};margin-bottom:6px">Kód poukazu</div>
+        <div style="font-size:28px;font-weight:700;letter-spacing:0.05em;color:${BARVA_ZNACKA}">${escH(poukaz.kod)}</div>
+        <div style="margin-top:12px;font-size:14px">Hodnota: <strong>${Number(poukaz.hodnota).toLocaleString('cs-CZ')} Kč</strong></div>
+        <div style="font-size:14px">Platnost do: <strong>${platnost}</strong></div>
+      </td></tr>
+    </table>
+    <p style="margin:16px 0 0 0;font-size:13px;color:${BARVA_TEXT_TLUMENY}">Kód zadejte při placení na e-shopu do pole "Mám dárkový poukaz", nebo ho nahlaste na prodejně.</p>`;
+
+  await odeslatEmail({
+    to: poukaz.kupujici_email,
+    subject: 'Váš dárkový poukaz – Dětské krůčky',
+    html: obalitBrandovanyEmail({ nadpis: 'Váš dárkový poukaz', obsahHtml })
+  });
+  console.log('Email s kodem poukazu odeslan na:', poukaz.kupujici_email);
 }
 
 // Zkušební e-mail – pro ověření, že server umí odesílat (RESEND_API_KEY + ověřená doména)
@@ -492,4 +541,4 @@ async function odeslat_test(komu) {
   });
 }
 
-module.exports = { odeslat_potvrzeni, odeslat_upozorneni_objednavky, odeslat_email_zmena_stavu, odeslat_potvrzeni_rezervace, odeslat_potvrzeni_terminu, odeslat_upozorneni_rezervace, odeslat_potvrzeni_vratky, odeslat_upozorneni_vratky, odeslat_potvrzeni_poradna, odeslat_upozorneni_poradna, odeslat_test, escH };
+module.exports = { odeslat_potvrzeni, odeslat_upozorneni_objednavky, odeslat_email_zmena_stavu, odeslat_potvrzeni_rezervace, odeslat_potvrzeni_terminu, odeslat_upozorneni_rezervace, odeslat_potvrzeni_vratky, odeslat_upozorneni_vratky, odeslat_potvrzeni_poradna, odeslat_upozorneni_poradna, odeslat_upozorneni_zadost_poukaz, odeslat_poukaz_zakaznikovi, odeslat_test, escH };

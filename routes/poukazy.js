@@ -3,6 +3,7 @@ const router = express.Router();
 const pool = require('../db/pool');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const { jeZablokovana: jeZadostZablokovana, zaznamenatZadost } = require('../middleware/poukazyZadostLimiter');
+const { odeslat_upozorneni_zadost_poukaz, odeslat_poukaz_zakaznikovi } = require('./emaily');
 
 const POVOLENE_HODNOTY = [500, 1000, 1500];
 
@@ -112,6 +113,10 @@ router.post('/zadost', async (req, res) => {
       [hodnotaCislo, kupujici_jmeno, kupujici_email, kupujici_telefon || null, pro_koho || null, vzkaz || null]
     );
     res.json(result.rows[0]);
+
+    // Až po odpovědi, ať prodleva/chyba s odesláním e-mailu žádost neblokuje
+    // (stejný vzor jako u objednávek/rezervací).
+    odeslat_upozorneni_zadost_poukaz(result.rows[0]).catch(e => console.error('Upozorneni majitelce o zadosti o poukaz se nepodarilo odeslat:', e.message));
   } catch (err) {
     res.status(500).json({ chyba: err.message });
   }
@@ -146,6 +151,13 @@ router.post('/', vyzadovatAdmina, async (req, res) => {
       [kod, ean, hodnotaCislo, platnostDo.toISOString().slice(0,10), zakoupeno_kde || 'prodejna', kupujici_jmeno || null, kupujici_email || null, poznamka || null]
     );
     res.json(result.rows[0]);
+
+    // Kód pošleme zákazníkovi jen když máme e-mail (přímý prodej na prodejně
+    // bez e-mailu ho prostě nedostane e-mailem - to je v pořádku, dostane ho
+    // fyzicky/ústně). Až po odpovědi, ať prodleva/chyba neblokuje vydání.
+    if (result.rows[0].kupujici_email) {
+      odeslat_poukaz_zakaznikovi(result.rows[0]).catch(e => console.error('Email s kodem poukazu se nepodarilo odeslat:', e.message));
+    }
   } catch (err) {
     res.status(500).json({ chyba: err.message });
   }

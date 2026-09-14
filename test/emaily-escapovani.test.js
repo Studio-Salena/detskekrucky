@@ -90,3 +90,27 @@ test('upozornění majitelce z poradny escapuje poznámku', async () => {
     assert.equal(html.includes(PAYLOAD), false);
   } finally { obnovitFetch(); }
 });
+
+test('upozornění majitelce o žádosti o poukaz escapuje vzkaz', async () => {
+  const { emaily, zachycene, obnovitFetch } = nacistEmailySZachycenymFetch();
+  try {
+    await emaily.odeslat_upozorneni_zadost_poukaz({
+      id: 1, hodnota: 500, kupujici_jmeno: 'Jana', kupujici_email: 'jana@example.com', vzkaz: PAYLOAD
+    });
+    const html = zachycene[0].html;
+    assert.equal(html.includes(PAYLOAD), false);
+  } finally { obnovitFetch(); }
+});
+
+test('e-mail s kódem poukazu zákazníkovi escapuje jméno kupujícího', async () => {
+  const { emaily, zachycene, obnovitFetch } = nacistEmailySZachycenymFetch();
+  try {
+    await emaily.odeslat_poukaz_zakaznikovi({
+      kod: 'ABCD1234', hodnota: 500, platnost_do: '2027-01-01',
+      kupujici_jmeno: PAYLOAD, kupujici_email: 'jana@example.com'
+    });
+    const html = zachycene[0].html;
+    assert.equal(html.includes(PAYLOAD), false);
+    assert.ok(html.includes('ABCD1234'), 'musí obsahovat kód poukazu');
+  } finally { obnovitFetch(); }
+});
