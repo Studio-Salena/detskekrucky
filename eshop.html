@@ -1409,22 +1409,22 @@ async function odeslatObjednavku() {
       kosik = [];
       ulozitKosik();
       uplatnenyPoukaz = null;
-      btn.textContent = 'Hotovo! &#10003;';
+      btn.textContent = 'Hotovo! ✓';
       setTimeout(() => {
         document.getElementById('modalCheckout').classList.remove('open');
         btn.disabled = false;
-        btn.textContent = 'Odeslat objednávku &#128230;';
+        btn.textContent = 'Odeslat objednávku 📦';
         document.getElementById('checkoutMsg').innerHTML = '';
       }, 3000);
     } else {
       zobrazitChybuCheckoutu(`<div class="msg msg-error">${data.chyba || 'Chyba serveru. Zkuste to prosím znovu.'}</div>`);
       btn.disabled = false;
-      btn.textContent = 'Odeslat objednávku &#128230;';
+      btn.textContent = 'Odeslat objednávku 📦';
     }
   } catch(e) {
     zobrazitChybuCheckoutu('<div class="msg msg-error">Chyba při odesílání. Zkuste to prosím znovu.</div>');
     btn.disabled = false;
-    btn.textContent = 'Odeslat objednávku &#128230;';
+    btn.textContent = 'Odeslat objednávku 📦';
   }
 }
 
