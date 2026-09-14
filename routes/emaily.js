@@ -101,7 +101,10 @@ async function odeslat_potvrzeni(objednavka) {
     html: `
       <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#2D2422;background:#F4F1EA;padding:30px 16px">
       <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;border:1px solid ${BARVA_RAMECEK};overflow:hidden">
-        <div style="background:${BARVA_ZNACKA};color:#fff;padding:28px 30px">
+        <div style="text-align:center;padding:20px 0 0 0">
+          <img src="https://www.detskekrucky.cz/logo.jpg" alt="Dětské krůčky" width="64" height="64" style="border-radius:50%">
+        </div>
+        <div style="background:${BARVA_ZNACKA};color:#fff;padding:20px 30px 28px 30px;margin-top:16px">
           <div style="font-size:13px;letter-spacing:0.05em;text-transform:uppercase;opacity:0.85">Dětské krůčky</div>
           <h1 style="font-size:22px;margin:4px 0 0 0;font-weight:600">Objednávka #${objednavka.objednavka_id}</h1>
         </div>

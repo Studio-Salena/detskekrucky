@@ -9,12 +9,21 @@ const pool = require('../db/pool');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const { jeZablokovana, zaznamenatObjednavku } = require('../middleware/objednavkyLimiter');
 
-// Idempotentní migrace - vazba objednávky na uplatněný dárkový poukaz.
+// Idempotentní migrace - vazba objednávky na uplatněný dárkový poukaz a
+// číslo/datum vystavení faktury. faktury_cislovani drží poslední použité
+// pořadové číslo PER ROK - číslování se má každý nový rok resetovat na 1
+// (výsledný tvar faktura_cislo je RRRRNNN, viz ziskatFakturuCislo níže).
 async function initObjednavkySloupce() {
   try {
     await pool.query(`
       ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS poukaz_id INTEGER;
       ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS sleva NUMERIC NOT NULL DEFAULT 0;
+      ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS faktura_cislo TEXT UNIQUE;
+      ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS faktura_datum TIMESTAMPTZ;
+      CREATE TABLE IF NOT EXISTS faktury_cislovani (
+        rok INTEGER PRIMARY KEY,
+        posledni_cislo INTEGER NOT NULL DEFAULT 0
+      );
     `);
     console.log('Objednavky sloupce OK');
   } catch (e) {
@@ -22,6 +31,45 @@ async function initObjednavkySloupce() {
   }
 }
 initObjednavkySloupce();
+
+// Vrátí číslo faktury pro objednávku - pokud ještě žádné nemá, PRVNÍ volání
+// (typicky při prvním tisku/zobrazení faktury) jí ho tady vystaví a natrvalo
+// uloží. Číslo se tak nepřiděluje hned při vzniku objednávky (testovací/
+// zrušené objednávky, které se nikdy nevytisknou, tak "nespotřebují" číslo a
+// nevznikají v řadě mezery) a opakovaný tisk vrací pořád stejné, jednou
+// vystavené číslo (faktura se nesmí přečíslovávat).
+// FOR UPDATE na řádku objednávky serializuje souběžné první-tisky téže
+// objednávky; UPDATE ... RETURNING na faktury_cislovani je sám o sobě
+// atomický (řádkový zámek po dobu transakce), takže dvě různé objednávky
+// vystavované souběžně nikdy nedostanou stejné číslo.
+async function ziskatFakturuCislo(objednavkaId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const soucasna = await client.query('SELECT faktura_cislo, faktura_datum FROM objednavky WHERE id=$1 FOR UPDATE', [objednavkaId]);
+    if (!soucasna.rows.length) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+    if (soucasna.rows[0].faktura_cislo) {
+      await client.query('ROLLBACK'); // nic se neměnilo, jen se čtelo
+      return soucasna.rows[0];
+    }
+    const rok = new Date().getFullYear();
+    await client.query('INSERT INTO faktury_cislovani (rok, posledni_cislo) VALUES ($1, 0) ON CONFLICT (rok) DO NOTHING', [rok]);
+    const pocitadlo = await client.query('UPDATE faktury_cislovani SET posledni_cislo = posledni_cislo + 1 WHERE rok=$1 RETURNING posledni_cislo', [rok]);
+    const cislo = `${rok}${String(pocitadlo.rows[0].posledni_cislo).padStart(3, '0')}`;
+    const datum = new Date();
+    await client.query('UPDATE objednavky SET faktura_cislo=$1, faktura_datum=$2 WHERE id=$3', [cislo, datum, objednavkaId]);
+    await client.query('COMMIT');
+    return { faktura_cislo: cislo, faktura_datum: datum };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
 
 const DOPRAVA_CENY = { zasilkovna: 79, ceska_posta: 89, osobni_odber: 0 };
 const DOPRAVA_ZDARMA_OD = 800;
@@ -333,6 +381,21 @@ router.get('/:id', vyzadovatAdmina, async (req, res) => {
     `, [req.params.id]);
 
     res.json({ ...objednavka.rows[0], polozky: polozky.rows });
+  } catch (err) {
+    res.status(500).json({ chyba: err.message });
+  }
+});
+
+// Vystavit (nebo - pokud už existuje - jen vrátit) číslo faktury k objednávce.
+// Volá admin.html před tiskem faktury; opakované volání vrací stále stejné
+// číslo (viz ziskatFakturuCislo).
+router.post('/:id/faktura', vyzadovatAdmina, async (req, res) => {
+  try {
+    const vysledek = await ziskatFakturuCislo(req.params.id);
+    if (!vysledek) {
+      return res.status(404).json({ chyba: 'Objednávka nenalezena.' });
+    }
+    res.json(vysledek);
   } catch (err) {
     res.status(500).json({ chyba: err.message });
   }

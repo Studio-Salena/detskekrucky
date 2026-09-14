@@ -176,6 +176,28 @@ function vytvoritMockClient(stav) {
         const z = o && stav.zakaznici.find(z => z.id === o.zakaznik_id);
         return { rows: z ? [{ jmeno: z.jmeno, email: z.email }] : [] };
       }
+      if (s.startsWith('SELECT faktura_cislo, faktura_datum FROM objednavky WHERE')) {
+        const [id] = params;
+        const o = stav.objednavky.find(o => o.id === Number(id));
+        return { rows: o ? [{ faktura_cislo: o.faktura_cislo || null, faktura_datum: o.faktura_datum || null }] : [] };
+      }
+      if (s.startsWith('INSERT INTO faktury_cislovani')) {
+        const [rok] = params;
+        if (!stav.fakturyCislovani.find(f => f.rok === rok)) stav.fakturyCislovani.push({ rok, posledni_cislo: 0 });
+        return {};
+      }
+      if (s.startsWith('UPDATE faktury_cislovani SET posledni_cislo')) {
+        const [rok] = params;
+        const f = stav.fakturyCislovani.find(f => f.rok === rok);
+        f.posledni_cislo++;
+        return { rows: [{ posledni_cislo: f.posledni_cislo }] };
+      }
+      if (s.startsWith('UPDATE objednavky SET faktura_cislo')) {
+        const [cislo, datum, id] = params;
+        const o = stav.objednavky.find(o => o.id === Number(id));
+        if (o) { o.faktura_cislo = cislo; o.faktura_datum = datum; }
+        return {};
+      }
 
       throw new Error('Mock nezná dotaz: ' + s);
     }
@@ -195,7 +217,7 @@ function pocatecniStav() {
     sklad: [], poukazy: [],
     objednavky: [], dalsiObjednavkaId: 1,
     objednavkyPolozky: [], pohybySkladu: [], poukazyPouziti: [],
-    vratky: []
+    vratky: [], fakturyCislovani: []
   };
 }
 
