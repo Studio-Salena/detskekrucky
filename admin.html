@@ -1519,8 +1519,11 @@ async function oznacitVseOdeslano() {
   loadObjednavky();
 }
 
+let aktivniDetailObjId = null;
+
 async function detailObjednavky(id) {
   try {
+    aktivniDetailObjId = id;
     const data = await adminFetch(API+'/objednavky/'+id).then(r=>r.json());
     document.getElementById('detailObjTitle').textContent = '📦 Objednávka #'+id;
     const polozky = data.polozky || [];
@@ -1545,7 +1548,7 @@ async function detailObjednavky(id) {
 }
 
 function tiskObjednavky() {
-  window.print();
+  if (aktivniDetailObjId) tiskObjednavkyId(aktivniDetailObjId);
 }
 
 const DOPRAVA_LABELY = { zasilkovna: 'Zásilkovna', ceska_posta: 'Česká pošta', osobni_odber: 'Osobní odběr' };
