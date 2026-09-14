@@ -180,6 +180,7 @@ router.post('/:id/images', (req, res, next) => {
     } catch (e) {
       // Žádný ROLLBACK - DB transakce ještě vůbec nezačala. Jen uklidit, co
       // se případně stihlo nahrát před tímhle selháním.
+      console.error('Cloudinary upload selhal:', e.message);
       await ukliditNahraneAssety(nahraneAssety.map(a => a.public_id));
       return res.status(502).json({ chyba: 'Nahrání do úložiště fotografií selhalo.' });
     }
