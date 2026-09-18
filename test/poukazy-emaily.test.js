@@ -3,22 +3,27 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
+async function mockQuery(sql, params = []) {
+  const s = sql.replace(/\s+/g, ' ').trim();
+  if (s.startsWith('CREATE TABLE') || s.startsWith('ALTER TABLE') || s === 'BEGIN' || s === 'COMMIT' || s === 'ROLLBACK') return {};
+  if (s.startsWith('INSERT INTO poukazy_zadosti')) {
+    return { rows: [{ id: 1, hodnota: params[0], kupujici_jmeno: params[1], kupujici_email: params[2] }] };
+  }
+  if (s.startsWith('SELECT id FROM darkove_poukazy WHERE kod')) {
+    return { rows: [] }; // kód/EAN vždy "volný" - test netestuje kolize
+  }
+  if (s.startsWith('INSERT INTO darkove_poukazy')) {
+    const [kod, ean, hodnota, platnostDo, zakoupenoKde, kupujiciJmeno, kupujiciEmail] = params;
+    return { rows: [{ id: 1, kod, ean, hodnota, zustatek: hodnota, platnost_do: platnostDo, stav: 'aktivni', zakoupeno_kde: zakoupenoKde, kupujici_jmeno: kupujiciJmeno, kupujici_email: kupujiciEmail }] };
+  }
+  throw new Error('Mock nezná dotaz: ' + s);
+}
+
 function vytvoritMockPool() {
   return {
-    async query(sql, params = []) {
-      const s = sql.replace(/\s+/g, ' ').trim();
-      if (s.startsWith('CREATE TABLE')) return {};
-      if (s.startsWith('INSERT INTO poukazy_zadosti')) {
-        return { rows: [{ id: 1, hodnota: params[0], kupujici_jmeno: params[1], kupujici_email: params[2] }] };
-      }
-      if (s.startsWith('SELECT id FROM darkove_poukazy WHERE kod')) {
-        return { rows: [] }; // kód/EAN vždy "volný" - test netestuje kolize
-      }
-      if (s.startsWith('INSERT INTO darkove_poukazy')) {
-        const [kod, ean, hodnota, platnostDo, zakoupenoKde, kupujiciJmeno, kupujiciEmail] = params;
-        return { rows: [{ id: 1, kod, ean, hodnota, zustatek: hodnota, platnost_do: platnostDo, stav: 'aktivni', zakoupeno_kde: zakoupenoKde, kupujici_jmeno: kupujiciJmeno, kupujici_email: kupujiciEmail }] };
-      }
-      throw new Error('Mock nezná dotaz: ' + s);
+    query: mockQuery,
+    async connect() {
+      return { query: mockQuery, release() {} };
     }
   };
 }

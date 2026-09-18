@@ -506,11 +506,12 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           <button class="refresh-btn no-print" onclick="loadUcetnictvi()">↻</button>
         </div>
       </div>
-      <div class="stats-grid" style="grid-template-columns:repeat(5,1fr)">
+      <div class="stats-grid" style="grid-template-columns:repeat(6,1fr)">
         <div class="stat-card"><div class="stat-label">Tržby celkem</div><div class="stat-value" id="ucetTrzby">...</div></div>
         <div class="stat-card"><div class="stat-label">Průměrná objednávka</div><div class="stat-value" id="ucetPrumer">...</div></div>
         <div class="stat-card"><div class="stat-label">Počet objednávek</div><div class="stat-value" id="ucetPocet">...</div></div>
         <div class="stat-card"><div class="stat-label">Vratky celkem</div><div class="stat-value" id="ucetVratky" style="color:var(--brown)">...</div></div>
+        <div class="stat-card"><div class="stat-label">Přijato za prodej poukazů</div><div class="stat-value" id="ucetPoukazyPrijato" style="color:var(--sage)">...</div></div>
         <div class="stat-card"><div class="stat-label">Zboží vydané za poukazy</div><div class="stat-value" id="ucetPoukazyZbozi" style="color:var(--sage)">...</div></div>
       </div>
       <div class="table-wrap">
@@ -908,10 +909,21 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     </div>
     <div class="form-group">
       <label>Prodáno kde</label>
-      <select id="pkKde">
+      <select id="pkKde" onchange="prepnoutPoukazKde()">
         <option value="prodejna">Prodejna</option>
         <option value="eshop">E-shop</option>
       </select>
+    </div>
+    <div class="form-group">
+      <label>Jak zaplatila</label>
+      <select id="pkPlatba">
+        <option value="hotovost">💵 Hotovost</option>
+        <option value="karta">💳 Karta</option>
+        <option value="qr">📱 QR platba</option>
+        <option value="prevod">🏦 Bankovní převod</option>
+        <option value="">Nezaplaceno / neevidovat platbu</option>
+      </select>
+      <div style="font-size:0.78rem;color:var(--text-light);margin-top:4px">Podle tohohle vznikne i záznam prodeje a účtenka – peníze se rovnou započítají do tržeb.</div>
     </div>
     <div class="form-group"><label>Jméno kupujícího (nepovinné)</label><input type="text" id="pkJmeno" placeholder="Jana Nová"></div>
     <div class="form-group"><label>E-mail kupujícího (nepovinné)</label><input type="email" id="pkEmail" placeholder="jana@email.cz"></div>
@@ -929,6 +941,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     <div id="poukazDetail" style="margin:16px 0"></div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modalZobrazitPoukaz')">Zavřít</button>
+      <button class="btn btn-outline" id="btnUctenkaPoukaz" style="display:none" onclick="tisknoutUctenkuPoukazu()">🧾 Účtenka za poukaz</button>
       <button class="btn btn-outline" onclick="tisknoutPoukazEAN()">🏷️ Jen EAN</button>
       <button class="btn btn-outline" onclick="tisknoutPoukaz(false)">🖨️ Poukaz bez EAN</button>
       <button class="btn btn-primary" onclick="tisknoutPoukaz(true)">🖨️ Poukaz s EAN</button>
@@ -1054,6 +1067,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <option value="karta">💳 Karta</option>
         <option value="qr">📱 QR platba</option>
         <option value="poukaz">🎁 Dárkový poukaz</option>
+        <option value="prevod">🏦 Bankovní převod</option>
       </select>
     </div>
     <div class="form-group"><label>Jméno zákazníka (volitelné)</label><input type="text" id="upProdejZakaznik" placeholder="Jana Nováková"></div>
@@ -1355,14 +1369,20 @@ document.addEventListener('click', e => {
 // PŘEHLED
 async function loadPrehled() {
   try {
-    const [obj, sklad, prodejna, celySklad] = await Promise.all([
+    const [obj, sklad, prodejna, celySklad, poukazyPouziti] = await Promise.all([
       adminFetch(API+'/objednavky').then(r=>r.json()).catch(()=>[]),
       adminFetch(API+'/sklad/nizky-stav').then(r=>r.json()).catch(()=>[]),
       adminFetch(API+'/prodejna').then(r=>r.json()).catch(()=>[]),
-      adminFetch(API+'/sklad/admin').then(r=>r.json()).catch(()=>[])
+      adminFetch(API+'/sklad/admin').then(r=>r.json()).catch(()=>[]),
+      adminFetch(API+'/poukazy/pouziti/vse').then(r=>r.json()).catch(()=>[])
     ]);
     const platne = Array.isArray(obj) ? obj.filter(o=>o.stav!=='zrusena') : [];
-    const prodejnaProdeje = Array.isArray(prodejna) ? prodejna : [];
+    // Uplatnění poukazu, u kterého už byly peníze připočítané do tržeb při jeho prodeji,
+    // se do tržeb podruhé nezapočítává (viz Účetnictví).
+    const jizZapocitanoProdejIdPrehled = new Set(
+      (Array.isArray(poukazyPouziti) ? poukazyPouziti : []).filter(x=>x.zapocitano_pri_vydani && x.prodej_id).map(x=>x.prodej_id)
+    );
+    const prodejnaProdeje = (Array.isArray(prodejna) ? prodejna : []).filter(p=>!jizZapocitanoProdejIdPrehled.has(p.id));
     const trzbyEshop = platne.reduce((s,o)=>s+o.celkem,0);
     const trzbyProdejna = prodejnaProdeje.reduce((s,p)=>s+Number(p.celkem),0);
     const trzby = trzbyEshop + trzbyProdejna;
@@ -2061,6 +2081,7 @@ function tiskSklad() {
 
 // PRODUKTY
 let vybraneProdukty = new Set();
+let posledniProdukty = [];
 async function loadProdukty() {
   document.getElementById('produktyTable').innerHTML='<div class="loading">Načítám...</div>';
   try {
@@ -2072,6 +2093,7 @@ async function loadProdukty() {
       if (s.velikost!=null) map[s.id].velikostiSeznam.push(s.velikost);
     });
     const list = Object.values(map);
+    posledniProdukty = list;
     if (!list.length) { document.getElementById('produktyTable').innerHTML='<div class="empty">Žádné produkty</div>'; return; }
     document.getElementById('produktyTable').innerHTML=`
       <table><thead><tr><th><input type="checkbox" onchange="vybratVseProdukty(this)"></th><th>ID</th><th>Název</th><th>Značka</th><th>Kategorie</th><th>Cena</th><th>Velikosti / ks</th><th>Akce</th></tr></thead>
@@ -2081,7 +2103,7 @@ async function loadProdukty() {
         <td>${escH(p.kategorie)}</td><td><strong>${p.cena.toLocaleString('cs-CZ')} Kč</strong></td>
         <td style="font-size:0.82rem;color:var(--text-light)"><strong>${p.velikostiSeznam.length?p.velikostiSeznam.sort((a,b)=>a-b).join(', '):'—'}</strong> / ${p.celkem} ks <span style="display:block">(EAN viz záložka Sklad)</span></td>
         <td style="display:flex;gap:4px">
-          <button class="btn btn-orange btn-sm" onclick="upravitProdukt(${p.id},'${escAttr(escJs(p.nazev))}','${escAttr(escJs(p.znacka))}',${p.cena},${p.cena_puvodni||0},'${escAttr(escJs(p.emoji||''))}','${escAttr(escJs(p.popis||''))}','${escAttr(escJs(p.kategorie||''))}','${escAttr(escJs(p.typ_nohy||''))}')">✏️ Upravit</button>
+          <button class="btn btn-orange btn-sm" onclick="upravitProdukt(${p.id})">✏️ Upravit</button>
           <button class="btn btn-red btn-sm" onclick="smazatProdukt(${p.id},'${escAttr(escJs(p.nazev))}')">🗑️ Smazat</button>
         </td>
       </tr>`).join('')}</tbody></table>`;
@@ -2158,16 +2180,18 @@ function otevritNovyProdukt() {
   openModal('modalNovyProdukt');
 }
 
-function upravitProdukt(id,nazev,znacka,cena,cenaPuvodni,emoji,popis,kategorie,typNohy) {
+function upravitProdukt(id) {
+  const p = posledniProdukty.find(x => String(x.id) === String(id));
+  if (!p) return;
   document.getElementById('upId').value=id;
-  document.getElementById('upNazev').value=nazev;
-  document.getElementById('upZnacka').value=znacka;
-  document.getElementById('upCena').value=cena;
-  document.getElementById('upCenaPuvodni').value=cenaPuvodni||'';
-  document.getElementById('upEmoji').value=emoji||'';
-  document.getElementById('upPopis').value=popis||'';
-  document.getElementById('upTypNohy').value=typNohy||'';
-  naplnitVyberKategorii('upKategorie', kategorie);
+  document.getElementById('upNazev').value=p.nazev;
+  document.getElementById('upZnacka').value=p.znacka;
+  document.getElementById('upCena').value=p.cena;
+  document.getElementById('upCenaPuvodni').value=p.cena_puvodni||'';
+  document.getElementById('upEmoji').value=p.emoji||'';
+  document.getElementById('upPopis').value=p.popis||'';
+  document.getElementById('upTypNohy').value=p.typ_nohy||'';
+  naplnitVyberKategorii('upKategorie', p.kategorie);
   fotkyProduktId = id;
   document.getElementById('fotkyMsg').innerHTML = '';
   nacistFotkyProduktu(id);
@@ -2368,7 +2392,6 @@ async function loadUcetnictvi() {
     const data = await adminFetch(API+'/objednavky').then(r=>r.json());
     const obj = Array.isArray(data) ? data.filter(o=>o.stav!=='zrusena') : [];
     const trzby = obj.reduce((s,o)=>s+o.celkem,0);
-    const prodejnaTrzbyUcet = prodejnaData.reduce((s,p)=>s+Number(p.celkem),0);
 
     let vratkyCelkem = 0;
     try {
@@ -2376,17 +2399,30 @@ async function loadUcetnictvi() {
       vratkyCelkem = Array.isArray(v) ? v.reduce((s,x)=>s+Number(x.castka),0) : 0;
     } catch(e) {}
 
-    let poukazyVydanoZbozi = 0;
+    // Poukazy: peníze se počítají do tržby jednou – buď při prodeji poukazu (má vydano_prodej_id),
+    // nebo (u starších poukazů vydaných před touto funkcí) až při jeho uplatnění za zboží.
+    // Proto z prodejny vyřadíme uplatnění poukazů, které už byly připočítané při vydání.
+    let poukazyVydanoZbozi = 0, poukazyPrijatoZaProdej = 0, jizZapocitanoProdejId = new Set();
     try {
       const pp = await adminFetch(API+'/poukazy/pouziti/vse').then(r=>r.json());
-      poukazyVydanoZbozi = Array.isArray(pp) ? pp.reduce((s,x)=>s+Number(x.castka),0) : 0;
+      if (Array.isArray(pp)) {
+        poukazyVydanoZbozi = pp.reduce((s,x)=>s+Number(x.castka),0);
+        pp.filter(x=>x.zapocitano_pri_vydani && x.prodej_id).forEach(x=>jizZapocitanoProdejId.add(x.prodej_id));
+      }
+    } catch(e) {}
+    try {
+      const pk = await adminFetch(API+'/poukazy').then(r=>r.json());
+      poukazyPrijatoZaProdej = Array.isArray(pk) ? pk.filter(p=>p.vydano_prodej_id).reduce((s,p)=>s+Number(p.hodnota),0) : 0;
     } catch(e) {}
 
+    const prodejnaTrzbyUcet = prodejnaData.filter(p=>!jizZapocitanoProdejId.has(p.id)).reduce((s,p)=>s+Number(p.celkem),0);
     const celkoveTrzby = trzby + prodejnaTrzbyUcet - vratkyCelkem;
     document.getElementById('ucetTrzby').textContent = celkoveTrzby.toLocaleString('cs-CZ')+' Kč';
     document.getElementById('ucetVratky').textContent = '−'+vratkyCelkem.toLocaleString('cs-CZ')+' Kč';
     const elPoukazy = document.getElementById('ucetPoukazyZbozi');
     if (elPoukazy) elPoukazy.textContent = poukazyVydanoZbozi.toLocaleString('cs-CZ')+' Kč';
+    const elPoukazyProdej = document.getElementById('ucetPoukazyPrijato');
+    if (elPoukazyProdej) elPoukazyProdej.textContent = poukazyPrijatoZaProdej.toLocaleString('cs-CZ')+' Kč';
     document.getElementById('ucetPrumer').textContent = obj.length ? Math.round(trzby/obj.length).toLocaleString('cs-CZ')+' Kč' : '—';
     document.getElementById('ucetPocet').textContent = obj.length;
     const mn = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
@@ -2419,22 +2455,32 @@ async function exportUcetnictviPDF() {
     const obj = await adminFetch(API+'/objednavky').then(r=>r.json());
     const objAktivni = obj.filter(o=>o.stav!=='zrusena');
 
-    let prodejnaTrzbyPdf = 0;
-    try {
-      const p = await adminFetch(API+'/prodejna').then(r=>r.json());
-      prodejnaTrzbyPdf = Array.isArray(p) ? p.reduce((s,x)=>s+Number(x.celkem),0) : 0;
-    } catch(e) {}
-
     let vratkyCelkemPdf = 0;
     try {
       const v = await adminFetch(API+'/prodejna/vratky/vse').then(r=>r.json());
       vratkyCelkemPdf = Array.isArray(v) ? v.reduce((s,x)=>s+Number(x.castka),0) : 0;
     } catch(e) {}
 
-    let poukazyZbozíPdf = 0;
+    // Poukazy: peníze se počítají do tržby jednou – při prodeji poukazu, nebo (u starších
+    // poukazů bez záznamu o prodeji) až při jeho uplatnění. Proto z tržeb prodejny vyřadíme
+    // uplatnění poukazů, které už byly připočítané při jejich vydání.
+    let poukazyZbozíPdf = 0, poukazyPrijatoPdf = 0, jizZapocitanoProdejIdPdf = new Set();
     try {
       const pp = await adminFetch(API+'/poukazy/pouziti/vse').then(r=>r.json());
-      poukazyZbozíPdf = Array.isArray(pp) ? pp.reduce((s,x)=>s+Number(x.castka),0) : 0;
+      if (Array.isArray(pp)) {
+        poukazyZbozíPdf = pp.reduce((s,x)=>s+Number(x.castka),0);
+        pp.filter(x=>x.zapocitano_pri_vydani && x.prodej_id).forEach(x=>jizZapocitanoProdejIdPdf.add(x.prodej_id));
+      }
+    } catch(e) {}
+    try {
+      const pk = await adminFetch(API+'/poukazy').then(r=>r.json());
+      poukazyPrijatoPdf = Array.isArray(pk) ? pk.filter(p=>p.vydano_prodej_id).reduce((s,p)=>s+Number(p.hodnota),0) : 0;
+    } catch(e) {}
+
+    let prodejnaTrzbyPdf = 0;
+    try {
+      const p = await adminFetch(API+'/prodejna').then(r=>r.json());
+      prodejnaTrzbyPdf = Array.isArray(p) ? p.filter(x=>!jizZapocitanoProdejIdPdf.has(x.id)).reduce((s,x)=>s+Number(x.celkem),0) : 0;
     } catch(e) {}
 
     const trzbyEshop = objAktivni.reduce((s,o)=>s+Number(o.celkem),0);
@@ -2484,6 +2530,7 @@ async function exportUcetnictviPDF() {
         ['Tržby e-shop', trzbyEshop.toLocaleString('cs-CZ') + ' Kč'],
         ['Tržby prodejna', prodejnaTrzbyPdf.toLocaleString('cs-CZ') + ' Kč'],
         ['Vratky celkem', '−' + vratkyCelkemPdf.toLocaleString('cs-CZ') + ' Kč'],
+        ['Přijato za prodej poukazů', poukazyPrijatoPdf.toLocaleString('cs-CZ') + ' Kč'],
         ['Zboží vydané za poukazy', poukazyZbozíPdf.toLocaleString('cs-CZ') + ' Kč'],
         ['Počet e-shop objednávek', String(objAktivni.length)],
         ['Průměrná e-shop objednávka', prumer.toLocaleString('cs-CZ') + ' Kč'],
@@ -2678,7 +2725,7 @@ async function exportCSV(typ) {
     } else if (typ==='prodejna') {
       const d=await adminFetch(API+'/prodejna').then(r=>r.json());
       rows=[['Č.','Datum','Zákazník','Položky','Celkem Kč','Platba','Poznámka']];
-      d.forEach(p=>rows.push([p.id,new Date(p.datum).toLocaleDateString('cs-CZ'),p.zakaznik||'',p.polozky.map(x=>`${x.nazev} vel.${x.velikost} x${x.pocet}`).join('; '),p.celkem,p.platba||'',p.poznamka||'']));
+      d.forEach(p=>rows.push([p.id,new Date(p.datum).toLocaleDateString('cs-CZ'),p.zakaznik||'',p.polozky.map(x=>x.typ==='poukaz'?`${x.nazev} x${x.pocet}`:`${x.nazev} vel.${x.velikost} x${x.pocet}`).join('; '),p.celkem,p.platba||'',p.poznamka||'']));
       nazev='prodejna';
     } else if (typ==='vratky') {
       const d=await adminFetch(API+'/prodejna/vratky/vse').then(r=>r.json());
@@ -2722,9 +2769,18 @@ async function loadProdejna() {
     prodejnaData = Array.isArray(data) ? data : [];
   } catch(e) { prodejnaData = []; }
 
+  // Uplatnění poukazu, u kterého už byly peníze připočítané do tržeb při jeho prodeji,
+  // se do "Tržby" na téhle stránce nepočítá podruhé (viz Účetnictví).
+  let jizZapocitanoProdejIdProdejna = new Set();
+  try {
+    const pp = await adminFetch(API+'/poukazy/pouziti/vse').then(r=>r.json());
+    if (Array.isArray(pp)) pp.filter(x=>x.zapocitano_pri_vydani && x.prodej_id).forEach(x=>jizZapocitanoProdejIdProdejna.add(x.prodej_id));
+  } catch(e) {}
+  const prodejnaDoTrzby = prodejnaData.filter(p=>!jizZapocitanoProdejIdProdejna.has(p.id));
+
   const dnes = new Date().toLocaleDateString('cs-CZ');
-  const trzby = prodejnaData.reduce((s,p)=>s+Number(p.celkem),0);
-  const dnesTrzby = prodejnaData.filter(p=>new Date(p.datum).toLocaleDateString('cs-CZ')===dnes).reduce((s,p)=>s+Number(p.celkem),0);
+  const trzby = prodejnaDoTrzby.reduce((s,p)=>s+Number(p.celkem),0);
+  const dnesTrzby = prodejnaDoTrzby.filter(p=>new Date(p.datum).toLocaleDateString('cs-CZ')===dnes).reduce((s,p)=>s+Number(p.celkem),0);
   document.getElementById('prodejnaTrzby').textContent = trzby.toLocaleString('cs-CZ')+' Kč';
   document.getElementById('prodejnaPocet').textContent = prodejnaData.length;
   document.getElementById('prodejnaDnes').textContent = dnesTrzby.toLocaleString('cs-CZ')+' Kč';
@@ -2738,9 +2794,9 @@ async function loadProdejna() {
         <td><strong>#${p.id}</strong></td>
         <td>${new Date(p.datum).toLocaleDateString('cs-CZ')}<br><small>${new Date(p.datum).toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})}</small></td>
         <td>${escH(p.zakaznik)||'—'}</td>
-        <td>${p.polozky.map(x=>`${escH(x.nazev)} vel.${escH(x.velikost)} x${escH(x.pocet)}`).join(', ')}</td>
+        <td>${p.polozky.map(x=>x.typ==='poukaz'?`${escH(x.nazev)} x${escH(x.pocet)}`:`${escH(x.nazev)} vel.${escH(x.velikost)} x${escH(x.pocet)}`).join(', ')}</td>
         <td><strong>${Number(p.celkem).toLocaleString('cs-CZ')} Kč</strong></td>
-        <td>${p.platba==='hotovost'?'💵 Hotovost':p.platba==='karta'?'💳 Karta':'📱 QR'}</td>
+        <td>${platbaLabel(p.platba)}</td>
         <td style="display:flex;gap:4px">
           <button class="btn btn-print btn-sm" onclick="tiskUctenky(${i})">🖨️ Účtenka</button>
           <button class="btn btn-outline btn-sm" onclick="otevritUpravitProdej(${p.id})">✎</button>
@@ -2775,7 +2831,7 @@ function renderDenniPrehled() {
   const dny = {};
   prodejnaData.forEach(p => {
     const k = denniKlic(p.datum);
-    if (!dny[k]) dny[k] = { pocet:0, celkem:0, hotovost:0, karta:0, qr:0, poukaz:0 };
+    if (!dny[k]) dny[k] = { pocet:0, celkem:0, hotovost:0, karta:0, qr:0, poukaz:0, prevod:0 };
     dny[k].pocet++;
     dny[k].celkem += Number(p.celkem);
     if (dny[k][p.platba] != null) dny[k][p.platba] += Number(p.celkem);
@@ -2783,7 +2839,7 @@ function renderDenniPrehled() {
   const seznam = Object.entries(dny).sort((a,b)=>b[0].localeCompare(a[0]));
 
   el.innerHTML = `
-    <table><thead><tr><th>Datum</th><th>Počet prodejů</th><th>Hotovost</th><th>Karta</th><th>QR</th><th>Poukaz</th><th>Tržby celkem</th><th>Akce</th></tr></thead>
+    <table><thead><tr><th>Datum</th><th>Počet prodejů</th><th>Hotovost</th><th>Karta</th><th>QR</th><th>Poukaz</th><th>Převod</th><th>Tržby celkem</th><th>Akce</th></tr></thead>
     <tbody>${seznam.map(([k,d])=>`<tr>
       <td><strong>${new Date(k).toLocaleDateString('cs-CZ')}</strong></td>
       <td>${d.pocet}</td>
@@ -2791,6 +2847,7 @@ function renderDenniPrehled() {
       <td>${d.karta.toLocaleString('cs-CZ')} Kč</td>
       <td>${d.qr.toLocaleString('cs-CZ')} Kč</td>
       <td>${d.poukaz.toLocaleString('cs-CZ')} Kč</td>
+      <td>${d.prevod.toLocaleString('cs-CZ')} Kč</td>
       <td><strong>${d.celkem.toLocaleString('cs-CZ')} Kč</strong></td>
       <td><button class="btn btn-print btn-sm no-print" onclick="tisknoutUzaverku('${k}')">🖨️ Uzávěrka</button></td>
     </tr>`).join('')}</tbody></table>`;
@@ -2806,7 +2863,7 @@ function renderMesicniPrehled() {
   const mesice = {};
   prodejnaData.forEach(p => {
     const k = mesicniKlic(p.datum);
-    if (!mesice[k]) mesice[k] = { pocet:0, celkem:0, hotovost:0, karta:0, qr:0, poukaz:0 };
+    if (!mesice[k]) mesice[k] = { pocet:0, celkem:0, hotovost:0, karta:0, qr:0, poukaz:0, prevod:0 };
     mesice[k].pocet++;
     mesice[k].celkem += Number(p.celkem);
     if (mesice[k][p.platba] != null) mesice[k][p.platba] += Number(p.celkem);
@@ -2814,7 +2871,7 @@ function renderMesicniPrehled() {
   const seznam = Object.entries(mesice).sort((a,b)=>b[0].localeCompare(a[0]));
 
   el.innerHTML = `
-    <table><thead><tr><th>Měsíc</th><th>Počet prodejů</th><th>Hotovost</th><th>Karta</th><th>QR</th><th>Poukaz</th><th>Tržby celkem</th><th>Akce</th></tr></thead>
+    <table><thead><tr><th>Měsíc</th><th>Počet prodejů</th><th>Hotovost</th><th>Karta</th><th>QR</th><th>Poukaz</th><th>Převod</th><th>Tržby celkem</th><th>Akce</th></tr></thead>
     <tbody>${seznam.map(([k,m])=>{
       const [rok,mesic] = k.split('-');
       return `<tr>
@@ -2824,6 +2881,7 @@ function renderMesicniPrehled() {
       <td>${m.karta.toLocaleString('cs-CZ')} Kč</td>
       <td>${m.qr.toLocaleString('cs-CZ')} Kč</td>
       <td>${m.poukaz.toLocaleString('cs-CZ')} Kč</td>
+      <td>${m.prevod.toLocaleString('cs-CZ')} Kč</td>
       <td><strong>${m.celkem.toLocaleString('cs-CZ')} Kč</strong></td>
       <td><button class="btn btn-print btn-sm no-print" onclick="tisknoutMesicniUzaverku('${k}')">🖨️ Uzávěrka</button></td>
     </tr>`;}).join('')}</tbody></table>`;
@@ -2841,7 +2899,7 @@ async function tisknoutMesicniUzaverku(klicMesice) {
     vratkyMesice = Array.isArray(v) ? v.filter(x => mesicniKlic(x.vytvoreno) === klicMesice) : [];
   } catch(e) {}
 
-  const souhrn = { pocet:0, celkem:0, hotovost:0, karta:0, qr:0, poukaz:0 };
+  const souhrn = { pocet:0, celkem:0, hotovost:0, karta:0, qr:0, poukaz:0, prevod:0 };
   prodejeMesice.forEach(p => {
     souhrn.pocet++;
     souhrn.celkem += Number(p.celkem);
@@ -2891,6 +2949,7 @@ async function tisknoutMesicniUzaverku(klicMesice) {
   <div class="row"><span>Karta:</span><span>${souhrn.karta.toLocaleString('cs-CZ')} Kč</span></div>
   <div class="row"><span>QR platba:</span><span>${souhrn.qr.toLocaleString('cs-CZ')} Kč</span></div>
   <div class="row"><span>Poukaz:</span><span>${souhrn.poukaz.toLocaleString('cs-CZ')} Kč</span></div>
+  <div class="row"><span>Převod:</span><span>${souhrn.prevod.toLocaleString('cs-CZ')} Kč</span></div>
   <div class="divider"></div>
   <div class="row total"><span>Celkem (${souhrn.pocet}×):</span><span>${souhrn.celkem.toLocaleString('cs-CZ')} Kč</span></div>
   <div class="row"><span>Vratky (${vratkyMesice.length}×):</span><span>−${vratkyCelkem.toLocaleString('cs-CZ')} Kč</span></div>
@@ -2924,7 +2983,7 @@ async function tisknoutUzaverku(klicDne) {
     vratkyDne = Array.isArray(v) ? v.filter(x => denniKlic(x.vytvoreno) === klicDne) : [];
   } catch(e) {}
 
-  const souhrn = { pocet:0, celkem:0, hotovost:0, karta:0, qr:0, poukaz:0 };
+  const souhrn = { pocet:0, celkem:0, hotovost:0, karta:0, qr:0, poukaz:0, prevod:0 };
   prodejeDne.forEach(p => {
     souhrn.pocet++;
     souhrn.celkem += Number(p.celkem);
@@ -2963,6 +3022,7 @@ async function tisknoutUzaverku(klicDne) {
   <div class="row"><span>Karta:</span><span>${souhrn.karta.toLocaleString('cs-CZ')} Kč</span></div>
   <div class="row"><span>QR platba:</span><span>${souhrn.qr.toLocaleString('cs-CZ')} Kč</span></div>
   <div class="row"><span>Poukaz:</span><span>${souhrn.poukaz.toLocaleString('cs-CZ')} Kč</span></div>
+  <div class="row"><span>Převod:</span><span>${souhrn.prevod.toLocaleString('cs-CZ')} Kč</span></div>
   <div class="divider"></div>
   <div class="row total"><span>Celkem (${souhrn.pocet}×):</span><span>${souhrn.celkem.toLocaleString('cs-CZ')} Kč</span></div>
   <div class="row"><span>Vratky (${vratkyDne.length}×):</span><span>−${vratkyCelkem.toLocaleString('cs-CZ')} Kč</span></div>
@@ -2970,7 +3030,7 @@ async function tisknoutUzaverku(klicDne) {
   <div class="divider"></div>
   <div><strong>Prodeje:</strong></div>
   ${prodejeDne.map(p=>`
-  <div class="row polozka"><span>${new Date(p.datum).toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})} ${p.platba==='hotovost'?'H':p.platba==='karta'?'K':p.platba==='qr'?'QR':'P'}</span><span>${Number(p.celkem).toLocaleString('cs-CZ')} Kč</span></div>`).join('')}
+  <div class="row polozka"><span>${new Date(p.datum).toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})} ${platbaZkratka(p.platba)}</span><span>${Number(p.celkem).toLocaleString('cs-CZ')} Kč</span></div>`).join('')}
   <div class="divider"></div>
   <div class="linka-popisek">Hotovost v pokladně (skutečnost):</div>
   <div class="linka"></div>
@@ -3054,7 +3114,11 @@ async function hledatEan() {
       const res = await adminFetch(API+'/poukazy/overit/'+encodeURIComponent(ean));
       const data = await res.json();
       if (res.ok) {
-        msg.innerHTML = `<div class="success-msg">🎁 Tohle je dárkový poukaz se zůstatkem <strong>${Number(data.zustatek).toLocaleString('cs-CZ')} Kč</strong>! Dole u „Způsob platby" vyber <strong>Dárkový poukaz</strong> a zadej tento kód: <strong>${data.kod}</strong></div>`;
+        // Rovnou přepni platbu na "Dárkový poukaz" a předvyplň kód, ať stačí naskenovat jen jednou
+        document.getElementById('prodejnaPlatba').value = 'poukaz';
+        prepnoutPoukazPole();
+        document.getElementById('prodejnaPoukazKod').value = data.kod;
+        msg.innerHTML = `<div class="success-msg">🎁 Poukaz přijat – zůstatek <strong>${Number(data.zustatek).toLocaleString('cs-CZ')} Kč</strong>. Platba je nastavená na Dárkový poukaz, teď jen přidej boty do košíku.</div>`;
         document.getElementById('eanInput').value = '';
         return;
       }
@@ -3453,7 +3517,7 @@ function tiskUctenkyData(prodej, cislo) {
   <div><strong>Položky:</strong></div>
   ${prodej.polozky.map(p=>`
     <div style="margin:6px 0">
-      <div>${escH(p.nazev)} — vel. ${escH(p.velikost)}</div>
+      <div>${escH(p.nazev)}${p.typ==='poukaz'?'':' — vel. '+escH(p.velikost)}</div>
       <div class="row"><span>${p.pocet} ks × ${Number(p.cena).toLocaleString('cs-CZ')} Kč</span><span><strong>${(p.pocet*Number(p.cena)).toLocaleString('cs-CZ')} Kč</strong></span></div>
     </div>`).join('')}
   <div class="divider"></div>
@@ -3462,7 +3526,7 @@ function tiskUctenkyData(prodej, cislo) {
   <div class="row"><span>Sleva${prodej.sleva_popis?' ('+escH(prodej.sleva_popis)+')':''}:</span><span>−${Number(prodej.sleva).toLocaleString('cs-CZ')} Kč</span></div>`:''}
   <div class="row total"><span>CELKEM:</span><span>${Number(prodej.celkem).toLocaleString('cs-CZ')} Kč</span></div>
   <div style="font-size:12px;margin-top:4px">Neplátce DPH</div>
-  <div class="row"><span>Platba:</span><span>${prodej.platba==='hotovost'?'Hotovost':prodej.platba==='karta'?'Karta':'QR platba'}</span></div>
+  <div class="row"><span>Platba:</span><span>${platbaLabel(prodej.platba)}</span></div>
   ${prodej.platba==='hotovost'&&Number(prodej.hotovost_prijato)>0?`
   <div class="row"><span>Přijato:</span><span>${Number(prodej.hotovost_prijato).toLocaleString('cs-CZ')} Kč</span></div>
   <div class="row"><span>Vráceno:</span><span>${Number(prodej.hotovost_vraceno||0).toLocaleString('cs-CZ')} Kč</span></div>`:''}
@@ -3782,7 +3846,7 @@ async function loadPoukazy() {
           <td>${new Date(p.platnost_do) < new Date() && p.stav==='aktivni' ? '<span class="badge badge-zruseno">⏰ Expirovaný</span>' : (stavPopisek[p.stav]||p.stav)}</td>
           <td style="display:flex;gap:4px">
             <button class="btn btn-outline btn-sm" onclick="zobrazitPoukazDetail(${p.id})">🖨️</button>
-            <button class="btn btn-red btn-sm" onclick="smazatPoukaz(${p.id})">🗑️</button>
+            <button class="btn btn-red btn-sm" onclick="smazatPoukaz(${p.id}, ${!!p.vydano_prodej_id})">🗑️</button>
           </td>
         </tr>`).join('')}</tbody></table>`;
     }
@@ -3829,12 +3893,13 @@ async function vyriditPoukazZadost(id) {
 
     const res = await adminFetch(API+'/poukazy', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ hodnota: zadost.hodnota, zakoupeno_kde: 'eshop', kupujici_jmeno: zadost.kupujici_jmeno, kupujici_email: zadost.kupujici_email, poznamka: zadost.pro_koho ? `Pro: ${zadost.pro_koho}` : '' })
+      body: JSON.stringify({ hodnota: zadost.hodnota, zakoupeno_kde: 'eshop', kupujici_jmeno: zadost.kupujici_jmeno, kupujici_email: zadost.kupujici_email, poznamka: zadost.pro_koho ? `Pro: ${zadost.pro_koho}` : '', platba: 'prevod' })
     });
     if (res.ok) {
       const poukaz = await res.json();
       await adminFetch(API+'/poukazy/zadosti/'+id+'/stav', {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({stav:'vyrizena'})});
       loadPoukazy();
+      loadProdejna();
       zobrazitPoukazDetail(poukaz.id);
     } else {
       alert('Chyba při vydávání poukazu');
@@ -3855,7 +3920,14 @@ function otevritVydatPoukaz() {
   document.getElementById('pkEmail').value = '';
   document.getElementById('pkPoznamka').value = '';
   document.getElementById('poukazMsg').innerHTML = '';
+  document.getElementById('pkKde').value = 'prodejna';
+  document.getElementById('pkPlatba').value = 'hotovost';
   openModal('modalVydatPoukaz');
+}
+
+// Při prodeji na prodejně zákazník obvykle platí hned (hotovost), přes e-shop skoro vždy převodem
+function prepnoutPoukazKde() {
+  document.getElementById('pkPlatba').value = document.getElementById('pkKde').value === 'eshop' ? 'prevod' : 'hotovost';
 }
 
 async function ulozitPoukaz() {
@@ -3868,13 +3940,15 @@ async function ulozitPoukaz() {
         zakoupeno_kde: document.getElementById('pkKde').value,
         kupujici_jmeno: document.getElementById('pkJmeno').value.trim(),
         kupujici_email: document.getElementById('pkEmail').value.trim(),
-        poznamka: document.getElementById('pkPoznamka').value.trim()
+        poznamka: document.getElementById('pkPoznamka').value.trim(),
+        platba: document.getElementById('pkPlatba').value || null
       })
     });
     if (res.ok) {
       const poukaz = await res.json();
       closeModal('modalVydatPoukaz');
       loadPoukazy();
+      loadProdejna();
       zobrazitPoukazDetail(poukaz.id, poukaz);
     } else {
       const err = await res.json().catch(()=>({}));
@@ -3891,6 +3965,9 @@ async function zobrazitPoukazDetail(id, poukazData=null) {
   }
   if (!poukaz) return;
   poslednePoukazData = poukaz;
+
+  const btnUctenka = document.getElementById('btnUctenkaPoukaz');
+  btnUctenka.style.display = poukaz.vydano_prodej_id ? 'inline-block' : 'none';
 
   const proKoho = (poukaz.poznamka && poukaz.poznamka.startsWith('Pro:')) ? poukaz.poznamka.replace('Pro:','').trim() : '';
 
@@ -4046,8 +4123,20 @@ function tisknoutPoukazEAN() {
   pw.document.close();
 }
 
-async function smazatPoukaz(id) {
-  if (!confirm('Opravdu smazat/zrušit tento poukaz? Pokud ještě nebyl vůbec použit, smaže se úplně. Pokud už byl částečně uplatněný, jen se znepřístupní (kvůli účetní evidenci).')) return;
+// Vytiskne účtenku za peníze přijaté při prodeji samotného poukazu (ne za jeho pozdější uplatnění)
+async function tisknoutUctenkuPoukazu() {
+  if (!poslednePoukazData || !poslednePoukazData.vydano_prodej_id) return;
+  try {
+    const seznam = await adminFetch(API+'/prodejna').then(r=>r.json());
+    const prodej = Array.isArray(seznam) ? seznam.find(p => p.id === poslednePoukazData.vydano_prodej_id) : null;
+    if (!prodej) { alert('Účtenka k tomuto poukazu nebyla nalezena.'); return; }
+    tiskUctenkyData(prodej, prodej.id);
+  } catch(e) { alert('Chyba při načítání účtenky'); }
+}
+
+async function smazatPoukaz(id, maZaznamPlatby) {
+  const varovaniPlatba = maZaznamPlatby ? ' Pozor: byl u něj zaevidovaný prodej/platba – při úplném smazání se smaže i ten a peníze zmizí i z tržeb.' : '';
+  if (!confirm('Opravdu smazat/zrušit tento poukaz? Pokud ještě nebyl vůbec použit, smaže se úplně.' + varovaniPlatba + ' Pokud už byl částečně uplatněný, jen se znepřístupní (kvůli účetní evidenci).')) return;
   try {
     await adminFetch(API+'/poukazy/'+id, {method:'DELETE'});
     loadPoukazy();
@@ -4475,10 +4564,15 @@ function formatDatum(d) {
 }
 function escH(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function escHtml(s) { return escH(s); }
+
+const PLATBA_POPISKY = { hotovost:'💵 Hotovost', karta:'💳 Karta', qr:'📱 QR', poukaz:'🎁 Poukaz', prevod:'🏦 Převod' };
+function platbaLabel(platba) { return PLATBA_POPISKY[platba] || (platba || '—'); }
+const PLATBA_ZKRATKY = { hotovost:'H', karta:'K', qr:'QR', poukaz:'P', prevod:'PŘ' };
+function platbaZkratka(platba) { return PLATBA_ZKRATKY[platba] || '?'; }
 function escAttr(s) { return escH(s).replace(/"/g,'&quot;'); }
 // Pro vkládání hodnoty do JS řetězcového literálu (např. při psaní do nového
 // okna přes document.write) - escH/escAttr escapují jen HTML, ne uvozovky/zpětná lomítka.
-function escJs(s) { return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/</g,'\\x3C'); }
+function escJs(s) { return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/</g,'\\x3C').replace(/\r/g,'\\r').replace(/\n/g,'\\n').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029'); }
 
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }

@@ -33,10 +33,15 @@ router.get('/', async (req, res) => {
     // v TÉTO JEDNÉ dotazu - žádné dodatečné dotazy po produktech (N+1). Pokud
     // produkt v product_images žádnou hlavní fotku nemá, primary_image_url
     // vyjde NULL a frontend spadne zpátky na legacy p.emoji (URL nebo emoji).
+    // Druhá LATERAL (imgs) stejným způsobem doplní VŠECHNY fotky produktu
+    // (ne jen tu hlavní) jako JSON pole - e-shop z nich poskládá galerii
+    // v detailu produktu, admin galerie (routes/produktyImages.js) zůstává
+    // beze změny, tohle je jen čtení pro veřejný výpis.
     const result = await pool.query(`
       SELECT p.id, p.nazev, p.znacka, p.emoji, p.kategorie, p.cena, p.cena_puvodni, p.typ_nohy, p.popis,
              s.velikost, s.pocet_kusu, s.delka_mm, s.sirka_mm, s.dostupnost,
-             pi.url AS primary_image_url, pi.alt AS primary_image_alt
+             pi.url AS primary_image_url, pi.alt AS primary_image_alt,
+             imgs.obrazky
       FROM produkty p
       LEFT JOIN sklad s ON p.id = s.produkt_id
       LEFT JOIN LATERAL (
@@ -44,14 +49,20 @@ router.get('/', async (req, res) => {
         WHERE produkt_id = p.id AND is_primary = true
         LIMIT 1
       ) pi ON true
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(json_agg(json_build_object('url', url, 'alt', alt) ORDER BY position ASC, id ASC), '[]'::json) AS obrazky
+        FROM product_images
+        WHERE produkt_id = p.id
+      ) imgs ON true
       ORDER BY p.nazev, s.velikost
     `);
     // Transformace (formát/kvalita/resize) se do URL vkládá až tady, ne při
     // uploadu - DB drží jen originální secure_url, žádné fyzické thumbnaily.
-    const radky = result.rows.map(r => r.primary_image_url
-      ? { ...r, primary_image_url: ziskatOptimalizovanouUrl(r.primary_image_url, 700) }
-      : r
-    );
+    const radky = result.rows.map(r => ({
+      ...r,
+      primary_image_url: r.primary_image_url ? ziskatOptimalizovanouUrl(r.primary_image_url, 700) : r.primary_image_url,
+      obrazky: (r.obrazky || []).map(o => ({ ...o, url: ziskatOptimalizovanouUrl(o.url, 700) }))
+    }));
     res.json(radky);
   } catch (err) {
     res.status(500).json({ chyba: err.message });

@@ -24,6 +24,7 @@ async function initTabulky() {
         poznamka TEXT,
         vytvoreno TIMESTAMPTZ DEFAULT NOW()
       );
+      ALTER TABLE darkove_poukazy ADD COLUMN IF NOT EXISTS vydano_prodej_id INTEGER REFERENCES prodejna_prodeje(id) ON DELETE SET NULL;
       CREATE TABLE IF NOT EXISTS poukazy_pouziti (
         id SERIAL PRIMARY KEY,
         poukaz_id INTEGER REFERENCES darkove_poukazy(id) ON DELETE CASCADE,
@@ -127,39 +128,68 @@ router.post('/zadost', async (req, res) => {
 // ═══════════════════════════════
 
 // POST /api/poukazy – vydat nový poukaz (přímý prodej na prodejně, nebo po potvrzení žádosti z e-shopu)
+// Volitelné pole `platba` (hotovost/karta/qr/prevod) říká, že za poukaz teď skutečně přišly peníze –
+// v tom případě vznikne i běžný záznam prodeje (prodejna_prodeje), ať jde vytisknout účtenka a peníze
+// se započítají do tržeb. Bez `platba` (např. ruční oprava evidence) se prodej nevytváří jako dřív.
 router.post('/', vyzadovatAdmina, async (req, res) => {
-  const { hodnota, zakoupeno_kde, kupujici_jmeno, kupujici_email, poznamka } = req.body;
+  const { hodnota, zakoupeno_kde, kupujici_jmeno, kupujici_email, poznamka, platba } = req.body;
   const hodnotaCislo = Number(hodnota);
   if (!POVOLENE_HODNOTY.includes(hodnotaCislo)) {
     return res.status(400).json({ chyba: `Hodnota poukazu musí být jedna z: ${POVOLENE_HODNOTY.join(', ')} Kč.` });
   }
+  if (platba && !['hotovost', 'karta', 'qr', 'prevod'].includes(platba)) {
+    return res.status(400).json({ chyba: 'Neplatný způsob platby.' });
+  }
+
+  const client = await pool.connect();
   try {
     let kod, ean, pokus = 0;
     while (true) {
       kod = vygenerovatKod();
       ean = vygenerovatEan();
-      const existuje = await pool.query('SELECT id FROM darkove_poukazy WHERE kod = $1 OR ean = $2', [kod, ean]);
+      const existuje = await client.query('SELECT id FROM darkove_poukazy WHERE kod = $1 OR ean = $2', [kod, ean]);
       if (existuje.rows.length === 0) break;
-      if (++pokus > 10) return res.status(500).json({ chyba: 'Nepodařilo se vygenerovat unikátní kód, zkuste to znovu.' });
+      if (++pokus > 10) { client.release(); return res.status(500).json({ chyba: 'Nepodařilo se vygenerovat unikátní kód, zkuste to znovu.' }); }
     }
     const platnostDo = new Date();
     platnostDo.setFullYear(platnostDo.getFullYear() + 1);
 
-    const result = await pool.query(
+    await client.query('BEGIN');
+
+    let poukaz = (await client.query(
       `INSERT INTO darkove_poukazy (kod, ean, hodnota, zustatek, platnost_do, stav, zakoupeno_kde, kupujici_jmeno, kupujici_email, poznamka)
        VALUES ($1,$2,$3,$3,$4,'aktivni',$5,$6,$7,$8) RETURNING *`,
       [kod, ean, hodnotaCislo, platnostDo.toISOString().slice(0,10), zakoupeno_kde || 'prodejna', kupujici_jmeno || null, kupujici_email || null, poznamka || null]
-    );
-    res.json(result.rows[0]);
+    )).rows[0];
+
+    let prodej = null;
+    if (platba) {
+      const polozky = [{ nazev: `Dárkový poukaz ${hodnotaCislo} Kč`, typ: 'poukaz', pocet: 1, cena: hodnotaCislo, poukaz_kod: kod }];
+      prodej = (await client.query(
+        `INSERT INTO prodejna_prodeje (zakaznik, platba, poznamka, polozky, celkem, mezisoucet, sleva)
+         VALUES ($1,$2,$3,$4,$5,$5,0) RETURNING *`,
+        [kupujici_jmeno || null, platba, `Prodej dárkového poukazu ${kod}`, JSON.stringify(polozky), hodnotaCislo]
+      )).rows[0];
+      poukaz = (await client.query(
+        'UPDATE darkove_poukazy SET vydano_prodej_id=$1 WHERE id=$2 RETURNING *',
+        [prodej.id, poukaz.id]
+      )).rows[0];
+    }
+
+    await client.query('COMMIT');
+    res.json({ ...poukaz, prodej });
 
     // Kód pošleme zákazníkovi jen když máme e-mail (přímý prodej na prodejně
     // bez e-mailu ho prostě nedostane e-mailem - to je v pořádku, dostane ho
     // fyzicky/ústně). Až po odpovědi, ať prodleva/chyba neblokuje vydání.
-    if (result.rows[0].kupujici_email) {
-      odeslat_poukaz_zakaznikovi(result.rows[0]).catch(e => console.error('Email s kodem poukazu se nepodarilo odeslat:', e.message));
+    if (poukaz.kupujici_email) {
+      odeslat_poukaz_zakaznikovi(poukaz).catch(e => console.error('Email s kodem poukazu se nepodarilo odeslat:', e.message));
     }
   } catch (err) {
+    await client.query('ROLLBACK');
     res.status(500).json({ chyba: err.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -204,21 +234,34 @@ router.post('/pouzit', vyzadovatAdmina, async (req, res) => {
 
 // DELETE /api/poukazy/:id – zrušit poukaz (zůstává v evidenci pro účetnictví, jen se znepřístupní)
 router.delete('/:id', vyzadovatAdmina, async (req, res) => {
+  const client = await pool.connect();
   try {
-    const poukaz = await pool.query('SELECT * FROM darkove_poukazy WHERE id=$1', [req.params.id]);
-    if (poukaz.rows.length === 0) return res.status(404).json({ chyba: 'Poukaz nenalezen.' });
+    const poukaz = await client.query('SELECT * FROM darkove_poukazy WHERE id=$1', [req.params.id]);
+    if (poukaz.rows.length === 0) { client.release(); return res.status(404).json({ chyba: 'Poukaz nenalezen.' }); }
 
     const nikdyNepouzity = Number(poukaz.rows[0].zustatek) === Number(poukaz.rows[0].hodnota);
     if (nikdyNepouzity) {
-      // Nikdy nepoužitý poukaz jde bezpečně smazat celý
-      await pool.query('DELETE FROM darkove_poukazy WHERE id=$1', [req.params.id]);
+      // Nikdy nepoužitý poukaz jde bezpečně smazat celý. Pokud za něj byly zaevidované
+      // peníze (vydano_prodej_id), smažeme i ten záznam prodeje – jinak by v Prodejně/
+      // tržbách zůstala "duchová" platba bez poukazu, na který se váže.
+      await client.query('BEGIN');
+      await client.query('DELETE FROM darkove_poukazy WHERE id=$1', [req.params.id]);
+      if (poukaz.rows[0].vydano_prodej_id) {
+        await client.query('DELETE FROM prodejna_prodeje WHERE id=$1', [poukaz.rows[0].vydano_prodej_id]);
+      }
+      await client.query('COMMIT');
       return res.json({ ok: true, smazano: true });
     }
     // Už částečně/plně použitý poukaz jen zrušíme, ať zůstane účetní stopa
-    await pool.query("UPDATE darkove_poukazy SET stav='zruseny' WHERE id=$1", [req.params.id]);
+    // (i s případným vydano_prodej_id – peníze při prodeji poukazu skutečně přišly,
+    // takže záznam prodeje musí zůstat).
+    await client.query("UPDATE darkove_poukazy SET stav='zruseny' WHERE id=$1", [req.params.id]);
     res.json({ ok: true, smazano: false });
   } catch (err) {
+    await client.query('ROLLBACK').catch(()=>{});
     res.status(500).json({ chyba: err.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -247,9 +290,18 @@ router.patch('/zadosti/:id/stav', vyzadovatAdmina, async (req, res) => {
 });
 
 // GET /api/poukazy/pouziti/vse – historie uplatnění poukazů (pro účetnictví)
+// zapocitano_pri_vydani = true znamená, že peníze za tento poukaz už byly připsané do tržeb
+// v okamžiku jeho prodeje (má vydano_prodej_id) – takže tahle jeho útrata se do tržeb podruhé
+// nepočítá. U starších poukazů (vydaných před touto funkcí) je false a útrata se do tržeb počítá
+// tady, jako dřív.
 router.get('/pouziti/vse', vyzadovatAdmina, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM poukazy_pouziti ORDER BY vytvoreno DESC');
+    const result = await pool.query(`
+      SELECT pp.*, (dp.vydano_prodej_id IS NOT NULL) AS zapocitano_pri_vydani
+      FROM poukazy_pouziti pp
+      JOIN darkove_poukazy dp ON dp.id = pp.poukaz_id
+      ORDER BY pp.vytvoreno DESC
+    `);
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ chyba: err.message });

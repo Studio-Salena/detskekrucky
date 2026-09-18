@@ -49,6 +49,17 @@ test('escJs() escapuje uvozovku a zpětné lomítko (ochrana proti úniku z JS �
   assert.equal(vm.runInContext(zabaleny, sandbox), payloadJs);
 });
 
+test('escJs() escapuje odřádkování (regrese: víceřádkový popis produktu rozbíjel onclick="upravitProdukt(...)")', () => {
+  // Textarea s popisem produktu běžně obsahuje Enter (\n). Neescapovaný raw
+  // line break uvnitř '...' řetězce v HTML atributu je SyntaxError -> prohlížeč
+  // handler tiše zahodí a tlačítko "Upravit" nedělá nic. Viz oprava.
+  const payloadNewline = 'první řádek\ndruhý řádek\r\ntřetí';
+  const vysledek = vm.runInContext(`escJs(${JSON.stringify(payloadNewline)})`, sandbox);
+  assert.equal(/[\r\n]/.test(vysledek), false, 'výstup nesmí obsahovat syrový raw line break');
+  const zabaleny = `'${vysledek}'`;
+  assert.equal(vm.runInContext(zabaleny, sandbox), payloadNewline);
+});
+
 test('data z objednávky (poznámka) se v admin.html renderují přes escH', () => {
   // Sanity check, že klíčová místa (viz commit) opravdu volají escH/escAttr na
   // zákaznických polích - kdyby někdo escH omylem smazal, tenhle test spadne.
@@ -62,8 +73,14 @@ test('atributové kontexty (onclick s vloženým API řetězcem) používají es
   // jde jak do HTML atributu (onclick="..."), tak do vnořeného JS řetězce ('...').
   assert.match(ADMIN_HTML, /onclick="rychleNaskladnit\(\$\{s\.id\},\$\{s\.velikost\},'\$\{escAttr\(escJs\(s\.nazev\)\)\}'\)"/);
   assert.match(ADMIN_HTML, /onclick="upravitSkladPolozku\([^"]*escAttr\(escJs\(s\.nazev\)\)[^"]*"/);
-  assert.match(ADMIN_HTML, /onclick="upravitProdukt\([^"]*escAttr\(escJs\(p\.nazev\)\)[^"]*"/);
   assert.match(ADMIN_HTML, /onclick="smazatKategorii\(\$\{k\.id\},'\$\{escAttr\(escJs\(k\.nazev\)\)\}'\)"/);
+});
+
+test('upravitProdukt() nevkládá data produktu do onclick atributu (jen ID) - vyhne se celé té atributové/JS-řetězcové escapovací třídě problémů (víceřádkový popis dřív rozbíjel onclick, viz oprava)', () => {
+  assert.match(ADMIN_HTML, /onclick="upravitProdukt\(\$\{p\.id\}\)"/);
+  // Data se dohledávají podle ID z posledniProdukty a nastavují přes .value/textContent,
+  // ne přes vkládání do HTML - takže žádný název/popis/značka tu nemůže obsahovat XSS.
+  assert.match(ADMIN_HTML, /function upravitProdukt\(id\) \{\s*const p = posledniProdukty\.find/);
 });
 
 test('obrázek produktu (src atribut) je escAttr-ovaný', () => {
