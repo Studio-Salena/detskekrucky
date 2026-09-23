@@ -5,7 +5,7 @@ Web a e-shop pro obchod s barefoot obuví pro děti (majitelka: Monika Škarpich
 ## Stack
 
 - **Backend:** Node.js / Express, entry point `index.js`
-- **Frontend:** statický web (`index.html`), GitHub Pages (`hasalovaalena-glitch/detskekrucky`)
+- **Frontend:** statický web (`index.html`), GitHub Pages (`Studio-Salena/detskekrucky`)
 - **Databáze:** self-hosted PostgreSQL na Forpsi VPS (produkční DB není Supabase)
 - **Hosting backendu:** Render – `detskekrucky1.onrender.com`
 - **Storage:** žádné dedikované product-image storage zatím není implementované; legacy obrázky používají externí URL uloženou u produktu. Cloudinary zatím není implementované.
