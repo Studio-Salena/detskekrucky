@@ -103,7 +103,7 @@ async function ziskatFakturuCislo(objednavkaId) {
 }
 
 const DOPRAVA_CENY = { zasilkovna: 79, ceska_posta: 89, osobni_odber: 0 };
-const DOPRAVA_ZDARMA_OD = 800;
+const DOPRAVA_ZDARMA_OD = 2000;
 
 function vypocitatDopravu(doprava, mezisoucet) {
   if (doprava === 'osobni_odber') return 0;

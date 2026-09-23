@@ -110,7 +110,7 @@ nav{display:flex;align-items:center;gap:8px}
 .products-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:24px}
 .product-card{background:#fff;border-radius:24px;overflow:hidden;border:2px solid var(--tan-light);transition:all 0.3s;cursor:pointer;position:relative}
 .product-card:hover{transform:translateY(-6px);box-shadow:0 16px 48px rgba(139,69,19,0.2);border-color:var(--tan);background:linear-gradient(180deg,#fff,#fffaf5)}
-.product-img{height:160px;display:flex;align-items:center;justify-content:center;font-size:4rem;position:relative}
+.product-img{height:220px;display:flex;align-items:center;justify-content:center;font-size:4rem;position:relative}
 .product-img-toddler{background:linear-gradient(135deg,#fff0e6,#fde8d0)}
 .product-img-boys{background:linear-gradient(135deg,#e8f4fd,#d6eaf8)}
 .product-img-girls{background:linear-gradient(135deg,#fce8f3,#f7d6e0)}
@@ -259,7 +259,7 @@ footer{background:linear-gradient(135deg,#3d2b1f,#6b4c35);padding:32px;text-alig
   /* PRODUCTS */
   .products-section{padding:16px}
   .products-grid{grid-template-columns:repeat(2,1fr);gap:12px}
-  .product-img{height:120px;font-size:3rem}
+  .product-img{height:170px;font-size:3rem}
   .product-info{padding:12px}
   .product-brand{font-size:0.7rem}
   .product-name{font-size:0.88rem}
@@ -822,7 +822,7 @@ let aktivniProdukt = null;
 let vybranaVelikost = null;
 
 const DOPRAVA_CENY = { zasilkovna: 79, ceska_posta: 89, osobni_odber: 0 };
-const DOPRAVA_ZDARMA_OD = 800;
+const DOPRAVA_ZDARMA_OD = 2000;
 function vypocitatDopravu(doprava, mezisoucet) {
   if (doprava === 'osobni_odber') return 0;
   if (mezisoucet >= DOPRAVA_ZDARMA_OD) return 0;
@@ -1010,8 +1010,8 @@ function jeBezpecnaHttpUrl(hodnota) {
 // Všechny hodnoty jdoucí do atributů (src/alt) i do textu jsou escapované -
 // jde o admin-zadaná data (název produktu, ALT text fotky), ne data přímo od
 // zákazníka, ale pořád ne o nic, čemu by se dalo věřit v innerHTML bez escapu.
-function obrazekProduktuHtml(p, vyskaPx) {
-  const styl = `width:100%;height:${vyskaPx}px;object-fit:cover;border-radius:12px`;
+function obrazekProduktuHtml(p, vyska) {
+  const styl = `width:100%;height:${vyska};object-fit:contain;border-radius:12px`;
   if (jeBezpecnaHttpUrl(p.primaryImageUrl)) {
     const alt = p.primaryImageAlt || p.nazev || '';
     return `<img src="${escAttr(p.primaryImageUrl)}" alt="${escAttr(alt)}" loading="lazy" decoding="async" style="${styl}">`;
@@ -1035,7 +1035,7 @@ function zobrazitProdukty(produkty) {
     const cenaText = (p.cenaOd ? 'od ' : '') + p.cena + ' Kč';
     return `<div class="product-card" onclick="openDetail('${klicJs}')">
       <div class="product-img ${bg.trida}" style="${bg.styl}">
-        ${obrazekProduktuHtml(p, 220)}
+        ${obrazekProduktuHtml(p, "100%")}
         ${p.cena_puvodni ? '<span class="product-badge sale">SLEVA</span>' : ''}
         ${p.maDodavatele ? '<span class="product-badge dodavatel">🚚 U dodavatele</span>' : ''}
       </div>
@@ -1170,7 +1170,7 @@ function openDetail(klic) {
   vybranaVelikost = null;
   if (!aktivniProdukt) return;
   detailAktivniObrazekUrl = aktivniProdukt.primaryImageUrl;
-  document.getElementById('detailIcon').innerHTML = obrazekProduktuHtml(aktivniProdukt, 200);
+  document.getElementById('detailIcon').innerHTML = obrazekProduktuHtml(aktivniProdukt, "200px");
   vykreslitDetailThumbs();
   document.getElementById('detailBrand').textContent = aktivniProdukt.znacka;
   document.getElementById('detailName').textContent = aktivniProdukt.nazev;
@@ -1202,7 +1202,7 @@ function vykreslitDetailThumbs() {
     const aktivni = o.url === detailAktivniObrazekUrl;
     return `<img src="${escAttr(o.url)}" alt="${escAttr(o.alt || aktivniProdukt.nazev || '')}" loading="lazy" decoding="async"
       onclick="vybratDetailFotku(${i})"
-      style="width:56px;height:56px;object-fit:cover;border-radius:8px;flex:0 0 auto;cursor:pointer;border:2px solid ${aktivni ? 'var(--brown)' : 'transparent'}">`;
+      style="width:56px;height:56px;object-fit:contain;background:#fff8f0;border-radius:8px;flex:0 0 auto;cursor:pointer;border:2px solid ${aktivni ? 'var(--brown)' : 'transparent'}">`;
   }).join('');
 }
 
@@ -1212,7 +1212,7 @@ function vybratDetailFotku(index) {
   if (!o || !jeBezpecnaHttpUrl(o.url)) return;
   detailAktivniObrazekUrl = o.url;
   const alt = o.alt || aktivniProdukt.nazev || '';
-  document.getElementById('detailIcon').innerHTML = `<img src="${escAttr(o.url)}" alt="${escAttr(alt)}" loading="lazy" decoding="async" style="width:100%;height:200px;object-fit:cover;border-radius:12px">`;
+  document.getElementById('detailIcon').innerHTML = `<img src="${escAttr(o.url)}" alt="${escAttr(alt)}" loading="lazy" decoding="async" style="width:100%;height:200px;object-fit:contain;border-radius:12px">`;
   vykreslitDetailThumbs();
 }
 

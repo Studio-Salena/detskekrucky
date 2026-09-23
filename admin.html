@@ -156,7 +156,7 @@ tr:hover td{background:#fffaf5}
 .fotky-dropzone.drag{border-color:var(--brown);background:rgba(139,69,19,0.05)}
 .fotka-karta{width:130px;border:2px solid var(--tan-light);border-radius:10px;padding:6px;text-align:center}
 .fotka-karta.primarni{border-color:var(--brown)}
-.fotka-karta img{width:100%;height:90px;object-fit:cover;border-radius:6px;display:block}
+.fotka-karta img{width:100%;height:90px;object-fit:contain;background:#fff8f0;border-radius:6px;display:block}
 .fotka-karta input[type=text]{width:100%;font-size:0.72rem;margin:4px 0;padding:3px;border:1px solid var(--tan-light);border-radius:4px;font-family:inherit;box-sizing:border-box}
 select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px;font-size:0.78rem;cursor:pointer;font-family:'Nunito',sans-serif}
 .filter-pills{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
@@ -2099,7 +2099,7 @@ async function loadProdukty() {
       <table><thead><tr><th><input type="checkbox" onchange="vybratVseProdukty(this)"></th><th>ID</th><th>Název</th><th>Značka</th><th>Kategorie</th><th>Cena</th><th>Velikosti / ks</th><th>Akce</th></tr></thead>
       <tbody>${list.map(p=>`<tr>
         <td><input type="checkbox" data-id="${p.id}" onchange="toggleVybranyProdukt(this)" ${vybraneProdukty.has(String(p.id))?'checked':''}></td>
-        <td>${p.id}</td><td>${p.emoji && p.emoji.startsWith("http") ? `<img src="${escAttr(p.emoji)}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;margin-right:8px">` : escH(p.emoji) || ""}  <strong>${escH(p.nazev)}</strong></td><td>${escH(p.znacka)}</td>
+        <td>${p.id}</td><td>${p.emoji && p.emoji.startsWith("http") ? `<img src="${escAttr(p.emoji)}" style="width:40px;height:40px;object-fit:contain;background:#fff8f0;border-radius:6px;margin-right:8px">` : escH(p.emoji) || ""}  <strong>${escH(p.nazev)}</strong></td><td>${escH(p.znacka)}</td>
         <td>${escH(p.kategorie)}</td><td><strong>${p.cena.toLocaleString('cs-CZ')} Kč</strong></td>
         <td style="font-size:0.82rem;color:var(--text-light)"><strong>${p.velikostiSeznam.length?p.velikostiSeznam.sort((a,b)=>a-b).join(', '):'—'}</strong> / ${p.celkem} ks <span style="display:block">(EAN viz záložka Sklad)</span></td>
         <td style="display:flex;gap:4px">
