@@ -173,7 +173,7 @@ nav{display:flex;align-items:center;gap:8px}
 .size-label{font-weight:700;font-size:0.85rem;color:var(--text-light);margin-bottom:10px}
 .sizes-grid{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px}
 .size-btn{padding:8px 14px;border:2px solid var(--tan-light);border-radius:8px;cursor:pointer;font-weight:700;font-size:0.85rem;background:#fff;transition:all 0.2s;font-family:'Nunito',sans-serif}
-.size-btn:hover:not(:disabled){border-color:var(--brown);color:var(--brown)}
+@media (hover:hover){.size-btn:hover:not(:disabled):not(.selected){border-color:var(--brown);color:var(--brown)}}
 .size-btn.selected{background:var(--brown);color:#fff;border-color:var(--brown)}
 .size-btn:disabled{opacity:0.4;cursor:not-allowed}
 .modal-add-btn{width:100%;padding:16px;background:var(--brown);color:#fff;border:none;border-radius:12px;font-family:'Nunito',sans-serif;font-weight:700;font-size:1rem;cursor:pointer;margin-bottom:12px;box-shadow:0 4px 15px rgba(139,69,19,0.3)}
@@ -966,6 +966,7 @@ async function nacistProdukty() {
     });
     naplnitFiltrVelikosti();
     zobrazitProdukty(vsechnyProdukty);
+    aktualizovatKosikPodleSkladu();
   } catch(e) {
     document.getElementById('productsGrid').innerHTML = '<div class="empty">Nepodařilo se načíst produkty. Zkuste to prosím znovu.</div>';
   }
@@ -1264,13 +1265,58 @@ function addToCart(produkt, velikost) {
   if (!velData) return;
   const key = velData.produkt_id + '_' + velikost;
   const existujici = kosik.find(i => i.key === key);
+  const max = maxKusuVelikosti(velData);
   if (existujici) {
+    existujici.max = max;
+    if (max != null && existujici.pocet >= max) { showToast(hlaskaMaxKusu(max)); return; }
     existujici.pocet++;
   } else {
-    kosik.push({key, id: velData.produkt_id, nazev: produkt.nazev, znacka: produkt.znacka, emoji: produkt.emoji, velikost, cena: velData.cena, pocet: 1});
+    kosik.push({key, id: velData.produkt_id, nazev: produkt.nazev, znacka: produkt.znacka, emoji: produkt.emoji, foto: fotoProduktu(produkt), velikost, cena: velData.cena, pocet: 1, max});
   }
   ulozitKosik();
   showToast(produkt.nazev + ' přidáno do košíku!');
+}
+
+// Kolik kusů dané velikosti jde objednat. Velikosti "u dodavatele" nemají
+// sledovanou zásobu (server je pustí bez ohledu na pocet_kusu) - bez limitu.
+function maxKusuVelikosti(velData) {
+  if (velData.dostupnost === 'dodavatel') return null;
+  return Math.max(0, Number(velData.pocet) || 0);
+}
+
+function hlaskaMaxKusu(max) {
+  return max === 1 ? 'Této velikosti máme skladem jen 1 kus.' : `Této velikosti máme skladem jen ${max} ks.`;
+}
+
+function fotoProduktu(p) {
+  if (jeBezpecnaHttpUrl(p.primaryImageUrl)) return p.primaryImageUrl;
+  if (jeBezpecnaHttpUrl(p.emoji)) return p.emoji;
+  return null;
+}
+
+// Košík přežívá v localStorage, takže po načtení produktů se u položek
+// dorovná aktuální skladová zásoba a fotka (starší košíky fotku ani limit
+// uložené nemají, a zásoba se mezitím mohla změnit).
+function aktualizovatKosikPodleSkladu() {
+  let zmena = false;
+  kosik.forEach(item => {
+    for (const p of vsechnyProdukty) {
+      const v = p.velikosti.find(v => v.produkt_id === item.id && String(v.velikost) === String(item.velikost));
+      if (!v) continue;
+      item.max = maxKusuVelikosti(v);
+      item.foto = fotoProduktu(p);
+      if (item.max != null && item.max > 0 && item.pocet > item.max) item.pocet = item.max;
+      zmena = true;
+      break;
+    }
+  });
+  if (zmena) ulozitKosik();
+}
+
+function ikonaPolozkyKosiku(item) {
+  const url = jeBezpecnaHttpUrl(item.foto) ? item.foto : (jeBezpecnaHttpUrl(item.emoji) ? item.emoji : null);
+  if (url) return `<img src="${escAttr(url)}" alt="${escAttr(item.nazev)}" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:contain;border-radius:12px">`;
+  return item.emoji || '&#128098;';
 }
 
 function ulozitKosik() {
@@ -1299,14 +1345,14 @@ function renderKosik() {
   }
   el.innerHTML = kosik.map((item, idx) => `
     <div class="cart-item">
-      <div class="cart-item-icon">${item.emoji}</div>
+      <div class="cart-item-icon">${ikonaPolozkyKosiku(item)}</div>
       <div class="cart-item-info">
         <div class="cart-item-name">${escHtml(item.nazev)}</div>
         <div class="cart-item-detail">${escHtml(item.znacka)} | Vel. ${escHtml(item.velikost)}</div>
         <div class="cart-item-qty">
           <button class="cart-qty-btn" onclick="zmenitPocetVKosiku(${idx},-1)" aria-label="Ubrat kus">&#8722;</button>
           <span>${item.pocet}</span>
-          <button class="cart-qty-btn" onclick="zmenitPocetVKosiku(${idx},1)" aria-label="Přidat kus">&#43;</button>
+          <button class="cart-qty-btn" onclick="zmenitPocetVKosiku(${idx},1)" aria-label="Přidat kus"${item.max != null && item.pocet >= item.max ? ' disabled title="Víc kusů skladem nemáme" style="opacity:0.35;cursor:not-allowed"' : ''}>&#43;</button>
         </div>
         <div class="cart-item-price">${item.cena * item.pocet} Kč</div>
       </div>
@@ -1317,6 +1363,7 @@ function renderKosik() {
 function zmenitPocetVKosiku(idx, delta) {
   const item = kosik[idx];
   if (!item) return;
+  if (delta > 0 && item.max != null && item.pocet >= item.max) { showToast(hlaskaMaxKusu(item.max)); return; }
   item.pocet += delta;
   if (item.pocet <= 0) {
     kosik.splice(idx, 1);
