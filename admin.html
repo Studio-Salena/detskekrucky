@@ -971,6 +971,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <button class="btn btn-outline" onclick="tisknoutPoukazEAN()">🏷️ Jen EAN</button>
       <button class="btn btn-outline" onclick="tisknoutPoukaz(false)">🖨️ Poukaz bez EAN</button>
       <button class="btn btn-primary" onclick="tisknoutPoukaz(true)">🖨️ Poukaz s EAN</button>
+      <button class="btn btn-green" onclick="tisknoutVanocniPoukaz()">🎄 Vánoční poukaz</button>
     </div>
   </div>
 </div>
@@ -4153,6 +4154,61 @@ function tisknoutPoukaz(sEanem = true) {
   <script>
     ${zobrazitEan ? `JsBarcode('#bc', '${escJs(p.ean)}', {format:'EAN13', width:1.8, height:48, fontSize:13, margin:0});` : ''}
     window.onload = () => setTimeout(()=>window.print(), 400);
+  <\/script>
+  </body></html>`);
+  pw.document.close();
+}
+
+// Vánoční poukaz - hotový obrázek (vanocni-poukaz.png, 1536x1024) jako podklad
+// a údaje vepsané do jeho prázdných řádků. Pozice jsou v % rozměrů obrázku,
+// velikost písma v cqw (šířka poukazu), takže sedí při jakékoli velikosti tisku.
+function tisknoutVanocniPoukaz() {
+  if (!poslednePoukazData) return;
+  const p = poslednePoukazData;
+  const proKoho = (p.poznamka && p.poznamka.startsWith('Pro:')) ? p.poznamka.replace('Pro:','').trim() : '';
+  const zakladUrl = window.location.origin + window.location.pathname.replace('admin.html','');
+  const radek = (top, popisek, hodnota) =>
+    `<div class="radek" style="top:${top}%"><span class="popisek">${popisek}</span> <span class="hodnota">${escH(hodnota)}</span></div>`;
+  const pw = window.open('','_blank','width=1000,height=720');
+  pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Vánoční poukaz ${escH(p.kod)}</title>
+  <base href="${zakladUrl}">
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></scr` + `ipt>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;800;900&display=swap" rel="stylesheet">
+  <style>
+    @page { size: A4 landscape; margin: 8mm; }
+    * { box-sizing: border-box; }
+    body { margin:0; padding:20px; background:#e8e2d5; font-family:'Nunito',sans-serif; }
+    .poukaz { position:relative; width:100%; max-width:1100px; margin:0 auto; container-type:inline-size; }
+    .poukaz img.podklad { display:block; width:100%; height:auto; }
+    .hodnota-castka { position:absolute; left:35.5%; width:27.5%; top:52.4%; text-align:center;
+      font-weight:900; font-size:3.4cqw; color:#4f5d3f; line-height:1; }
+    .radek { position:absolute; left:33.2%; width:38%; font-size:1.45cqw; color:#4a3a2c; line-height:1; transform:translateY(-100%); }
+    .radek .popisek { font-weight:600; color:#7a6a58; }
+    .radek .hodnota { font-weight:800; color:#3d2b1f; }
+    .ean { position:absolute; left:12.5%; top:77%; width:16%; background:rgba(255,255,255,0.75); padding:0.4cqw; border-radius:0.4cqw; }
+    .ean svg { display:block; width:100%; height:auto; }
+    @media print { body { background:#fff; padding:0; } .poukaz { max-width:none; } }
+  </style></head><body>
+  <div class="poukaz">
+    <img class="podklad" src="vanocni-poukaz.png" alt="">
+    <div class="hodnota-castka">${Number(p.hodnota).toLocaleString('cs-CZ')}</div>
+    ${radek(66.4, 'Pro:', proKoho)}
+    ${radek(72.5, 'Věnováno od:', '')}
+    ${radek(78.4, 'Platnost do:', new Date(p.platnost_do).toLocaleDateString('cs-CZ'))}
+    ${radek(84.0, 'Číslo poukazu:', p.kod)}
+    ${p.ean ? '<div class="ean"><svg id="bc"></svg></div>' : ''}
+  </div>
+  <script>
+    // Tisk až po načtení obrázku i knihovny na EAN, jinak by vyšel prázdný papír / bez kódu
+    window.addEventListener('load', () => {
+      ${p.ean ? `try { JsBarcode('#bc', '${escJs(p.ean)}', {format:'EAN13', width:2, height:50, fontSize:14, margin:0, background:'transparent'});
+        // viewBox, ať se kód při tisku zmenší celý, ne jen ořízne
+        const bc = document.getElementById('bc');
+        bc.setAttribute('viewBox', '0 0 ' + parseFloat(bc.getAttribute('width')) + ' ' + parseFloat(bc.getAttribute('height')));
+        bc.removeAttribute('width'); bc.removeAttribute('height');
+      } catch(e) { document.querySelector('.ean').style.display = 'none'; }` : ''}
+      setTimeout(() => window.print(), 400);
+    });
   <\/script>
   </body></html>`);
   pw.document.close();
