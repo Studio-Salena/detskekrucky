@@ -493,6 +493,21 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <div class="table-header"><h3>Seznam kategorií</h3><button class="refresh-btn" onclick="loadKategorie()">↻ Obnovit</button></div>
         <div id="kategorieTable"><div class="loading">Načítám...</div></div>
       </div>
+      <div class="table-wrap" style="margin-top:20px;padding:20px">
+        <h3 style="margin-bottom:6px">🎁 Dlaždice „Dárkové poukazy“</h3>
+        <p style="color:var(--text-light);font-size:0.85rem;margin-bottom:14px">Poslední dlaždice v e-shopu. Bez nahraného obrázku ukazuje náhled vašeho poukazu – nahráním ho můžeš nahradit vlastním obrázkem.</p>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div style="width:160px;height:70px;border:1px dashed var(--tan-light);border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fff">
+            <img id="poukazDlazdiceNahled" src="poukaz-dlazdice.png" alt="" style="max-width:100%;max-height:100%;object-fit:contain">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <input type="file" id="poukazDlazdiceSoubor" accept="image/*" style="display:none" onchange="nahratObrazekPoukazDlazdice()">
+            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('poukazDlazdiceSoubor').click()">📷 Nahrát vlastní obrázek</button>
+            <button type="button" class="btn btn-red btn-sm" id="poukazDlazdiceOdebrat" style="display:none" onclick="odebratObrazekPoukazDlazdice()">↩️ Vrátit výchozí náhled poukazu</button>
+          </div>
+        </div>
+        <div id="poukazDlazdiceMsg" style="margin-top:8px"></div>
+      </div>
     </div>
 
     <!-- ÚČETNICTVÍ -->
@@ -4250,6 +4265,7 @@ async function ulozitVratku() {
 // KATEGORIE
 async function loadKategorie() {
   document.getElementById('kategorieTable').innerHTML = '<div class="loading">Načítám...</div>';
+  nacistPoukazDlazdici();
   try {
     const data = await adminFetch(API+'/kategorie').then(r=>r.json());
     vsechnyKategorieData = data;
@@ -4382,6 +4398,47 @@ async function odebratObrazekKategorie() {
     zobrazitObrazekKategorie(null);
     msg.innerHTML = '<div class="success-msg">✅ Obrázek odebrán</div>';
     loadKategorie();
+  } catch(e) { msg.innerHTML = '<div class="error-msg">Chyba spojení</div>'; }
+}
+
+function zobrazitPoukazDlazdici(url) {
+  document.getElementById('poukazDlazdiceNahled').src = url || 'poukaz-dlazdice.png';
+  document.getElementById('poukazDlazdiceOdebrat').style.display = url ? 'inline-flex' : 'none';
+}
+
+async function nacistPoukazDlazdici() {
+  try {
+    const data = await fetch(API+'/poukaz-dlazdice').then(r=>r.json());
+    zobrazitPoukazDlazdici(data.obrazek_url);
+  } catch(e) { /* necháme výchozí náhled */ }
+}
+
+async function nahratObrazekPoukazDlazdice() {
+  const input = document.getElementById('poukazDlazdiceSoubor');
+  const soubor = input.files[0];
+  input.value = '';
+  if (!soubor) return;
+  const msg = document.getElementById('poukazDlazdiceMsg');
+  msg.innerHTML = '<div class="loading" style="padding:4px">Nahrávám...</div>';
+  const fd = new FormData();
+  fd.append('obrazek', soubor);
+  try {
+    const res = await adminFetch(API+'/poukaz-dlazdice/obrazek', { method:'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) { msg.innerHTML = `<div class="error-msg">${escH(data.chyba||'Nahrání selhalo')}</div>`; return; }
+    zobrazitPoukazDlazdici(data.obrazek_url);
+    msg.innerHTML = '<div class="success-msg">✅ Obrázek nahrán</div>';
+  } catch(e) { msg.innerHTML = '<div class="error-msg">Chyba spojení</div>'; }
+}
+
+async function odebratObrazekPoukazDlazdice() {
+  if (!confirm('Odebrat vlastní obrázek? Dlaždice pak ukáže výchozí náhled poukazu.')) return;
+  const msg = document.getElementById('poukazDlazdiceMsg');
+  try {
+    const res = await adminFetch(API+'/poukaz-dlazdice/obrazek', { method:'DELETE' });
+    if (!res.ok) { msg.innerHTML = '<div class="error-msg">Odebrání selhalo</div>'; return; }
+    zobrazitPoukazDlazdici(null);
+    msg.innerHTML = '<div class="success-msg">✅ Vrácen výchozí náhled</div>';
   } catch(e) { msg.innerHTML = '<div class="error-msg">Chyba spojení</div>'; }
 }
 

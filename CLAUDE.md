@@ -8,7 +8,7 @@ Web a e-shop pro obchod s barefoot obuví pro děti (majitelka: Monika Škarpich
 - **Frontend:** statický web (`index.html`), GitHub Pages (`Studio-Salena/detskekrucky`)
 - **Databáze:** self-hosted PostgreSQL na Forpsi VPS (produkční DB není Supabase)
 - **Hosting backendu:** Render – `detskekrucky1.onrender.com`
-- **Storage:** Cloudinary (`lib/cloudinary.js`, klíče v env na Renderu) – fotky produktů (`routes/produktyImages.js`, tabulka `product_images`) a obrázky dlaždic kategorií (`routes/kategorie.js`, sloupce `obrazek_url`/`obrazek_key`). Kontrola nahrávaných souborů je sdílená v `lib/overeniObrazku.js`. Legacy produkty mají externí URL v `produkty.emoji`.
+- **Storage:** Cloudinary (`lib/cloudinary.js`, klíče v env na Renderu) – fotky produktů (`routes/produktyImages.js`, tabulka `product_images`) a obrázky dlaždic kategorií (`routes/kategorie.js`, sloupce `obrazek_url`/`obrazek_key`) a dlaždice Dárkové poukazy (`routes/poukazDlazdice.js`, `nastaveni.poukazDlazdice`, výchozí `poukaz-dlazdice.png`). Kontrola nahrávaných souborů je sdílená v `lib/overeniObrazku.js`. Legacy produkty mají externí URL v `produkty.emoji`.
 - **Lokální cesta:** `C:\projekty\detskekrucky\`
 - **Prostředí:** Windows, VS Code, PowerShell – git příkazy se zadávají jednotlivě, ne řetězené
 

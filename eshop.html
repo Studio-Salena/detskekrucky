@@ -83,6 +83,7 @@ nav{display:flex;align-items:center;gap:8px}
 .kategorie-dlazdice .ikona{font-size:2.2rem;margin-bottom:8px;display:block}
 /* Obrázek místo emoji - stejná výška jako emoji, ať dlaždice nevyčnívá */
 .kategorie-dlazdice img.ikona{width:64px;height:44px;object-fit:contain;margin:0 auto 8px;border-radius:8px}
+.kategorie-dlazdice img.ikona.poukaz{width:100%;max-width:110px;border-radius:3px}
 .kategorie-dlazdice .nazev{font-weight:700;font-size:0.85rem;color:var(--brown)}
 .kategorie-skeleton{background:linear-gradient(90deg,#f0ebe3 25%,#f8f5f0 50%,#f0ebe3 75%);background-size:200% 100%;animation:kategorieSkeletonPulz 1.4s ease-in-out infinite;border-radius:18px;height:112px}
 @keyframes kategorieSkeletonPulz{0%{background-position:200% 0}100%{background-position:-200% 0}}
@@ -880,6 +881,16 @@ function ziskatPozadiKategorie(slug) {
 const KATEGORIE_CACHE_KEY = 'kategorie_cache_v1';
 const KATEGORIE_CACHE_TTL_MS = 3 * 60 * 1000;
 
+// Dlaždice "Dárkové poukazy": výchozí náhled poukazu, nebo obrázek nahraný
+// v adminu (Kategorie -> Dlaždice Dárkové poukazy).
+let poukazDlazdiceUrl = 'poukaz-dlazdice.png';
+fetch(API + '/poukaz-dlazdice').then(r => r.json()).then(data => {
+  if (!jeBezpecnaHttpUrl(data.obrazek_url)) return;
+  poukazDlazdiceUrl = data.obrazek_url;
+  const img = document.getElementById('poukazDlazdiceObrazek');
+  if (img) img.src = poukazDlazdiceUrl;
+}).catch(() => {});
+
 function vykreslitKategorieGrid(seznam) {
   const dlazdice = seznam.map(k => `
     <div class="kategorie-dlazdice" data-slug="${k.slug}" onclick="vybratKategoriiZGridu('${k.slug}')">
@@ -891,7 +902,7 @@ function vykreslitKategorieGrid(seznam) {
   // Dárkový poukaz není kategorie produktů, jen rychlá zkratka na konci rozcestníku.
   const poukazDlazdice = `
     <div class="kategorie-dlazdice" onclick="openModal('modalPoukazy')">
-      <span class="ikona">&#127873;</span>
+      <img class="ikona poukaz" id="poukazDlazdiceObrazek" src="${escAttr(poukazDlazdiceUrl)}" alt="" loading="lazy" decoding="async">
       <div class="nazev">Dárkové poukazy</div>
     </div>`;
   document.getElementById('kategorieGrid').innerHTML = dlazdice + poukazDlazdice;
