@@ -12,6 +12,16 @@ if (!JWT_SECRET) {
   console.error('CHYBA: JWT_SECRET není nastaven v proměnných prostředí! Přihlašování zákazníků nebude fungovat bezpečně.');
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_DELKA_HESLA = 5;
+
+function validovatRegistraci({ jmeno, email, heslo }) {
+  if (!jmeno || !String(jmeno).trim()) return 'Vyplňte prosím jméno.';
+  if (!email || !EMAIL_RE.test(String(email).trim())) return 'Zadejte prosím platný e-mail (musí obsahovat @).';
+  if (!heslo || String(heslo).length < MIN_DELKA_HESLA) return `Heslo musí mít alespoň ${MIN_DELKA_HESLA} znaků.`;
+  return null;
+}
+
 // Registrace
 router.post('/registrace', async (req, res) => {
   const zbyvaSekund = jeRegistraceZablokovana(req.ip);
@@ -20,21 +30,25 @@ router.post('/registrace', async (req, res) => {
   }
   zaznamenatRegistraci(req.ip);
   const { jmeno, email, heslo, telefon, ulice, mesto, psc } = req.body;
+  const chybaValidace = validovatRegistraci({ jmeno, email, heslo });
+  if (chybaValidace) return res.status(400).json({ chyba: chybaValidace });
   try {
     const existuje = await pool.query('SELECT id, heslo FROM zakaznici WHERE email = $1', [email]);
     if (existuje.rows.length > 0) {
       if (existuje.rows[0].heslo) {
         // Skutečný, už dřív dokončený účet - klasické "email je zabraný".
-        return res.status(400).json({ chyba: 'Email je jiz registrovan' });
+        return res.status(400).json({ chyba: 'Tento e-mail už má účet – přihlaste se prosím.' });
       }
       // Zákazník vznikl jen z objednávky bez zadání hesla (host checkout) -
       // účet ještě nikdy nešel dokončit, takže mu teď heslo prostě doplníme
       // místo toho, abychom ho navěky blokovali hláškou "email už existuje".
       const hash = await bcrypt.hash(heslo, 10);
       const id = existuje.rows[0].id;
+      // COALESCE: registrace z přihlašovacího okna posílá jen jméno/email/heslo -
+      // telefon a adresa z dřívější host objednávky se tím nesmí vymazat.
       await pool.query(
-        'UPDATE zakaznici SET heslo=$1, jmeno=$2, telefon=$3, ulice=$4, mesto=$5, psc=$6 WHERE id=$7',
-        [hash, jmeno, telefon, ulice, mesto, psc, id]
+        'UPDATE zakaznici SET heslo=$1, jmeno=$2, telefon=COALESCE($3, telefon), ulice=COALESCE($4, ulice), mesto=COALESCE($5, mesto), psc=COALESCE($6, psc) WHERE id=$7',
+        [hash, jmeno, telefon || null, ulice || null, mesto || null, psc || null, id]
       );
       const token = jwt.sign({ id, email }, JWT_SECRET, { expiresIn: '7d' });
       return res.json({ zprava: 'Registrace uspesna', token, jmeno, email });

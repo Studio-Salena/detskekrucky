@@ -29,7 +29,9 @@ function vytvoritMockPool(zakaznici) {
       if (s.startsWith('UPDATE zakaznici SET heslo=')) {
         const [heslo, jmeno, telefon, ulice, mesto, psc, id] = params;
         const z = zakaznici.find(z => z.id === id);
-        Object.assign(z, { heslo, jmeno, telefon, ulice, mesto, psc });
+        // Stejně jako COALESCE v SQL: null pole nechá původní hodnotu.
+        Object.assign(z, { heslo, jmeno,
+          telefon: telefon ?? z.telefon, ulice: ulice ?? z.ulice, mesto: mesto ?? z.mesto, psc: psc ?? z.psc });
         return {};
       }
       if (s.startsWith('INSERT INTO zakaznici')) {
@@ -89,7 +91,7 @@ test('registrace se stejným emailem jako už dokončený účet je odmítnuta',
   await handler({ ip: novaIp(), body: { jmeno: 'Jana Nová', email: 'jana@example.com', heslo: 'novaheslo123' } }, res);
 
   assert.equal(res.statusCode, 400);
-  assert.match(res.body.chyba, /jiz registrovan/);
+  assert.match(res.body.chyba, /už má účet/);
 });
 
 test('registrace na email z host objednávky (heslo NULL) dokončí účet místo chyby', async () => {
@@ -175,4 +177,40 @@ test('opakovaná registrace ze stejné IP je po pár pokusech zablokována (429)
   }
 
   assert.equal(posledni.statusCode, 429);
+});
+
+test('registrace odmítne e-mail bez zavináče', async () => {
+  const zakaznici = [];
+  const router = nacistAuthSMockPoolem(zakaznici);
+  const handler = najitHandler(router, 'post', '/registrace');
+  const res = vytvoritRes();
+  await handler({ ip: novaIp(), body: { jmeno: 'Jana Nová', email: 'jana.example.com', heslo: 'tajneheslo123' } }, res);
+
+  assert.equal(res.statusCode, 400);
+  assert.match(res.body.chyba, /@/);
+  assert.equal(zakaznici.length, 0);
+});
+
+test('registrace odmítne heslo kratší než 5 znaků', async () => {
+  const zakaznici = [];
+  const router = nacistAuthSMockPoolem(zakaznici);
+  const handler = najitHandler(router, 'post', '/registrace');
+  const res = vytvoritRes();
+  await handler({ ip: novaIp(), body: { jmeno: 'Jana Nová', email: 'jana@example.com', heslo: '1234' } }, res);
+
+  assert.equal(res.statusCode, 400);
+  assert.match(res.body.chyba, /alespoň 5 znaků/);
+  assert.equal(zakaznici.length, 0);
+});
+
+test('registrace bez adresy nevymaže adresu z dřívější host objednávky', async () => {
+  const zakaznici = [{ id: 1, jmeno: 'Jana Host', email: 'jana@example.com', heslo: null, telefon: '777123456', ulice: 'A 1', mesto: 'Hulín', psc: '76824' }];
+  const router = nacistAuthSMockPoolem(zakaznici);
+  const handler = najitHandler(router, 'post', '/registrace');
+  const res = vytvoritRes();
+  await handler({ ip: novaIp(), body: { jmeno: 'Jana Nová', email: 'jana@example.com', heslo: 'tajneheslo123' } }, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(zakaznici[0].ulice, 'A 1');
+  assert.equal(zakaznici[0].telefon, '777123456');
 });

@@ -652,8 +652,8 @@ body:has(.modal-overlay.open) #back-to-top {
 <div class="modal-overlay" id="modalCheckout">
   <div class="checkout-modal">
     <h3>&#128230; Dokončit objednávku</h3>
-    <div style="background:var(--cream);border-radius:12px;padding:14px;margin-bottom:20px;border:1px solid var(--tan-light);font-size:0.85rem">
-      <strong>Máte účet?</strong> <a href="#" onclick="prepnoutNaPrihlaseni()" style="color:var(--brown);font-weight:700">Přihlaste se</a> a sledujte své objednávky.
+    <div id="checkoutUcetBox" style="background:var(--cream);border-radius:12px;padding:14px;margin-bottom:20px;border:1px solid var(--tan-light);font-size:0.85rem">
+      <strong>Máte účet?</strong> <a href="#" onclick="prepnoutNaPrihlaseni();return false;" style="color:var(--brown);font-weight:700">Přihlaste se</a> a údaje se vyplní samy.
     </div>
     <div id="checkoutMsg"></div>
     <div class="order-summary" id="orderSummary"></div>
@@ -705,6 +705,18 @@ body:has(.modal-overlay.open) #back-to-top {
         Souhlasím s <a href="obchodni-podminky.html" target="_blank" style="color:var(--brown);font-weight:700">obchodními podmínkami</a> a zpracováním osobních údajů pro účely vyřízení objednávky.
       </label>
     </div>
+    <div id="chVytvoritUcetBox">
+      <div class="form-group" style="display:flex;align-items:flex-start;gap:8px">
+        <input type="checkbox" id="chVytvoritUcet" onchange="document.getElementById('chUcetHesloWrap').style.display = this.checked ? 'block' : 'none'" style="width:18px;height:18px;flex-shrink:0;margin-top:2px">
+        <label for="chVytvoritUcet" style="font-size:0.85rem;font-weight:400;color:var(--text);cursor:pointer">
+          Chci si zároveň vytvořit účet – příště nebudu muset vyplňovat údaje a uvidím historii objednávek.
+        </label>
+      </div>
+      <div class="form-group" id="chUcetHesloWrap" style="display:none">
+        <label>Heslo k účtu (alespoň 5 znaků) *</label>
+        <input type="password" id="chUcetHeslo" placeholder="Zvolte heslo" autocomplete="new-password">
+      </div>
+    </div>
     <div class="honeypot-pole" aria-hidden="true">
       <label for="chWebovaStranka">Nevyplňujte toto pole</label>
       <input type="text" id="chWebovaStranka" name="webova_stranka" tabindex="-1" autocomplete="off">
@@ -734,10 +746,10 @@ body:has(.modal-overlay.open) #back-to-top {
     <div id="formRegistrace" style="display:none">
       <div class="form-group"><label>Jméno a příjmení</label><input type="text" id="regJmeno" placeholder="Jana Nováková"></div>
       <div class="form-group"><label>Email</label><input type="email" id="regEmail" placeholder="jana@email.cz"></div>
-      <div class="form-group"><label>Heslo</label><input type="password" id="regHeslo" placeholder="Zvolte heslo"></div>
+      <div class="form-group"><label>Heslo (alespoň 5 znaků)</label><input type="password" id="regHeslo" placeholder="Zvolte heslo" autocomplete="new-password"></div>
       <button onclick="registrovat()" style="width:100%;padding:14px;background:var(--sage);color:#fff;border:none;border-radius:12px;font-family:'Nunito',sans-serif;font-weight:700;font-size:1rem;cursor:pointer;margin-bottom:10px">Zaregistrovat se</button>
     </div>
-    <button onclick="closeModal('modalLogin')" style="width:100%;padding:12px;background:none;border:2px solid var(--tan);border-radius:12px;font-family:'Nunito',sans-serif;font-weight:700;font-size:0.9rem;cursor:pointer;color:var(--text-light)">Zavřít</button>
+    <button onclick="zavritLogin()" style="width:100%;padding:12px;background:none;border:2px solid var(--tan);border-radius:12px;font-family:'Nunito',sans-serif;font-weight:700;font-size:0.9rem;cursor:pointer;color:var(--text-light)">Zavřít</button>
   </div>
 </div>
 
@@ -1396,6 +1408,46 @@ function openCheckout() {
   document.getElementById('chPoukazMsg').innerHTML = '';
   vykreslitSouhrnObjednavky();
   document.getElementById('modalCheckout').classList.add('open');
+  pripravitCheckoutProUcet();
+}
+
+// Přihlášená zákaznice: místo výzvy "Přihlaste se" ukázat, za koho objednává,
+// a předvyplnit prázdná pole z profilu. Nepřihlášené nabídnout vytvoření účtu.
+async function pripravitCheckoutProUcet() {
+  const box = document.getElementById('checkoutUcetBox');
+  const ucetBox = document.getElementById('chVytvoritUcetBox');
+  if (!prihlasenyUzivatel) {
+    box.innerHTML = '<strong>Máte účet?</strong> <a href="#" onclick="prepnoutNaPrihlaseni();return false;" style="color:var(--brown);font-weight:700">Přihlaste se</a> a údaje se vyplní samy.';
+    ucetBox.style.display = 'block';
+    return;
+  }
+  box.innerHTML = '';
+  const strong = document.createElement('strong');
+  strong.textContent = '✓ Objednáváte jako ' + prihlasenyUzivatel.jmeno;
+  box.append(strong, document.createElement('br'), prihlasenyUzivatel.email);
+  ucetBox.style.display = 'none';
+  document.getElementById('chVytvoritUcet').checked = false;
+  document.getElementById('chUcetHesloWrap').style.display = 'none';
+
+  const vyplnit = (id, hodnota) => {
+    const el = document.getElementById(id);
+    if (hodnota && !el.value.trim()) el.value = hodnota;
+  };
+  vyplnit('chJmeno', prihlasenyUzivatel.jmeno);
+  vyplnit('chEmail', prihlasenyUzivatel.email);
+  try {
+    const res = await fetch(API + '/auth/profil', { headers: { 'Authorization': 'Bearer ' + ziskatToken() } });
+    if (res.status === 401) { odhlasitTise(); pripravitCheckoutProUcet(); return; }
+    if (!res.ok) return;
+    const p = await res.json();
+    if (!p) return;
+    vyplnit('chJmeno', p.jmeno);
+    vyplnit('chEmail', p.email);
+    vyplnit('chTelefon', p.telefon);
+    vyplnit('chUlice', p.ulice);
+    vyplnit('chMesto', p.mesto);
+    vyplnit('chPsc', p.psc);
+  } catch (e) { /* bez profilu se dá objednat i tak */ }
 }
 
 function vykreslitSouhrnObjednavky() {
@@ -1452,6 +1504,7 @@ function closeCheckout() {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const TELEFON_RE = /^(\+420\s?)?\d{3}\s?\d{3}\s?\d{3}$/;
 const PSC_RE = /^\d{3}\s?\d{2}$/;
+const MIN_DELKA_HESLA = 5;
 
 function validovatCheckoutFormular({ jmeno, email, telefon, ulice, mesto, psc }) {
   if (!jmeno || jmeno.split(/\s+/).length < 2) return 'Zadejte prosím jméno a příjmení.';
@@ -1489,6 +1542,12 @@ async function odeslatObjednavku() {
     zobrazitChybuCheckoutu('<div class="msg msg-error">Pro odeslání objednávky je potřeba souhlasit s obchodními podmínkami.</div>');
     return;
   }
+  const vytvoritUcet = !prihlasenyUzivatel && document.getElementById('chVytvoritUcet').checked;
+  const ucetHeslo = document.getElementById('chUcetHeslo').value;
+  if (vytvoritUcet && ucetHeslo.length < MIN_DELKA_HESLA) {
+    zobrazitChybuCheckoutu(`<div class="msg msg-error">Heslo k účtu musí mít alespoň ${MIN_DELKA_HESLA} znaků.</div>`);
+    return;
+  }
 
   const btn = document.getElementById('submitBtn');
   btn.disabled = true;
@@ -1515,6 +1574,18 @@ async function odeslatObjednavku() {
       ulozitKosik();
       uplatnenyPoukaz = null;
       btn.textContent = 'Hotovo! ✓';
+      if (vytvoritUcet) {
+        // Objednávka už je založená (i se zákazníkem bez hesla) - registrace
+        // mu jen doplní heslo. Když selže, objednávka tím nijak neutrpí.
+        const chyba = await zalozitUcetPoObjednavce({ jmeno, email, heslo: ucetHeslo, telefon, ulice, mesto, psc });
+        document.getElementById('chUcetHeslo').value = '';
+        document.getElementById('chVytvoritUcet').checked = false;
+        document.getElementById('chUcetHesloWrap').style.display = 'none';
+        const msg = document.createElement('div');
+        msg.className = 'msg ' + (chyba ? 'msg-error' : 'msg-success');
+        msg.textContent = chyba ? 'Účet se nepodařilo vytvořit: ' + chyba : '👤 Účet je vytvořený a jste přihlášeni.';
+        document.getElementById('checkoutMsg').appendChild(msg);
+      }
       setTimeout(() => {
         document.getElementById('modalCheckout').classList.remove('open');
         btn.disabled = false;
@@ -1530,6 +1601,23 @@ async function odeslatObjednavku() {
     zobrazitChybuCheckoutu('<div class="msg msg-error">Chyba při odesílání. Zkuste to prosím znovu.</div>');
     btn.disabled = false;
     btn.textContent = 'Odeslat objednávku 📦';
+  }
+}
+
+// Vrací null při úspěchu (a rovnou přihlásí), jinak text chyby.
+async function zalozitUcetPoObjednavce(udaje) {
+  try {
+    const res = await fetch(API + '/auth/registrace', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(udaje)
+    });
+    const data = await res.json();
+    if (!res.ok) return data.chyba || 'chyba serveru';
+    ulozitPrihlaseni(data);
+    return null;
+  } catch (e) {
+    return 'chyba připojení';
   }
 }
 
@@ -1564,8 +1652,51 @@ if (!localStorage.getItem('cookieConsent')) {
 
 
 // Prihlaseni
-let prihlasenyUzivatel = JSON.parse(sessionStorage.getItem('uzivatel') || 'null');
+// Přihlášení drží localStorage (ne sessionStorage) - jinak se "ztratí" v novém
+// panelu nebo po zavření prohlížeče, i když token platí ještě 7 dní.
+function nacistUlozeneho(klic) {
+  try { return localStorage.getItem(klic) || sessionStorage.getItem(klic); } catch (e) { return null; }
+}
+let prihlasenyUzivatel = null;
+try { prihlasenyUzivatel = JSON.parse(nacistUlozeneho('uzivatel') || 'null'); } catch (e) {}
+if (prihlasenyUzivatel && !nacistUlozeneho('token')) prihlasenyUzivatel = null;
+let prihlaseniZCheckoutu = false;
 aktualizovatNavUcet();
+
+function ziskatToken() {
+  return nacistUlozeneho('token');
+}
+
+function ulozitPrihlaseni(data) {
+  prihlasenyUzivatel = { jmeno: data.jmeno, email: data.email };
+  try {
+    localStorage.setItem('uzivatel', JSON.stringify(prihlasenyUzivatel));
+    localStorage.setItem('token', data.token);
+  } catch (e) {}
+  aktualizovatNavUcet();
+}
+
+function odhlasitTise() {
+  prihlasenyUzivatel = null;
+  for (const uloziste of [localStorage, sessionStorage]) {
+    try { uloziste.removeItem('uzivatel'); uloziste.removeItem('token'); } catch (e) {}
+  }
+  aktualizovatNavUcet();
+}
+
+// Po přihlášení/registraci (nebo zavření okna) spuštěných z pokladny
+// se vrátit zpátky do rozpracované objednávky.
+function vratitSeDoCheckoutu() {
+  if (!prihlaseniZCheckoutu) return;
+  prihlaseniZCheckoutu = false;
+  document.getElementById('modalCheckout').classList.add('open');
+  pripravitCheckoutProUcet();
+}
+
+function zavritLogin() {
+  closeModal('modalLogin');
+  vratitSeDoCheckoutu();
+}
 
 function aktualizovatNavUcet() {
   const btn = document.getElementById('navUcet');
@@ -1759,14 +1890,22 @@ function prepnoutTab(tab) {
 }
 
 function prepnoutNaPrihlaseni() {
+  prihlaseniZCheckoutu = true;
   closeModal('modalCheckout');
+  document.getElementById('loginMsg').innerHTML = '';
   document.getElementById('modalLogin').classList.add('open');
+}
+
+function zobrazitChybuLoginu(text) {
+  const msg = document.getElementById('loginMsg');
+  msg.innerHTML = '<div class="msg msg-error"></div>';
+  msg.firstChild.textContent = text;
 }
 
 async function prihlasit() {
   const email = document.getElementById('loginEmail').value.trim();
   const heslo = document.getElementById('loginHeslo').value;
-  if (!email || !heslo) { document.getElementById('loginMsg').innerHTML = '<div class="msg msg-error">Vyplňte email a heslo.</div>'; return; }
+  if (!email || !heslo) { zobrazitChybuLoginu('Vyplňte email a heslo.'); return; }
   try {
     const res = await fetch(API + '/auth/prihlaseni', {
       method: 'POST',
@@ -1775,17 +1914,16 @@ async function prihlasit() {
     });
     const data = await res.json();
     if (res.ok) {
-      prihlasenyUzivatel = { jmeno: data.jmeno, email: data.email };
-      sessionStorage.setItem('uzivatel', JSON.stringify(prihlasenyUzivatel));
-      sessionStorage.setItem('token', data.token);
+      ulozitPrihlaseni(data);
+      document.getElementById('loginMsg').innerHTML = '';
       closeModal('modalLogin');
-      aktualizovatNavUcet();
       showToast('Vítejte, ' + prihlasenyUzivatel.jmeno.split(' ')[0] + '!');
+      vratitSeDoCheckoutu();
     } else {
-      document.getElementById('loginMsg').innerHTML = '<div class="msg msg-error">' + (data.chyba || 'Nesprávný email nebo heslo.') + '</div>';
+      zobrazitChybuLoginu(data.chyba || 'Nesprávný email nebo heslo.');
     }
   } catch(e) {
-    document.getElementById('loginMsg').innerHTML = '<div class="msg msg-error">Chyba připojení.</div>';
+    zobrazitChybuLoginu('Chyba připojení.');
   }
 }
 
@@ -1793,7 +1931,9 @@ async function registrovat() {
   const jmeno = document.getElementById('regJmeno').value.trim();
   const email = document.getElementById('regEmail').value.trim();
   const heslo = document.getElementById('regHeslo').value;
-  if (!jmeno || !email || !heslo) { document.getElementById('loginMsg').innerHTML = '<div class="msg msg-error">Vyplňte všechna pole.</div>'; return; }
+  if (!jmeno || !email || !heslo) { zobrazitChybuLoginu('Vyplňte všechna pole.'); return; }
+  if (!EMAIL_RE.test(email)) { zobrazitChybuLoginu('Zadejte prosím platný e-mail (musí obsahovat @).'); return; }
+  if (heslo.length < MIN_DELKA_HESLA) { zobrazitChybuLoginu('Heslo musí mít alespoň ' + MIN_DELKA_HESLA + ' znaků.'); return; }
   try {
     const res = await fetch(API + '/auth/registrace', {
       method: 'POST',
@@ -1802,31 +1942,27 @@ async function registrovat() {
     });
     const data = await res.json();
     if (res.ok) {
-      prihlasenyUzivatel = { jmeno: data.jmeno, email: data.email };
-      sessionStorage.setItem('uzivatel', JSON.stringify(prihlasenyUzivatel));
-      sessionStorage.setItem('token', data.token);
+      ulozitPrihlaseni(data);
+      document.getElementById('loginMsg').innerHTML = '';
       closeModal('modalLogin');
-      aktualizovatNavUcet();
       showToast('Registrace úspěšná! Vítejte, ' + prihlasenyUzivatel.jmeno.split(' ')[0] + '!');
+      vratitSeDoCheckoutu();
     } else {
-      document.getElementById('loginMsg').innerHTML = '<div class="msg msg-error">' + (data.chyba || 'Chyba při registraci.') + '</div>';
+      zobrazitChybuLoginu(data.chyba || 'Chyba při registraci.');
     }
   } catch(e) {
-    document.getElementById('loginMsg').innerHTML = '<div class="msg msg-error">Chyba připojení.</div>';
+    zobrazitChybuLoginu('Chyba připojení.');
   }
 }
 
 function odhlasit() {
-  prihlasenyUzivatel = null;
-  sessionStorage.removeItem('uzivatel');
-  sessionStorage.removeItem('token');
+  odhlasitTise();
   closeModal('modalUcet');
-  aktualizovatNavUcet();
   showToast('Byli jste odhlášeni.');
 }
 
 async function nacistMojeObjednavky() {
-  const token = sessionStorage.getItem('token');
+  const token = ziskatToken();
   if (!token) return;
   try {
     const data = await fetch(API + '/auth/moje-objednavky', {
