@@ -107,7 +107,8 @@ nav{display:flex;align-items:center;gap:8px}
 /* PRODUCTS */
 .products-section{padding:32px;background:var(--cream)}
 .section-title{font-family:'Dancing Script',cursive;font-size:1.8rem;color:var(--brown);margin-bottom:24px}
-.products-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:24px}
+.products-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px;max-width:1400px;margin:0 auto}
+@media(max-width:1100px){.products-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .product-card{background:#fff;border-radius:24px;overflow:hidden;border:2px solid var(--tan-light);transition:all 0.3s;cursor:pointer;position:relative}
 .product-card:hover{transform:translateY(-6px);box-shadow:0 16px 48px rgba(139,69,19,0.2);border-color:var(--tan);background:linear-gradient(180deg,#fff,#fffaf5)}
 .product-img{height:220px;display:flex;align-items:center;justify-content:center;font-size:4rem;position:relative}
@@ -168,6 +169,10 @@ nav{display:flex;align-items:center;gap:8px}
 .modal-overlay.open{display:flex}
 .modal{background:#fff;border-radius:24px;padding:32px;width:100%;max-width:500px;max-height:90vh;overflow-y:auto}
 .modal-icon{font-size:5rem;text-align:center;margin-bottom:16px;background:var(--gradient);border-radius:16px;padding:20px}
+/* Detail produktu - větší okno a fotka než ostatní modaly */
+#modalDetail{--detail-foto-vyska:min(440px,50vh)}
+#modalDetail .modal{max-width:760px}
+@media(max-width:768px){#modalDetail{--detail-foto-vyska:min(300px,42vh)}}
 .modal-brand{font-size:0.8rem;color:var(--text-light);text-transform:uppercase;letter-spacing:1px}
 .modal-name{font-family:'Dancing Script',cursive;font-size:1.8rem;color:var(--brown);margin:8px 0}
 .modal-popis{color:var(--text-light);line-height:1.6;margin-bottom:20px}
@@ -969,7 +974,9 @@ async function nacistProdukty() {
       p.kategorie = Object.entries(p.kategorieCitac).sort((a, b) => b[1] - a[1])[0][0];
       delete p.kategorieCitac;
       delete p._seenObrazky;
-      p.emoji = p.emoji || '&#128098;';
+      // Skutečný znak, ne HTML entita - fallback se escapuje (escHtml),
+      // takže '&#128098;' by se na kartě vypsalo doslova jako text.
+      p.emoji = p.emoji || '\u{1F462}';
       const ceny = p.velikosti.map(v => v.cena);
       p.cenaOd = new Set(ceny).size > 1;
       p.cena = Math.min(...ceny);
@@ -1023,7 +1030,7 @@ function jeBezpecnaHttpUrl(hodnota) {
 // (nahraná admin.html, přes Cloudinary), 2) legacy - produkty.emoji obsahuje
 // externí HTTP URL (starý způsob), 3) produkty.emoji je skutečné emoji.
 // p.emoji už v tuhle chvíli má vždycky nějakou hodnotu (viz výchozí
-// '&#128098;' o pár řádků výš), takže <span> fallback nemůže zůstat prázdný.
+// '\u{1F462}' o pár řádků výš), takže <span> fallback nemůže zůstat prázdný.
 // Všechny hodnoty jdoucí do atributů (src/alt) i do textu jsou escapované -
 // jde o admin-zadaná data (název produktu, ALT text fotky), ne data přímo od
 // zákazníka, ale pořád ne o nic, čemu by se dalo věřit v innerHTML bez escapu.
@@ -1187,7 +1194,7 @@ function openDetail(klic) {
   vybranaVelikost = null;
   if (!aktivniProdukt) return;
   detailAktivniObrazekUrl = aktivniProdukt.primaryImageUrl;
-  document.getElementById('detailIcon').innerHTML = obrazekProduktuHtml(aktivniProdukt, "200px");
+  document.getElementById('detailIcon').innerHTML = obrazekProduktuHtml(aktivniProdukt, "var(--detail-foto-vyska)");
   vykreslitDetailThumbs();
   document.getElementById('detailBrand').textContent = aktivniProdukt.znacka;
   document.getElementById('detailName').textContent = aktivniProdukt.nazev;
@@ -1229,7 +1236,7 @@ function vybratDetailFotku(index) {
   if (!o || !jeBezpecnaHttpUrl(o.url)) return;
   detailAktivniObrazekUrl = o.url;
   const alt = o.alt || aktivniProdukt.nazev || '';
-  document.getElementById('detailIcon').innerHTML = `<img src="${escAttr(o.url)}" alt="${escAttr(alt)}" loading="lazy" decoding="async" style="width:100%;height:200px;object-fit:contain;border-radius:12px">`;
+  document.getElementById('detailIcon').innerHTML = `<img src="${escAttr(o.url)}" alt="${escAttr(alt)}" loading="lazy" decoding="async" style="width:100%;height:var(--detail-foto-vyska);object-fit:contain;border-radius:12px">`;
   vykreslitDetailThumbs();
 }
 
