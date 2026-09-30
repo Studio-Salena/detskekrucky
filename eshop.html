@@ -151,6 +151,8 @@ nav{display:flex;align-items:center;gap:8px}
 .cart-item-qty span{min-width:16px;text-align:center;font-weight:700;font-size:0.85rem}
 .cart-qty-btn{width:22px;height:22px;border-radius:50%;border:1px solid var(--tan-light);background:#fff;color:var(--brown);cursor:pointer;font-size:0.85rem;line-height:1;display:flex;align-items:center;justify-content:center;padding:0}
 .cart-qty-btn:hover{background:var(--cream)}
+.cart-item-odkaz{cursor:pointer}
+.cart-item-name.cart-item-odkaz:hover{color:var(--brown);text-decoration:underline}
 .cart-item-remove{background:none;border:none;color:var(--text-light);cursor:pointer;font-size:1rem;padding:4px}
 .cart-item-remove:hover{color:#e74c3c}
 .cart-empty{text-align:center;padding:48px;color:var(--text-light)}
@@ -485,7 +487,9 @@ footer {
    - bez tohohle by na mobilu ležela NAD otevřeným oknem a chytala kliky/ťuknutí
    místo prvků pod sebou (typicky checkbox souhlasu dole ve formuláři). */
 body:has(.modal-overlay.open) .float-contact,
-body:has(.modal-overlay.open) #back-to-top {
+body:has(.modal-overlay.open) #back-to-top,
+body:has(.cart-sidebar.open) .float-contact,
+body:has(.cart-sidebar.open) #back-to-top {
   display: none;
 }
 
@@ -1268,6 +1272,7 @@ function addToCartFromModal() {
 function closeModal(id) {
   if (id) { document.getElementById(id).classList.remove('open'); return; }
   document.getElementById('modalDetail').classList.remove('open');
+  if (detailZKosiku) { detailZKosiku = false; openCart(); }
 }
 
 function addToCart(produkt, velikost) {
@@ -1357,9 +1362,9 @@ function renderKosik() {
   }
   el.innerHTML = kosik.map((item, idx) => `
     <div class="cart-item">
-      <div class="cart-item-icon">${ikonaPolozkyKosiku(item)}</div>
+      <div class="cart-item-icon cart-item-odkaz" onclick="otevritProduktZKosiku(${idx})" title="Zobrazit produkt">${ikonaPolozkyKosiku(item)}</div>
       <div class="cart-item-info">
-        <div class="cart-item-name">${escHtml(item.nazev)}</div>
+        <div class="cart-item-name cart-item-odkaz" onclick="otevritProduktZKosiku(${idx})" title="Zobrazit produkt">${escHtml(item.nazev)}</div>
         <div class="cart-item-detail">${escHtml(item.znacka)} | Vel. ${escHtml(item.velikost)}</div>
         <div class="cart-item-qty">
           <button class="cart-qty-btn" onclick="zmenitPocetVKosiku(${idx},-1)" aria-label="Ubrat kus">&#8722;</button>
@@ -1392,6 +1397,22 @@ function openCart() {
   document.getElementById('cartOverlay').classList.add('open');
   document.getElementById('cartSidebar').classList.add('open');
   renderKosik();
+}
+
+// Klik na fotku/název v košíku otevře detail produktu s předvybranou velikostí.
+// Po zavření detailu se košík zase otevře, ať se zákaznice neztratí.
+let detailZKosiku = false;
+function otevritProduktZKosiku(idx) {
+  const item = kosik[idx];
+  if (!item) return;
+  const produkt = vsechnyProdukty.find(p => p.velikosti.some(v => v.produkt_id === item.id));
+  if (!produkt) { showToast('Tento produkt už v nabídce není.'); return; }
+  closeCart();
+  openDetail(produkt.klic);
+  detailZKosiku = true;
+  const velIdx = produkt.velikosti.findIndex(v => String(v.velikost) === String(item.velikost));
+  const btn = document.querySelectorAll('#detailSizes .size-btn')[velIdx];
+  if (btn) vybrVelikost(produkt.velikosti[velIdx].velikost, btn);
 }
 
 function closeCart() {
