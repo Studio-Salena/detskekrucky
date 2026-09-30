@@ -911,10 +911,17 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
 </div>
 
 <div class="modal-overlay" id="modalVydatPoukaz">
-  <div class="modal" style="max-width:420px">
+  <div class="modal" style="max-width:560px">
     <h3>🎁 Vydat dárkový poukaz</h3>
     <div id="poukazMsg"></div>
     <div id="pkKrokFormular">
+    <div class="form-group">
+      <label>Vzhled poukazu</label>
+      <select id="pkVzhled">
+        <option value="klasicky">🎁 Klasický</option>
+        <option value="vanocni">🎄 Vánoční</option>
+      </select>
+    </div>
     <div class="form-group">
       <label>Hodnota poukazu *</label>
       <select id="pkHodnota">
@@ -962,7 +969,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
 </div>
 
 <div class="modal-overlay" id="modalZobrazitPoukaz">
-  <div class="modal" style="max-width:420px;text-align:center">
+  <div class="modal" style="max-width:560px;text-align:center">
     <h3>🎁 Poukaz vydán!</h3>
     <div id="poukazDetail" style="margin:16px 0"></div>
     <div class="modal-footer">
@@ -971,7 +978,6 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <button class="btn btn-outline" onclick="tisknoutPoukazEAN()">🏷️ Jen EAN</button>
       <button class="btn btn-outline" onclick="tisknoutPoukaz(false)">🖨️ Poukaz bez EAN</button>
       <button class="btn btn-primary" onclick="tisknoutPoukaz(true)">🖨️ Poukaz s EAN</button>
-      <button class="btn btn-green" onclick="tisknoutVanocniPoukaz()">🎄 Vánoční poukaz</button>
     </div>
   </div>
 </div>
@@ -3932,7 +3938,7 @@ async function vyriditPoukazZadost(id) {
 
     const res = await adminFetch(API+'/poukazy', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ hodnota: zadost.hodnota, zakoupeno_kde: 'eshop', kupujici_jmeno: zadost.kupujici_jmeno, kupujici_email: zadost.kupujici_email, poznamka: zadost.pro_koho ? `Pro: ${zadost.pro_koho}` : '', platba: 'prevod' })
+      body: JSON.stringify({ hodnota: zadost.hodnota, zakoupeno_kde: 'eshop', kupujici_jmeno: zadost.kupujici_jmeno, kupujici_email: zadost.kupujici_email, poznamka: zadost.pro_koho ? `Pro: ${zadost.pro_koho}` : '', platba: 'prevod', vzhled: vychoziVzhledPoukazu() })
     });
     if (res.ok) {
       const poukaz = await res.json();
@@ -3961,6 +3967,7 @@ function otevritVydatPoukaz() {
   document.getElementById('poukazMsg').innerHTML = '';
   document.getElementById('pkKde').value = 'prodejna';
   document.getElementById('pkPlatba').value = 'hotovost';
+  document.getElementById('pkVzhled').value = vychoziVzhledPoukazu();
   upravitNovyPoukaz();
   openModal('modalVydatPoukaz');
 }
@@ -4008,7 +4015,10 @@ async function zobrazitPoukazDetail(id, poukazData=null) {
 
   document.getElementById('poukazDetail').innerHTML = htmlKartyPoukazu(poukaz, 'poukazBarcode');
   setTimeout(() => {
-    try { JsBarcode('#poukazBarcode', poukaz.ean, {format:'EAN13', width:1.6, height:42, fontSize:12, margin:0}); } catch(e){}
+    try {
+      JsBarcode('#poukazBarcode', poukaz.ean, {format:'EAN13', width:1.6, height:42, fontSize:12, margin:0, background:'transparent'});
+      if (poukaz.vzhled === 'vanocni') prizpusobitEanSirce(document.getElementById('poukazBarcode'));
+    } catch(e){}
   }, 50);
   openModal('modalZobrazitPoukaz');
 }
@@ -4016,6 +4026,7 @@ async function zobrazitPoukazDetail(id, poukazData=null) {
 // Karta poukazu v adminu - pro detail vydaného poukazu i náhled před vydáním.
 // barcodeId: kam se po vykreslení vloží EAN (null = místo kódu jen popisek).
 function htmlKartyPoukazu(poukaz, barcodeId) {
+  if (poukaz.vzhled === 'vanocni') return htmlVanocnihoPoukazu(poukaz, barcodeId);
   const proKoho = (poukaz.poznamka && poukaz.poznamka.startsWith('Pro:')) ? poukaz.poznamka.replace('Pro:','').trim() : '';
   return `
     <div style="display:flex;background:#f7f3ea;border-radius:6px;padding:8px;border:8px solid transparent;border-image:linear-gradient(135deg,#c9a15a,#e8d4a0,#b8874a,#e8d4a0,#c9a15a) 1;box-shadow:0 6px 20px rgba(107,76,53,0.2)">
@@ -4043,8 +4054,14 @@ function dataNovehoPoukazu() {
     kupujici_jmeno: document.getElementById('pkJmeno').value.trim(),
     kupujici_email: document.getElementById('pkEmail').value.trim(),
     poznamka: document.getElementById('pkPoznamka').value.trim(),
-    platba: document.getElementById('pkPlatba').value || null
+    platba: document.getElementById('pkPlatba').value || null,
+    vzhled: document.getElementById('pkVzhled').value
   };
+}
+
+// V listopadu a prosinci se nabízí rovnou vánoční vzhled, jinak klasický
+function vychoziVzhledPoukazu() {
+  return new Date().getMonth() >= 10 ? 'vanocni' : 'klasicky';
 }
 
 function zobrazitNahledNovehoPoukazu() {
@@ -4069,6 +4086,7 @@ function upravitNovyPoukaz() {
 
 function tisknoutPoukaz(sEanem = true) {
   if (!poslednePoukazData) return;
+  if (poslednePoukazData.vzhled === 'vanocni') return tisknoutVanocniPoukaz(sEanem);
   const p = poslednePoukazData;
   const zobrazitEan = sEanem && !!p.ean;
   const proKoho = (p.poznamka && p.poznamka.startsWith('Pro:')) ? p.poznamka.replace('Pro:','').trim() : '';
@@ -4161,14 +4179,51 @@ function tisknoutPoukaz(sEanem = true) {
 
 // Vánoční poukaz - hotový obrázek (vanocni-poukaz.png, 1536x1024) jako podklad
 // a údaje vepsané do jeho prázdných řádků. Pozice jsou v % rozměrů obrázku,
-// velikost písma v cqw (šířka poukazu), takže sedí při jakékoli velikosti tisku.
-function tisknoutVanocniPoukaz() {
+// velikost písma v cqw (šířka poukazu), takže sedí v malém náhledu i při tisku.
+const VANOCNI_POUKAZ_CSS = `
+  .vp { position:relative; width:100%; container-type:inline-size; font-family:'Nunito',sans-serif; text-align:left; }
+  .vp img.vp-podklad { display:block; width:100%; height:auto; }
+  .vp-castka { position:absolute; left:35.5%; width:27.5%; top:52.4%; text-align:center;
+    font-weight:900; font-size:3.4cqw; color:#4f5d3f; line-height:1; }
+  .vp-radek { position:absolute; left:33.2%; width:38%; font-size:1.45cqw; color:#4a3a2c; line-height:1; transform:translateY(-100%); white-space:nowrap; overflow:hidden; }
+  .vp-radek .vp-popisek { font-weight:600; color:#7a6a58; }
+  .vp-radek .vp-hodnota { font-weight:800; color:#3d2b1f; }
+  .vp-ean { position:absolute; left:12.5%; top:77%; width:16%; background:rgba(255,255,255,0.75); padding:0.4cqw; border-radius:0.4cqw; }
+  .vp-ean svg { display:block; width:100%; height:auto; }
+  .vp-ean-popisek { font-size:1.1cqw; color:#7a6a58; text-align:center; padding:1.2cqw 0.4cqw; border:1px dashed #c9b9a0; border-radius:0.4cqw; }
+`;
+document.head.insertAdjacentHTML('beforeend', '<style>' + VANOCNI_POUKAZ_CSS + '</style>');
+
+// barcodeId: kam se vykreslí EAN; null bez kódu poukazu = náhled před vydáním
+function htmlVanocnihoPoukazu(p, barcodeId) {
+  const proKoho = (p.poznamka && p.poznamka.startsWith('Pro:')) ? p.poznamka.replace('Pro:','').trim() : '';
+  const radek = (top, popisek, hodnota) =>
+    `<div class="vp-radek" style="top:${top}%"><span class="vp-popisek">${popisek}</span> <span class="vp-hodnota">${escH(hodnota)}</span></div>`;
+  const ean = barcodeId
+    ? `<div class="vp-ean"><svg id="${barcodeId}"></svg></div>`
+    : (p.kod ? '' : '<div class="vp-ean"><div class="vp-ean-popisek">EAN kód se přidělí po vydání</div></div>');
+  return `<div class="vp">
+    <img class="vp-podklad" src="vanocni-poukaz.png" alt="Vánoční poukaz">
+    <div class="vp-castka">${Number(p.hodnota).toLocaleString('cs-CZ')}</div>
+    ${radek(66.4, 'Pro:', proKoho)}
+    ${radek(72.5, 'Věnováno od:', '')}
+    ${radek(78.4, 'Platnost do:', new Date(p.platnost_do).toLocaleDateString('cs-CZ'))}
+    ${radek(84.0, 'Číslo poukazu:', p.kod || 'přidělí se po vydání')}
+    ${ean}
+  </div>`;
+}
+
+// JsBarcode dává SVG pevnou šířku - s viewBoxem se kód zmenší celý, ne jen ořízne
+function prizpusobitEanSirce(svg) {
+  svg.setAttribute('viewBox', '0 0 ' + parseFloat(svg.getAttribute('width')) + ' ' + parseFloat(svg.getAttribute('height')));
+  svg.removeAttribute('width'); svg.removeAttribute('height');
+}
+
+function tisknoutVanocniPoukaz(sEanem = true) {
   if (!poslednePoukazData) return;
   const p = poslednePoukazData;
-  const proKoho = (p.poznamka && p.poznamka.startsWith('Pro:')) ? p.poznamka.replace('Pro:','').trim() : '';
+  const sKodem = sEanem && !!p.ean;
   const zakladUrl = window.location.origin + window.location.pathname.replace('admin.html','');
-  const radek = (top, popisek, hodnota) =>
-    `<div class="radek" style="top:${top}%"><span class="popisek">${popisek}</span> <span class="hodnota">${escH(hodnota)}</span></div>`;
   const pw = window.open('','_blank','width=1000,height=720');
   pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Vánoční poukaz ${escH(p.kod)}</title>
   <base href="${zakladUrl}">
@@ -4177,36 +4232,21 @@ function tisknoutVanocniPoukaz() {
   <style>
     @page { size: A4 landscape; margin: 8mm; }
     * { box-sizing: border-box; }
-    body { margin:0; padding:20px; background:#e8e2d5; font-family:'Nunito',sans-serif; }
-    .poukaz { position:relative; width:100%; max-width:1100px; margin:0 auto; container-type:inline-size; }
-    .poukaz img.podklad { display:block; width:100%; height:auto; }
-    .hodnota-castka { position:absolute; left:35.5%; width:27.5%; top:52.4%; text-align:center;
-      font-weight:900; font-size:3.4cqw; color:#4f5d3f; line-height:1; }
-    .radek { position:absolute; left:33.2%; width:38%; font-size:1.45cqw; color:#4a3a2c; line-height:1; transform:translateY(-100%); }
-    .radek .popisek { font-weight:600; color:#7a6a58; }
-    .radek .hodnota { font-weight:800; color:#3d2b1f; }
-    .ean { position:absolute; left:12.5%; top:77%; width:16%; background:rgba(255,255,255,0.75); padding:0.4cqw; border-radius:0.4cqw; }
-    .ean svg { display:block; width:100%; height:auto; }
-    @media print { body { background:#fff; padding:0; } .poukaz { max-width:none; } }
+    body { margin:0; padding:20px; background:#e8e2d5; }
+    .obal { max-width:1100px; margin:0 auto; }
+    ${VANOCNI_POUKAZ_CSS}
+    @media print { body { background:#fff; padding:0; } .obal { max-width:none; } }
   </style></head><body>
-  <div class="poukaz">
-    <img class="podklad" src="vanocni-poukaz.png" alt="">
-    <div class="hodnota-castka">${Number(p.hodnota).toLocaleString('cs-CZ')}</div>
-    ${radek(66.4, 'Pro:', proKoho)}
-    ${radek(72.5, 'Věnováno od:', '')}
-    ${radek(78.4, 'Platnost do:', new Date(p.platnost_do).toLocaleDateString('cs-CZ'))}
-    ${radek(84.0, 'Číslo poukazu:', p.kod)}
-    ${p.ean ? '<div class="ean"><svg id="bc"></svg></div>' : ''}
-  </div>
+  <div class="obal">${htmlVanocnihoPoukazu(p, sKodem ? 'bc' : null)}</div>
   <script>
     // Tisk až po načtení obrázku i knihovny na EAN, jinak by vyšel prázdný papír / bez kódu
     window.addEventListener('load', () => {
-      ${p.ean ? `try { JsBarcode('#bc', '${escJs(p.ean)}', {format:'EAN13', width:2, height:50, fontSize:14, margin:0, background:'transparent'});
-        // viewBox, ať se kód při tisku zmenší celý, ne jen ořízne
+      ${sKodem ? `try {
+        JsBarcode('#bc', '${escJs(p.ean)}', {format:'EAN13', width:2, height:50, fontSize:14, margin:0, background:'transparent'});
         const bc = document.getElementById('bc');
         bc.setAttribute('viewBox', '0 0 ' + parseFloat(bc.getAttribute('width')) + ' ' + parseFloat(bc.getAttribute('height')));
         bc.removeAttribute('width'); bc.removeAttribute('height');
-      } catch(e) { document.querySelector('.ean').style.display = 'none'; }` : ''}
+      } catch(e) { document.querySelector('.vp-ean').style.display = 'none'; }` : ''}
       setTimeout(() => window.print(), 400);
     });
   <\/script>

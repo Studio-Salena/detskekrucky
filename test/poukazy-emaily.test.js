@@ -13,8 +13,8 @@ async function mockQuery(sql, params = []) {
     return { rows: [] }; // kód/EAN vždy "volný" - test netestuje kolize
   }
   if (s.startsWith('INSERT INTO darkove_poukazy')) {
-    const [kod, ean, hodnota, platnostDo, zakoupenoKde, kupujiciJmeno, kupujiciEmail] = params;
-    return { rows: [{ id: 1, kod, ean, hodnota, zustatek: hodnota, platnost_do: platnostDo, stav: 'aktivni', zakoupeno_kde: zakoupenoKde, kupujici_jmeno: kupujiciJmeno, kupujici_email: kupujiciEmail }] };
+    const [kod, ean, hodnota, platnostDo, zakoupenoKde, kupujiciJmeno, kupujiciEmail, , vzhled] = params;
+    return { rows: [{ id: 1, kod, ean, hodnota, zustatek: hodnota, platnost_do: platnostDo, stav: 'aktivni', zakoupeno_kde: zakoupenoKde, kupujici_jmeno: kupujiciJmeno, kupujici_email: kupujiciEmail, vzhled }] };
   }
   throw new Error('Mock nezná dotaz: ' + s);
 }
@@ -108,4 +108,19 @@ test('vydání poukazu bez e-mailu (prodejna) nepošle nic', async () => {
 
   assert.equal(res.statusCode, 200);
   assert.equal(zachycene.length, 0);
+});
+
+test('vydání poukazu uloží zvolený vzhled, neznámý vzhled odmítne', async () => {
+  const router = nacistPoukazySMocky([]);
+  const handler = najitHandler(router, 'post', '/');
+
+  const ok = vytvoritRes();
+  await handler({ body: { hodnota: 1000, zakoupeno_kde: 'prodejna', vzhled: 'vanocni' } }, ok);
+  assert.equal(ok.statusCode, 200);
+  assert.equal(ok.body.vzhled, 'vanocni');
+
+  const spatne = vytvoritRes();
+  await handler({ body: { hodnota: 1000, zakoupeno_kde: 'prodejna', vzhled: 'velikonocni' } }, spatne);
+  assert.equal(spatne.statusCode, 400);
+  assert.match(spatne.body.chyba, /vzhled/);
 });

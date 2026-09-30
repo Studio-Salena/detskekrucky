@@ -6,6 +6,8 @@ const { jeZablokovana: jeZadostZablokovana, zaznamenatZadost } = require('../mid
 const { odeslat_upozorneni_zadost_poukaz, odeslat_poukaz_zakaznikovi } = require('./emaily');
 
 const POVOLENE_HODNOTY = [500, 1000, 1500];
+// Vzhled tištěného poukazu - volí se při vydání, ať jde i později vytisknout stejně
+const POVOLENE_VZHLEDY = ['klasicky', 'vanocni'];
 
 async function initTabulky() {
   try {
@@ -25,6 +27,7 @@ async function initTabulky() {
         vytvoreno TIMESTAMPTZ DEFAULT NOW()
       );
       ALTER TABLE darkove_poukazy ADD COLUMN IF NOT EXISTS vydano_prodej_id INTEGER REFERENCES prodejna_prodeje(id) ON DELETE SET NULL;
+      ALTER TABLE darkove_poukazy ADD COLUMN IF NOT EXISTS vzhled TEXT NOT NULL DEFAULT 'klasicky';
       CREATE TABLE IF NOT EXISTS poukazy_pouziti (
         id SERIAL PRIMARY KEY,
         poukaz_id INTEGER REFERENCES darkove_poukazy(id) ON DELETE CASCADE,
@@ -133,12 +136,16 @@ router.post('/zadost', async (req, res) => {
 // se započítají do tržeb. Bez `platba` (např. ruční oprava evidence) se prodej nevytváří jako dřív.
 router.post('/', vyzadovatAdmina, async (req, res) => {
   const { hodnota, zakoupeno_kde, kupujici_jmeno, kupujici_email, poznamka, platba } = req.body;
+  const vzhled = req.body.vzhled || 'klasicky';
   const hodnotaCislo = Number(hodnota);
   if (!POVOLENE_HODNOTY.includes(hodnotaCislo)) {
     return res.status(400).json({ chyba: `Hodnota poukazu musí být jedna z: ${POVOLENE_HODNOTY.join(', ')} Kč.` });
   }
   if (platba && !['hotovost', 'karta', 'qr', 'prevod'].includes(platba)) {
     return res.status(400).json({ chyba: 'Neplatný způsob platby.' });
+  }
+  if (!POVOLENE_VZHLEDY.includes(vzhled)) {
+    return res.status(400).json({ chyba: 'Neplatný vzhled poukazu.' });
   }
 
   const client = await pool.connect();
@@ -157,9 +164,9 @@ router.post('/', vyzadovatAdmina, async (req, res) => {
     await client.query('BEGIN');
 
     let poukaz = (await client.query(
-      `INSERT INTO darkove_poukazy (kod, ean, hodnota, zustatek, platnost_do, stav, zakoupeno_kde, kupujici_jmeno, kupujici_email, poznamka)
-       VALUES ($1,$2,$3,$3,$4,'aktivni',$5,$6,$7,$8) RETURNING *`,
-      [kod, ean, hodnotaCislo, platnostDo.toISOString().slice(0,10), zakoupeno_kde || 'prodejna', kupujici_jmeno || null, kupujici_email || null, poznamka || null]
+      `INSERT INTO darkove_poukazy (kod, ean, hodnota, zustatek, platnost_do, stav, zakoupeno_kde, kupujici_jmeno, kupujici_email, poznamka, vzhled)
+       VALUES ($1,$2,$3,$3,$4,'aktivni',$5,$6,$7,$8,$9) RETURNING *`,
+      [kod, ean, hodnotaCislo, platnostDo.toISOString().slice(0,10), zakoupeno_kde || 'prodejna', kupujici_jmeno || null, kupujici_email || null, poznamka || null, vzhled]
     )).rows[0];
 
     let prodej = null;
