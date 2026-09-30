@@ -914,6 +914,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
   <div class="modal" style="max-width:420px">
     <h3>🎁 Vydat dárkový poukaz</h3>
     <div id="poukazMsg"></div>
+    <div id="pkKrokFormular">
     <div class="form-group">
       <label>Hodnota poukazu *</label>
       <select id="pkHodnota">
@@ -945,7 +946,17 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     <div class="form-group"><label>Poznámka</label><input type="text" id="pkPoznamka" placeholder="Volitelné"></div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modalVydatPoukaz')">Zrušit</button>
-      <button class="btn btn-primary" onclick="ulozitPoukaz()">💾 Vydat poukaz</button>
+      <button class="btn btn-primary" onclick="zobrazitNahledNovehoPoukazu()">👁️ Náhled poukazu</button>
+    </div>
+    </div>
+    <div id="pkKrokNahled" style="display:none">
+      <p style="font-size:0.85rem;color:var(--text-light);margin-bottom:12px">Takhle bude poukaz vypadat. Kód a EAN se přidělí až po vydání.</p>
+      <div id="pkNahledKarta"></div>
+      <div id="pkNahledShrnuti" style="font-size:0.82rem;color:var(--text-light);margin-top:12px;line-height:1.6"></div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="upravitNovyPoukaz()">← Upravit</button>
+        <button class="btn btn-primary" id="pkVydatBtn" onclick="ulozitPoukaz()">✅ Vydat poukaz</button>
+      </div>
     </div>
   </div>
 </div>
@@ -3949,6 +3960,7 @@ function otevritVydatPoukaz() {
   document.getElementById('poukazMsg').innerHTML = '';
   document.getElementById('pkKde').value = 'prodejna';
   document.getElementById('pkPlatba').value = 'hotovost';
+  upravitNovyPoukaz();
   openModal('modalVydatPoukaz');
 }
 
@@ -3959,17 +3971,13 @@ function prepnoutPoukazKde() {
 
 async function ulozitPoukaz() {
   const msg = document.getElementById('poukazMsg');
+  const btn = document.getElementById('pkVydatBtn');
+  if (btn.disabled) return;
+  btn.disabled = true;
   try {
     const res = await adminFetch(API+'/poukazy', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        hodnota: document.getElementById('pkHodnota').value,
-        zakoupeno_kde: document.getElementById('pkKde').value,
-        kupujici_jmeno: document.getElementById('pkJmeno').value.trim(),
-        kupujici_email: document.getElementById('pkEmail').value.trim(),
-        poznamka: document.getElementById('pkPoznamka').value.trim(),
-        platba: document.getElementById('pkPlatba').value || null
-      })
+      body: JSON.stringify(dataNovehoPoukazu())
     });
     if (res.ok) {
       const poukaz = await res.json();
@@ -3979,9 +3987,10 @@ async function ulozitPoukaz() {
       zobrazitPoukazDetail(poukaz.id, poukaz);
     } else {
       const err = await res.json().catch(()=>({}));
-      msg.innerHTML = `<div class="error-msg">${err.chyba||'Chyba'}</div>`;
+      msg.innerHTML = `<div class="error-msg">${escH(err.chyba||'Chyba')}</div>`;
     }
   } catch(e) { msg.innerHTML = '<div class="error-msg">Chyba spojení</div>'; }
+  finally { btn.disabled = false; }
 }
 
 async function zobrazitPoukazDetail(id, poukazData=null) {
@@ -3996,9 +4005,18 @@ async function zobrazitPoukazDetail(id, poukazData=null) {
   const btnUctenka = document.getElementById('btnUctenkaPoukaz');
   btnUctenka.style.display = poukaz.vydano_prodej_id ? 'inline-block' : 'none';
 
-  const proKoho = (poukaz.poznamka && poukaz.poznamka.startsWith('Pro:')) ? poukaz.poznamka.replace('Pro:','').trim() : '';
+  document.getElementById('poukazDetail').innerHTML = htmlKartyPoukazu(poukaz, 'poukazBarcode');
+  setTimeout(() => {
+    try { JsBarcode('#poukazBarcode', poukaz.ean, {format:'EAN13', width:1.6, height:42, fontSize:12, margin:0}); } catch(e){}
+  }, 50);
+  openModal('modalZobrazitPoukaz');
+}
 
-  document.getElementById('poukazDetail').innerHTML = `
+// Karta poukazu v adminu - pro detail vydaného poukazu i náhled před vydáním.
+// barcodeId: kam se po vykreslení vloží EAN (null = místo kódu jen popisek).
+function htmlKartyPoukazu(poukaz, barcodeId) {
+  const proKoho = (poukaz.poznamka && poukaz.poznamka.startsWith('Pro:')) ? poukaz.poznamka.replace('Pro:','').trim() : '';
+  return `
     <div style="display:flex;background:#f7f3ea;border-radius:6px;padding:8px;border:8px solid transparent;border-image:linear-gradient(135deg,#c9a15a,#e8d4a0,#b8874a,#e8d4a0,#c9a15a) 1;box-shadow:0 6px 20px rgba(107,76,53,0.2)">
       <div style="flex:0 0 110px;display:flex;align-items:center;justify-content:center;padding:10px;border-right:1px solid rgba(107,76,53,0.15)">
         <img src="logo.jpg" alt="Dětské krůčky" style="width:100%;max-width:100px;border-radius:50%">
@@ -4011,14 +4029,41 @@ async function zobrazitPoukazDetail(id, poukazData=null) {
           <div><strong>PRO:</strong> <span style="border-bottom:1px dotted #9a8a76">${escH(proKoho) || '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'}</span></div>
           <div><strong>PLATNOST DO:</strong> ${new Date(poukaz.platnost_do).toLocaleDateString('cs-CZ')}</div>
         </div>
-        <svg id="poukazBarcode" style="margin-top:6px"></svg>
+        ${barcodeId ? `<svg id="${barcodeId}" style="margin-top:6px"></svg>` : '<div style="margin-top:8px;font-size:0.68rem;color:var(--text-light);border:1px dashed #c9b9a0;border-radius:4px;padding:10px;text-align:center">EAN kód se přidělí po vydání</div>'}
       </div>
     </div>
   `;
-  setTimeout(() => {
-    try { JsBarcode('#poukazBarcode', poukaz.ean, {format:'EAN13', width:1.6, height:42, fontSize:12, margin:0}); } catch(e){}
-  }, 50);
-  openModal('modalZobrazitPoukaz');
+}
+
+function dataNovehoPoukazu() {
+  return {
+    hodnota: document.getElementById('pkHodnota').value,
+    zakoupeno_kde: document.getElementById('pkKde').value,
+    kupujici_jmeno: document.getElementById('pkJmeno').value.trim(),
+    kupujici_email: document.getElementById('pkEmail').value.trim(),
+    poznamka: document.getElementById('pkPoznamka').value.trim(),
+    platba: document.getElementById('pkPlatba').value || null
+  };
+}
+
+function zobrazitNahledNovehoPoukazu() {
+  const d = dataNovehoPoukazu();
+  // Stejné pravidlo jako server (routes/poukazy.js): platnost 1 rok od vydání
+  const platnostDo = new Date();
+  platnostDo.setFullYear(platnostDo.getFullYear() + 1);
+  document.getElementById('pkNahledKarta').innerHTML = htmlKartyPoukazu({ ...d, platnost_do: platnostDo }, null);
+  const platbaText = document.getElementById('pkPlatba').selectedOptions[0].textContent;
+  document.getElementById('pkNahledShrnuti').innerHTML =
+    `Prodáno: <strong>${d.zakoupeno_kde === 'eshop' ? 'E-shop' : 'Prodejna'}</strong> · Platba: <strong>${escH(platbaText)}</strong>` +
+    (d.kupujici_jmeno || d.kupujici_email ? `<br>Kupující: <strong>${escH([d.kupujici_jmeno, d.kupujici_email].filter(Boolean).join(', '))}</strong>` : '');
+  document.getElementById('poukazMsg').innerHTML = '';
+  document.getElementById('pkKrokFormular').style.display = 'none';
+  document.getElementById('pkKrokNahled').style.display = 'block';
+}
+
+function upravitNovyPoukaz() {
+  document.getElementById('pkKrokNahled').style.display = 'none';
+  document.getElementById('pkKrokFormular').style.display = 'block';
 }
 
 function tisknoutPoukaz(sEanem = true) {
