@@ -8,6 +8,7 @@ const router = express.Router();
 const pool = require('../db/pool');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const { jeZablokovana, zaznamenatObjednavku } = require('../middleware/objednavkyLimiter');
+const { migrovatSnapshoty, SQL_UDAJE_OBJEDNAVKY } = require('../lib/objednavkySnapshot');
 
 // Idempotentní migrace - vazba objednávky na uplatněný dárkový poukaz, číslo
 // objednávky a číslo/datum vystavení faktury.
@@ -42,6 +43,17 @@ async function initObjednavkySloupce() {
     console.log('Objednavky sloupce OK');
   } catch (e) {
     console.log('Objednavky sloupce chyba:', e.message);
+  }
+  try {
+    const bezSnimku = await migrovatSnapshoty(pool);
+    if (bezSnimku.length) {
+      // Nemělo by nastat (každá objednávka má zákazníka) - jen nahlásit, nic nevymýšlet.
+      console.log('Objednavky bez snimku udaju (zustava fallback na zakaznika):', bezSnimku.map(o => o.cislo || o.id).join(', '));
+    } else {
+      console.log('Snimky udaju objednavek OK');
+    }
+  } catch (e) {
+    console.log('Snimky udaju objednavek chyba:', e.message);
   }
 }
 initObjednavkySloupce();
@@ -197,7 +209,10 @@ router.post('/', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // Vytvorit nebo najit zakaznika
+    // Najít nebo vytvořit zákazníka. Existujícímu se údaje NEMĚNÍ - objednávka
+    // bez přihlášení nesmí přepsat profil (stačila by znalost cizího e-mailu).
+    // Údaje zadané teď patří jen této objednávce (snímek obj_* níže); vazba
+    // přes zakaznik_id zůstává, ať je po ověření e-mailu uvidí v účtu.
     let zakaznik = await client.query(
       'SELECT id FROM zakaznici WHERE email = $1', [email]
     );
@@ -210,15 +225,6 @@ router.post('/', async (req, res) => {
       zakaznik_id = novy.rows[0].id;
     } else {
       zakaznik_id = zakaznik.rows[0].id;
-      // Objednávka nemá vlastní snapshot doručovací adresy - v detailu objednávky
-      // (admin i "Moje objednávky") se vždycky čte aktuální adresa ze zakaznici,
-      // takže ji tu při každé objednávce aktualizujeme na to, co zákazník právě
-      // vyplnil (jinak by se u druhé objednávky na jinou adresu pořád ukazovala
-      // ta z první objednávky/registrace).
-      await client.query(
-        'UPDATE zakaznici SET jmeno=$1, telefon=$2, ulice=$3, mesto=$4, psc=$5 WHERE id=$6',
-        [jmeno, telefon, ulice, mesto, psc, zakaznik_id]
-      );
     }
 
     // Zkontrolovat sklad (FOR UPDATE - zamkne řádky do konce transakce, aby dvě
@@ -293,8 +299,10 @@ router.post('/', async (req, res) => {
 
     // Vytvorit objednavku
     const objednavka = await client.query(
-      'INSERT INTO objednavky (zakaznik_id, doprava, platba, celkem, poznamka, poukaz_id, sleva) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
-      [zakaznik_id, doprava, platba, celkem, poznamka, poukaz_id, sleva]
+      `INSERT INTO objednavky (zakaznik_id, doprava, platba, celkem, poznamka, poukaz_id, sleva,
+                               obj_jmeno, obj_email, obj_telefon, obj_ulice, obj_mesto, obj_psc)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+      [zakaznik_id, doprava, platba, celkem, poznamka, poukaz_id, sleva, jmeno, email, telefon, ulice, mesto, psc]
     );
     const objednavka_id = objednavka.rows[0].id;
     const cislo = await pridelitCisloObjednavky(client, objednavka_id);
@@ -384,7 +392,7 @@ router.get('/', vyzadovatAdmina, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT o.id, o.cislo, o.stav, o.doprava, o.platba, o.celkem, o.vytvoreno,
-             z.jmeno, z.email, z.telefon, z.mesto
+             ${SQL_UDAJE_OBJEDNAVKY}
       FROM objednavky o
       JOIN zakaznici z ON o.zakaznik_id = z.id
       ORDER BY o.vytvoreno DESC
@@ -399,7 +407,7 @@ router.get('/', vyzadovatAdmina, async (req, res) => {
 router.get('/:id', vyzadovatAdmina, async (req, res) => {
   try {
     const objednavka = await pool.query(`
-      SELECT o.*, z.jmeno, z.email, z.telefon, z.ulice, z.mesto, z.psc, dp.kod AS poukaz_kod
+      SELECT o.*, ${SQL_UDAJE_OBJEDNAVKY}, dp.kod AS poukaz_kod
       FROM objednavky o
       JOIN zakaznici z ON o.zakaznik_id = z.id
       LEFT JOIN darkove_poukazy dp ON o.poukaz_id = dp.id
@@ -521,7 +529,8 @@ router.patch('/:id/stav', vyzadovatAdmina, async (req, res) => {
     // stav znovu) a jen pro stavy z STAVY_S_EMAILEM.
     if (STAVY_S_EMAILEM.includes(stav) && puvodniStav !== stav) {
       pool.query(
-        `SELECT o.cislo, z.jmeno, z.email FROM objednavky o JOIN zakaznici z ON o.zakaznik_id = z.id WHERE o.id = $1`,
+        `SELECT o.cislo, ${SQL_UDAJE_OBJEDNAVKY}
+         FROM objednavky o JOIN zakaznici z ON o.zakaznik_id = z.id WHERE o.id = $1`,
         [req.params.id]
       ).then(r => {
         if (!r.rows.length) return;

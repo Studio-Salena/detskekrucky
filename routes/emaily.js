@@ -525,6 +525,24 @@ async function odeslat_poukaz_zakaznikovi(poukaz) {
 }
 
 // Zkušební e-mail – pro ověření, že server umí odesílat (RESEND_API_KEY + ověřená doména)
+// Odkaz pro ověření e-mailu (dokončení registrace / převzetí záznamu z objednávky
+// bez účtu). Odkaz obsahuje jen náhodný token - žádný e-mail ani jiné údaje.
+async function odeslat_overeni_emailu({ email, jmeno, odkaz, platnostHodin }) {
+  const obsahHtml = `
+    <p style="margin:0 0 4px 0;font-size:15px">Ahoj${jmeno ? ' ' + escH(jmeno) : ''},</p>
+    <p style="margin:0 0 20px 0;font-size:14px;color:${BARVA_TEXT_TLUMENY}">pro dokončení účtu v e-shopu Dětské krůčky prosím potvrďte, že tento e-mail patří vám. Po potvrzení uvidíte v účtu své objednávky a uložené údaje.</p>
+    <p style="margin:0 0 24px 0;text-align:center">
+      <a href="${escH(odkaz)}" style="display:inline-block;background:${BARVA_ZNACKA};color:#fff;text-decoration:none;font-weight:600;padding:12px 28px;border-radius:8px">Potvrdit e-mail</a>
+    </p>
+    <p style="margin:0 0 8px 0;font-size:13px;color:${BARVA_TEXT_TLUMENY}">Po kliknutí zadáte heslo, které jste zvolili při registraci. Odkaz platí ${platnostHodin} hodin a jde použít jen jednou.</p>
+    <p style="margin:0;font-size:13px;color:${BARVA_TEXT_TLUMENY}">Pokud jste si účet nezakládali vy, tento e-mail ignorujte – bez kliknutí na odkaz se nic nezmění.</p>`;
+  await odeslatEmail({
+    to: email,
+    subject: 'Potvrďte svůj e-mail – Dětské krůčky',
+    html: obalitBrandovanyEmail({ nadpis: 'Potvrzení e-mailu', obsahHtml })
+  });
+}
+
 async function odeslat_test(komu) {
   await odeslatEmail({
     to: komu,
@@ -541,4 +559,4 @@ async function odeslat_test(komu) {
   });
 }
 
-module.exports = { odeslat_potvrzeni, odeslat_upozorneni_objednavky, odeslat_email_zmena_stavu, odeslat_potvrzeni_rezervace, odeslat_potvrzeni_terminu, odeslat_upozorneni_rezervace, odeslat_potvrzeni_vratky, odeslat_upozorneni_vratky, odeslat_potvrzeni_poradna, odeslat_upozorneni_poradna, odeslat_upozorneni_zadost_poukaz, odeslat_poukaz_zakaznikovi, odeslat_test, escH };
+module.exports = { odeslat_potvrzeni, odeslat_upozorneni_objednavky, odeslat_email_zmena_stavu, odeslat_potvrzeni_rezervace, odeslat_potvrzeni_terminu, odeslat_upozorneni_rezervace, odeslat_potvrzeni_vratky, odeslat_upozorneni_vratky, odeslat_potvrzeni_poradna, odeslat_upozorneni_poradna, odeslat_upozorneni_zadost_poukaz, odeslat_poukaz_zakaznikovi, odeslat_overeni_emailu, odeslat_test, escH };

@@ -49,7 +49,7 @@ function vytvoritMockClient(stav) {
       if (s.startsWith('COMMIT')) { this.committed = true; return {}; }
       if (s.startsWith('ROLLBACK')) { this.rolledBack = true; return {}; }
 
-      if (s.startsWith('SELECT id FROM zakaznici')) {
+      if (s === 'SELECT id FROM zakaznici WHERE email = $1') {
         const [email] = params;
         const z = stav.zakaznici.find(z => z.email === email);
         return { rows: z ? [{ id: z.id }] : [] };
@@ -60,8 +60,75 @@ function vytvoritMockClient(stav) {
         stav.zakaznici.push({ id, jmeno, email, telefon, ulice, mesto, psc });
         return { rows: [{ id }] };
       }
-      if (s.startsWith('UPDATE zakaznici SET')) {
+      // Úprava zákazníka adminem (routes/auth.js PUT /zakaznici/:id) - mock ji
+      // SKUTEČNĚ provede (dřív tu byl tichý no-op, takže žádný test nemohl
+      // odhalit, že objednávka přepisuje zákazníka). Jakýkoli jiný UPDATE
+      // zakaznici (např. vrácený přepis profilu z objednávky) skončí chybou.
+      if (s.startsWith('UPDATE zakaznici SET jmeno=$1, email=$2, telefon=$3, ulice=$4, mesto=$5, psc=$6 WHERE id=$7')) {
+        const [jmeno, email, telefon, ulice, mesto, psc, id] = params;
+        const z = stav.zakaznici.find(z => z.id === Number(id));
+        if (!z) return { rows: [] };
+        Object.assign(z, { jmeno, email, telefon, ulice, mesto, psc });
+        return { rows: [{ ...z }] };
+      }
+      // Registrace a ověření e-mailu (routes/auth.js) - stejné chování jako mock v test/auth.test.js
+      if (s.startsWith('SELECT id, jmeno, email, heslo, email_overen_at FROM zakaznici WHERE email')
+        || s.startsWith('SELECT * FROM zakaznici WHERE email')) {
+        return { rows: stav.zakaznici.filter(z => z.email === params[0]).map(z => ({ heslo: null, email_overen_at: null, ...z })) };
+      }
+      if (s.startsWith('DELETE FROM overeni_emailu')) return {};
+      if (s.startsWith('INSERT INTO overeni_emailu')) {
+        const [token_hash, zakaznik_id, heslo_hash, jmeno] = params;
+        (stav.overeni = stav.overeni || []).push({ token_hash, zakaznik_id, heslo_hash, jmeno, expirace: Date.now() + 864e5, pouzito_at: null });
         return {};
+      }
+      if (s.startsWith('SELECT o.heslo_hash, z.heslo AS heslo_uctu FROM overeni_emailu o JOIN zakaznici z')) {
+        const o = (stav.overeni || []).find(o => o.token_hash === params[0] && !o.pouzito_at && o.expirace > Date.now());
+        const z = o && stav.zakaznici.find(z => z.id === o.zakaznik_id);
+        return { rows: o && z ? [{ heslo_hash: o.heslo_hash, heslo_uctu: z.heslo || null }] : [] };
+      }
+      if (s.startsWith('UPDATE overeni_emailu SET pouzito_at = NOW() WHERE token_hash')) {
+        const o = (stav.overeni || []).find(o => o.token_hash === params[0] && !o.pouzito_at && o.expirace > Date.now());
+        if (!o) return { rows: [] };
+        o.pouzito_at = new Date();
+        return { rows: [{ zakaznik_id: o.zakaznik_id, heslo_hash: o.heslo_hash, jmeno: o.jmeno }] };
+      }
+      if (s.startsWith('UPDATE overeni_emailu SET pouzito_at = NOW() WHERE zakaznik_id')) {
+        (stav.overeni || []).filter(o => o.zakaznik_id === params[0] && !o.pouzito_at).forEach(o => { o.pouzito_at = new Date(); });
+        return {};
+      }
+      if (s.startsWith('UPDATE zakaznici SET heslo = $1')) {
+        const [heslo, jmeno, id, zmeneno] = params;
+        const z = stav.zakaznici.find(z => z.id === Number(id));
+        if (!z || z.email_overen_at) return { rows: [] };
+        Object.assign(z, { heslo, jmeno: jmeno ?? z.jmeno, email_overen_at: new Date(), heslo_zmeneno_at: zmeneno });
+        return { rows: [{ id: z.id, jmeno: z.jmeno, email: z.email }] };
+      }
+      if (s.startsWith('SELECT o.id, o.cislo, o.stav, o.celkem, o.vytvoreno, o.doprava FROM objednavky o WHERE o.zakaznik_id')) {
+        return { rows: stav.objednavky.filter(o => o.zakaznik_id === Number(params[0])).map(o => ({ id: o.id, cislo: o.cislo, stav: o.stav, celkem: o.celkem, vytvoreno: o.vytvoreno, doprava: o.doprava })) };
+      }
+      // Dřívější přepis profilu objednávkou (C1) - mock ho provede jako skutečná DB,
+      // ať případný návrat chyby testy odhalí podle změněných údajů, ne podle pádu.
+      if (s.startsWith('UPDATE zakaznici SET jmeno=$1, telefon=$2, ulice=$3, mesto=$4, psc=$5 WHERE id=$6')) {
+        const [jmeno, telefon, ulice, mesto, psc, id] = params;
+        const z = stav.zakaznici.find(z => z.id === Number(id));
+        if (z) Object.assign(z, { jmeno, telefon, ulice, mesto, psc });
+        stav.zakazaneUpdatyZakazniku = (stav.zakazaneUpdatyZakazniku || 0) + 1;
+        return {};
+      }
+      if (s.startsWith('UPDATE zakaznici SET')) {
+        throw new Error('Neočekávaný UPDATE zakaznici: ' + s);
+      }
+      if (s.startsWith('SELECT id FROM zakaznici WHERE email = $1 AND id <> $2')) {
+        const [email, id] = params;
+        return { rows: stav.zakaznici.filter(z => z.email === email && z.id !== Number(id)).map(z => ({ id: z.id })) };
+      }
+      // routes/auth.js - inicializace a načtení přihlášeného zákazníka
+      if (s.startsWith('SELECT 1 FROM information_schema')) return { rows: [{}] };
+      if (s.startsWith('CREATE TABLE')) return {};
+      if (s.startsWith('SELECT id, jmeno, email, telefon, ulice, mesto, psc, email_overen_at, heslo_zmeneno_at FROM zakaznici WHERE id')) {
+        const z = stav.zakaznici.find(z => z.id === Number(params[0]));
+        return { rows: z ? [{ email_overen_at: null, heslo_zmeneno_at: null, ...z }] : [] };
       }
 
       if (s.includes('FROM sklad s JOIN produkty p')) {
@@ -102,9 +169,34 @@ function vytvoritMockClient(stav) {
 
       if (s.startsWith('INSERT INTO objednavky (')) {
         const id = stav.dalsiObjednavkaId++;
-        const [zakaznik_id, doprava, platba, celkem, poznamka, poukaz_id, sleva] = params;
-        stav.objednavky.push({ id, zakaznik_id, doprava, platba, celkem, poznamka, poukaz_id, sleva, stav: 'nova' });
+        const [zakaznik_id, doprava, platba, celkem, poznamka, poukaz_id, sleva,
+          obj_jmeno, obj_email, obj_telefon, obj_ulice, obj_mesto, obj_psc] = params;
+        stav.objednavky.push({ id, zakaznik_id, doprava, platba, celkem, poznamka, poukaz_id, sleva, stav: 'nova',
+          obj_jmeno, obj_email, obj_telefon, obj_ulice, obj_mesto, obj_psc, udaje_doplneny_zpetne: false });
         return { rows: [{ id }] };
+      }
+      // Migrace snímků při načtení routeru (lib/objednavkySnapshot.js) - samotné
+      // doplnění testuje proti skutečnému PostgreSQL test/c1-migrace-postgres.test.js.
+      if (s.startsWith('SELECT id, cislo, zakaznik_id FROM objednavky WHERE obj_email IS NULL')) {
+        return { rows: stav.objednavky.filter(o => o.obj_email == null).map(o => ({ id: o.id, cislo: o.cislo || null, zakaznik_id: o.zakaznik_id })) };
+      }
+      // Čtení údajů objednávky jako SQL_UDAJE_OBJEDNAVKY: o zdroji se rozhoduje jednou
+      // za objednávku (snímek = obj_email není NULL), prázdné pole snímku zůstane prázdné.
+      const udajeObjednavky = (o) => {
+        const z = stav.zakaznici.find(z => z.id === o.zakaznik_id) || {};
+        const pole = ['jmeno', 'email', 'telefon', 'ulice', 'mesto', 'psc'];
+        const maSnimek = o.obj_email != null;
+        return Object.fromEntries(pole.map(p => [p, (maSnimek ? o['obj_' + p] : z[p]) ?? null]));
+      };
+      if (s.startsWith('SELECT o.id, o.cislo, o.stav, o.doprava, o.platba, o.celkem, o.vytvoreno, CASE WHEN o.obj_email IS NOT NULL THEN o.obj_jmeno ELSE z.jmeno END AS jmeno')) {
+        return { rows: stav.objednavky.map(o => ({ id: o.id, cislo: o.cislo, stav: o.stav, doprava: o.doprava, platba: o.platba, celkem: o.celkem, vytvoreno: o.vytvoreno, ...udajeObjednavky(o) })) };
+      }
+      if (s.startsWith('SELECT o.*, CASE WHEN o.obj_email IS NOT NULL THEN o.obj_jmeno ELSE z.jmeno END AS jmeno')) {
+        const o = stav.objednavky.find(o => o.id === Number(params[0]));
+        return { rows: o ? [{ ...o, ...udajeObjednavky(o), poukaz_kod: null }] : [] };
+      }
+      if (s.startsWith('SELECT op.*, p.nazev, p.znacka FROM objednavky_polozky op')) {
+        return { rows: stav.objednavkyPolozky.filter(p => String(p.objednavka_id) === String(params[0])) };
       }
 
       if (s.startsWith('INSERT INTO objednavky_cislovani')) {
@@ -188,11 +280,11 @@ function vytvoritMockClient(stav) {
         stav.objednavky = stav.objednavky.filter(o => o.id !== Number(id));
         return {};
       }
-      if (s.startsWith('SELECT o.cislo, z.jmeno, z.email FROM objednavky o JOIN zakaznici z')) {
+      if (s.startsWith('SELECT o.cislo, CASE WHEN o.obj_email IS NOT NULL THEN o.obj_jmeno ELSE z.jmeno END AS jmeno')) {
         const [id] = params;
         const o = stav.objednavky.find(o => o.id === Number(id));
         const z = o && stav.zakaznici.find(z => z.id === o.zakaznik_id);
-        return { rows: z ? [{ cislo: o.cislo || null, jmeno: z.jmeno, email: z.email }] : [] };
+        return { rows: z ? [{ cislo: o.cislo || null, ...udajeObjednavky(o) }] : [] };
       }
       if (s.startsWith('SELECT faktura_cislo, faktura_datum FROM objednavky WHERE')) {
         const [id] = params;

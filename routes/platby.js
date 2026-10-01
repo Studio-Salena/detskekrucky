@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
+const { SQL_UDAJE_OBJEDNAVKY } = require('../lib/objednavkySnapshot');
 
 // Platba kartou je momentálně vypnutá v checkoutu (viz commit "Odebrat platbu
 // kartou z checkoutu e-shopu"), ale routa zůstává v kódu pro budoucí návrat -
@@ -34,7 +35,7 @@ router.post('/vytvorit', async (req, res) => {
   const { objednavka_id } = req.body;
   try {
     const objednavka = await pool.query(`
-      SELECT o.*, z.email, z.jmeno
+      SELECT o.*, ${SQL_UDAJE_OBJEDNAVKY}
       FROM objednavky o
       JOIN zakaznici z ON o.zakaznik_id = z.id
       WHERE o.id = $1
