@@ -733,7 +733,7 @@ body:has(.cart-sidebar.open) #back-to-top {
       <label for="chWebovaStranka">Nevyplňujte toto pole</label>
       <input type="text" id="chWebovaStranka" name="webova_stranka" tabindex="-1" autocomplete="off">
     </div>
-    <button class="submit-btn" id="submitBtn" onclick="odeslatObjednavku()">Odeslat objednávku &#128230;</button>
+    <button class="submit-btn" id="submitBtn" onclick="odeslatObjednavku()">Objednávka zavazující k platbě</button>
     <button class="cancel-btn" onclick="closeCheckout()">Zpět do košíku</button>
   </div>
 </div>
@@ -1644,18 +1644,18 @@ async function odeslatObjednavku() {
       setTimeout(() => {
         document.getElementById('modalCheckout').classList.remove('open');
         btn.disabled = false;
-        btn.textContent = 'Odeslat objednávku 📦';
+        btn.textContent = 'Objednávka zavazující k platbě';
         document.getElementById('checkoutMsg').innerHTML = '';
       }, 3000);
     } else {
       zobrazitChybuCheckoutu(`<div class="msg msg-error">${data.chyba || 'Chyba serveru. Zkuste to prosím znovu.'}</div>`);
       btn.disabled = false;
-      btn.textContent = 'Odeslat objednávku 📦';
+      btn.textContent = 'Objednávka zavazující k platbě';
     }
   } catch(e) {
     zobrazitChybuCheckoutu('<div class="msg msg-error">Chyba při odesílání. Zkuste to prosím znovu.</div>');
     btn.disabled = false;
-    btn.textContent = 'Odeslat objednávku 📦';
+    btn.textContent = 'Objednávka zavazující k platbě';
   }
 }
 
