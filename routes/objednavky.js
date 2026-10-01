@@ -301,7 +301,7 @@ router.post('/', async (req, res) => {
     const objednavka = await client.query(
       `INSERT INTO objednavky (zakaznik_id, doprava, platba, celkem, poznamka, poukaz_id, sleva,
                                obj_jmeno, obj_email, obj_telefon, obj_ulice, obj_mesto, obj_psc)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id, vytvoreno`,
       [zakaznik_id, doprava, platba, celkem, poznamka, poukaz_id, sleva, jmeno, email, telefon, ulice, mesto, psc]
     );
     const objednavka_id = objednavka.rows[0].id;
@@ -365,7 +365,9 @@ try {
     doprava,
     platba,
     polozky: polozkySkutecne,
-    sleva
+    sleva,
+    // Datum a čas objednávky do potvrzení (ne datum uzavření smlouvy)
+    vytvoreno: objednavka.rows[0].vytvoreno
   });
 } catch (emailErr) {
   console.error('Chyba pri odesilani emailu:', emailErr.message);

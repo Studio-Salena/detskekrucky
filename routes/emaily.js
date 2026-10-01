@@ -6,6 +6,7 @@
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const ODESILATEL = 'Dětské krůčky <info@detskekrucky.cz>';
 const MAJITELKA_EMAIL = 'info@detskekrucky.cz';
+const { ziskatPravniTexty, ODKAZY } = require('../lib/pravniTexty');
 
 if (!RESEND_API_KEY) {
   console.error('CHYBA: RESEND_API_KEY neni nastaven v promennych prostredi! Odesilani emailu nebude fungovat.');
@@ -85,11 +86,80 @@ function obalitBrandovanyEmail({ nadpis, obsahHtml }) {
     </div>`;
 }
 
+// Datum a čas objednávky (o.vytvoreno) v českém čase - server na Renderu běží v UTC.
+function formatovatDatumCasObjednavky(hodnota) {
+  if (!hodnota) return null;
+  const d = new Date(hodnota);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleString('cs-CZ', { timeZone: 'Europe/Prague', day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+// Bloky z lib/pravniTexty.js -> HTML e-mailu. Text se vždy znovu escapuje,
+// z původního HTML stránek do e-mailu nejde žádný tag.
+function vykreslitPravniBloky(bloky) {
+  let html = '';
+  let vSeznamu = false;
+  for (const b of bloky) {
+    if (b.typ === 'odrazka' && !vSeznamu) { html += '<ul style="margin:4px 0 8px 0;padding-left:20px">'; vSeznamu = true; }
+    if (b.typ !== 'odrazka' && vSeznamu) { html += '</ul>'; vSeznamu = false; }
+    if (b.typ === 'nadpis') html += `<p style="margin:14px 0 4px 0;font-size:13px;font-weight:bold">${escH(b.text)}</p>`;
+    else if (b.typ === 'odrazka') html += `<li style="margin:2px 0;font-size:13px">${escH(b.text)}</li>`;
+    else html += `<p style="margin:0 0 6px 0;font-size:13px">${escH(b.text)}</p>`;
+  }
+  if (vSeznamu) html += '</ul>';
+  return html;
+}
+
+function pravniSekce(nadpis, obsahHtml) {
+  return `
+    <div style="margin-top:28px;padding-top:16px;border-top:1px solid ${BARVA_RAMECEK}">
+      <h3 style="margin:0 0 10px 0;font-size:14px;text-transform:uppercase;letter-spacing:0.05em;color:${BARVA_ZNACKA}">${escH(nadpis)}</h3>
+      <div style="color:#2D2422">${obsahHtml}</div>
+    </div>`;
+}
+
+// Informace, které musí zákazník dostat v textové podobě (§ 1824a, § 1827 odst. 2):
+// prodávající, poučení o odstoupení, vzorový formulář, reklamace, ADR a VOP.
+// Texty jsou převzaté z veřejných stránek webu (jediný zdroj). Záměrně tu
+// NENÍ žádné tvrzení o okamžiku uzavření smlouvy - VOP čl. 2 zatím čeká na
+// právní rozhodnutí; samotné VOP se cituje beze změny v sekci níže.
+function pravniCastPotvrzeni() {
+  const odkazyHtml = `
+    <ul style="margin:4px 0 0 0;padding-left:20px;font-size:13px">
+      <li><a href="${ODKAZY.vop}" style="color:${BARVA_ZNACKA}">Obchodní podmínky</a></li>
+      <li><a href="${ODKAZY.odstoupeni}" style="color:${BARVA_ZNACKA}">Odstoupení od smlouvy</a></li>
+      <li><a href="${ODKAZY.vratitZbozi}" style="color:${BARVA_ZNACKA}">Vrátit zboží (online formulář)</a></li>
+      <li><a href="${ODKAZY.reklamacniRad}" style="color:${BARVA_ZNACKA}">Reklamační řád</a></li>
+    </ul>`;
+  let t;
+  try {
+    t = ziskatPravniTexty();
+  } catch (e) {
+    // Nemělo by nastat (hlídají testy) - e-mail s objednávkou se i tak pošle,
+    // aspoň s odkazy, a chyba je v logu k okamžité nápravě.
+    console.error('CHYBA: právní texty pro potvrzení objednávky se nepodařilo načíst:', e.message);
+    return pravniSekce('Obchodní podmínky a poučení', `<p style="margin:0;font-size:13px">Obchodní podmínky, poučení o odstoupení od smlouvy, vzorový formulář a reklamační řád najdete na webu:</p>${odkazyHtml}`);
+  }
+  return `
+    <p style="margin:28px 0 0 0;font-size:13px;color:${BARVA_TEXT_TLUMENY}">Níže v tomto e-mailu najdete údaje o prodávajícím, poučení o odstoupení od smlouvy, vzorový formulář pro odstoupení, informace o reklamaci a obchodní podmínky. E-mail si prosím uschovejte.</p>
+    ${pravniSekce('Prodávající', vykreslitPravniBloky(t.prodavajici))}
+    ${pravniSekce('Užitečné odkazy', odkazyHtml)}
+    ${pravniSekce('Poučení o odstoupení od smlouvy', vykreslitPravniBloky(t.pouceni))}
+    ${pravniSekce('Vzorový formulář pro odstoupení od smlouvy', vykreslitPravniBloky(t.formular))}
+    ${pravniSekce('Reklamace a práva z vadného plnění', vykreslitPravniBloky(t.reklamace))}
+    ${pravniSekce('Mimosoudní řešení sporů', vykreslitPravniBloky(t.adr))}
+    <!--VOP-START-->
+    ${pravniSekce('Obchodní podmínky', vykreslitPravniBloky(t.vop))}
+    <!--VOP-END-->`;
+}
+
 async function odeslat_potvrzeni(objednavka) {
   // Zákaznicky viditelné "číslo objednávky" - cislo (RRMMNN, přidělené hned
   // při vzniku). Fallback na interní objednavka_id jen pro jistotu, kdyby ho
   // volající nedodal (nemělo by nastat, cislo se přiděluje vždy).
   const cisloZobrazit = objednavka.cislo || objednavka.objednavka_id;
+  // Datum a čas OBJEDNÁVKY (vznik záznamu), ne datum uzavření smlouvy
+  const datumCas = formatovatDatumCasObjednavky(objednavka.vytvoreno);
   // dopravaCena není v objektu zvlášť (jen celkem) - dopočítá se, ať jde
   // zobrazit doprava jako vlastní řádek v tabulce se správným součtem.
   const mezisoucet = objednavka.polozky.reduce((s, p) => s + p.cena * p.pocet, 0);
@@ -125,7 +195,8 @@ async function odeslat_potvrzeni(objednavka) {
 
   const obsahHtml = `
     <p style="margin:0 0 4px 0;font-size:15px">Ahoj ${escH(objednavka.jmeno)},</p>
-    <p style="margin:0 0 24px 0;font-size:14px;color:${BARVA_TEXT_TLUMENY}">děkujeme za objednávku, brzy ji zpracujeme. Níže posíláme její přehled.</p>
+    <p style="margin:0 0 ${datumCas ? '8px' : '24px'} 0;font-size:14px;color:${BARVA_TEXT_TLUMENY}">děkujeme za objednávku, brzy ji zpracujeme. Níže posíláme její přehled.</p>
+    ${datumCas ? `<p style="margin:0 0 24px 0;font-size:14px">Datum a čas objednávky: <strong>${escH(datumCas)}</strong></p>` : ''}
 
     <table role="presentation" style="width:100%;background:${BARVA_POZADI_BOX};border:1px solid ${BARVA_RAMECEK};border-radius:8px;margin-bottom:24px">
       <tr>
@@ -161,7 +232,8 @@ async function odeslat_potvrzeni(objednavka) {
         <tr><td colspan="3" style="padding:10px 8px;font-size:14px">${escH(dopravaLabel)} (doprava)</td><td style="padding:10px 8px;font-size:14px;text-align:right">${dopravaCena === 0 ? 'Zdarma' : dopravaCena + ' Kč'}</td></tr>
         <tr><td colspan="3" style="padding:14px 8px 0 8px;font-size:15px;font-weight:bold;color:${BARVA_ZNACKA};border-top:2px solid ${BARVA_ZNACKA_TMAVA}">CELKEM K ÚHRADĚ</td><td style="padding:14px 8px 0 8px;font-size:15px;font-weight:bold;color:${BARVA_ZNACKA};text-align:right;border-top:2px solid ${BARVA_ZNACKA_TMAVA}">${objednavka.celkem} Kč</td></tr>
       </tbody>
-    </table>`;
+    </table>
+    ${pravniCastPotvrzeni()}`;
 
   await odeslatEmail({
     to: objednavka.email,
