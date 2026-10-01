@@ -428,7 +428,7 @@ async function odeslat_upozorneni_rezervace(rezervace, slot, typ = 'nova') {
 }
 
 // Potvrzení přijetí žádosti o vrácení/odstoupení od smlouvy zákazníkovi.
-// Zákon (§1824a odst. 2 obč. zák.) vyžaduje, aby prodávající přijetí odstoupení
+// Zákon (§ 1830 odst. 2 obč. zák.) vyžaduje, aby prodávající přijetí odstoupení
 // od smlouvy bez zbytečného odkladu potvrdil v textové podobě.
 async function odeslat_potvrzeni_vratky(zadost) {
   const polozky_html = zadost.polozky.map(p => `
@@ -452,7 +452,7 @@ async function odeslat_potvrzeni_vratky(zadost) {
           <tbody>${polozky_html}</tbody>
         </table>
         ${zadost.duvod ? `<p style="margin-top:12px"><strong>Uvedený důvod:</strong> ${escH(zadost.duvod)}</p>` : ''}
-        <p style="margin-top:16px">Zboží prosím zašlete nepoužité, nepoškozené a pokud možno v původním obalu na adresu prodejny (Holešovská 752, 768 24 Hulín).</p>
+        <p style="margin-top:16px">Zboží prosím zašlete na adresu prodejny (Holešovská 752, 768 24 Hulín). Odpovídáte pouze za snížení hodnoty zboží, které vzniklo v důsledku nakládání s tímto zbožím jinak, než je nutné k obeznámení se s povahou, vlastnostmi a funkčností zboží.</p>
         <hr>
         <p style="color:#666;font-size:13px">
           Dětské krůčky | 773 517 733 | info@detskekrucky.cz
