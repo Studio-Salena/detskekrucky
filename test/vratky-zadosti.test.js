@@ -17,10 +17,11 @@ function vytvoritMockPool(vlozeneZadosti) {
     async query(sql, params = []) {
       const s = sql.replace(/\s+/g, ' ').trim();
       if (s.startsWith('CREATE TABLE')) return {};
-      if (s.startsWith('SELECT o.id, z.email FROM objednavky')) {
+      // Objednávku lze dohledat interním id (1) i zákaznickým číslem (261012) - jako WHERE o.cislo = $1 OR o.id::text = $1
+      if (s.startsWith('SELECT o.id, o.cislo, z.email FROM objednavky')) {
         const [id] = params;
-        if (Number(id) !== 1) return { rows: [] };
-        return { rows: [{ id: 1, email: 'jana@example.com' }] };
+        if (id !== '1' && id !== '261012') return { rows: [] };
+        return { rows: [{ id: 1, cislo: '261012', email: 'jana@example.com' }] };
       }
       if (s.startsWith('SELECT op.produkt_id, op.velikost, op.pocet, op.cena, p.nazev')) {
         return { rows: SKUTECNE_POLOZKY };
@@ -36,7 +37,7 @@ function vytvoritMockPool(vlozeneZadosti) {
   };
 }
 
-function nacistSMockPoolem(vlozeneZadosti) {
+function nacistSMockPoolem(vlozeneZadosti, odeslaneEmaily = []) {
   const routePath = require.resolve('../routes/vratkyZadosti.js');
   const poolPath = require.resolve('../db/pool');
   const emailyPath = require.resolve('../routes/emaily');
@@ -44,7 +45,10 @@ function nacistSMockPoolem(vlozeneZadosti) {
   delete require.cache[poolPath];
   delete require.cache[emailyPath];
   require.cache[poolPath] = { id: poolPath, filename: poolPath, loaded: true, exports: vytvoritMockPool(vlozeneZadosti) };
-  require.cache[emailyPath] = { id: emailyPath, filename: emailyPath, loaded: true, exports: { odeslat_potvrzeni_vratky: async () => {}, odeslat_upozorneni_vratky: async () => {} } };
+  require.cache[emailyPath] = { id: emailyPath, filename: emailyPath, loaded: true, exports: {
+    odeslat_potvrzeni_vratky: async (zadost) => { odeslaneEmaily.push({ typ: 'potvrzeni', zadost }); },
+    odeslat_upozorneni_vratky: async (zadost) => { odeslaneEmaily.push({ typ: 'upozorneni', zadost }); }
+  } };
   const router = require(routePath);
   delete require.cache[poolPath];
   delete require.cache[routePath];
@@ -127,4 +131,36 @@ test('podvržený název položky se do DB neuloží (uloží se jen ověřený 
   assert.equal(res.statusCode, 200);
   assert.equal(vlozene[0].polozky[0].nazev, 'Bota A');
   assert.equal(vlozene[0].polozky[0].cena, 500);
+});
+
+// B2.2 - e-maily k vratce dostanou zákaznické číslo objednávky (cislo, RRMMNN)
+// z DB; objednavka_id z requestu zůstává beze změny a interní logika (INSERT)
+// dál používá skutečné interní id.
+test('B2.2: e-maily dostanou cislo z DB, objednavka_id zůstane, INSERT používá interní id', async () => {
+  // Jak to posílá e-shop: interní id z /overit
+  const vlozene = [];
+  const emaily = [];
+  const handler = najitHandler(nacistSMockPoolem(vlozene, emaily), 'post', '/');
+  const res = vytvoritRes();
+  await handler({ ip: novaIp(), body: { objednavka_id: 1, email: 'jana@example.com', polozky: [{ produkt_id: 5, velikost: 24, pocet: 1 }] } }, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(emaily.map(e => e.typ).sort(), ['potvrzeni', 'upozorneni']);
+  for (const { zadost } of emaily) {
+    assert.equal(zadost.cislo, '261012'); // z DB
+    assert.equal(zadost.objednavka_id, 1); // beze změny, jak přišlo
+  }
+  assert.equal(vlozene[0].objednavka_id, 1); // INSERT se skutecneId
+
+  // Přijme se i zákaznické číslo - INSERT pořád s interním id
+  const vlozene2 = [];
+  const emaily2 = [];
+  const handler2 = najitHandler(nacistSMockPoolem(vlozene2, emaily2), 'post', '/');
+  const res2 = vytvoritRes();
+  await handler2({ ip: novaIp(), body: { objednavka_id: '261012', email: 'jana@example.com', polozky: [{ produkt_id: 5, velikost: 24, pocet: 1 }] } }, res2);
+
+  assert.equal(res2.statusCode, 200);
+  assert.equal(vlozene2[0].objednavka_id, 1);
+  assert.equal(emaily2.length, 2);
+  assert.equal(emaily2[0].zadost.cislo, '261012');
 });

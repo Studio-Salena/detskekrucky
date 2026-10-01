@@ -96,11 +96,11 @@ router.post('/', async (req, res) => {
 
   try {
     // Znovu ověřit, že objednávka a e-mail sedí (nespoléhat jen na frontend).
-    // objednavka_id od klienta je "hezké" číslo objednávky (cislo) - přijme
-    // se i syrové interní id (staré objednávky bez cisla). Dál v handleru se
-    // VŽDY používá jen skutecneId (reálný interní id), ne to, co přišlo v requestu.
+    // objednavka_id od klienta: e-shop posílá interní id z /overit, přijme se
+    // ale i číslo objednávky (cislo, RRMMNN). Dál v handleru se VŽDY používá
+    // jen skutecneId (reálný interní id), ne to, co přišlo v requestu.
     const objednavka = await pool.query(`
-      SELECT o.id, z.email FROM objednavky o
+      SELECT o.id, o.cislo, z.email FROM objednavky o
       JOIN zakaznici z ON o.zakaznik_id = z.id
       WHERE o.cislo = $1 OR o.id::text = $1
     `, [String(objednavka_id).trim()]);
@@ -153,7 +153,8 @@ router.post('/', async (req, res) => {
 
     // Potvrzení zákazníkovi (zákonná povinnost) i upozornění majitelce se posílají
     // až po odpovědi, ať prodleva/chyba s odesláním žádost o vrácení nezablokuje.
-    const zadost = { objednavka_id, jmeno, email, telefon, polozky: overenePolozky, duvod };
+    // cislo (RRMMNN) jen pro zobrazení v e-mailech - interní logika dál používá skutecneId
+    const zadost = { objednavka_id, cislo: objednavka.rows[0].cislo, jmeno, email, telefon, polozky: overenePolozky, duvod };
     odeslat_potvrzeni_vratky(zadost).catch(e => console.error('Potvrzeni zadosti o vratku se nepodarilo odeslat:', e.message));
     odeslat_upozorneni_vratky(zadost).catch(e => console.error('Upozorneni majitelce o vratce se nepodarilo odeslat:', e.message));
   } catch (err) {

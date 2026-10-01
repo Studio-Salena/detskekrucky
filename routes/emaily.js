@@ -431,6 +431,8 @@ async function odeslat_upozorneni_rezervace(rezervace, slot, typ = 'nova') {
 // Zákon (§ 1830 odst. 2 obč. zák.) vyžaduje, aby prodávající přijetí odstoupení
 // od smlouvy bez zbytečného odkladu potvrdil v textové podobě.
 async function odeslat_potvrzeni_vratky(zadost) {
+  // Zákaznické číslo objednávky (RRMMNN); fallback pro staré objednávky bez cisla
+  const cisloZobrazit = zadost.cislo || zadost.objednavka_id;
   const polozky_html = zadost.polozky.map(p => `
     <tr>
       <td style="padding:8px;border-bottom:1px solid #eee">${p.nazev ? escH(p.nazev) : ('produkt #' + p.produkt_id)} - vel. ${escH(p.velikost)}</td>
@@ -440,12 +442,12 @@ async function odeslat_potvrzeni_vratky(zadost) {
 
   await odeslatEmail({
     to: zadost.email,
-    subject: `Přijali jsme vaši žádost o vrácení – objednávka #${zadost.objednavka_id}`,
+    subject: `Přijali jsme vaši žádost o vrácení – objednávka #${cisloZobrazit}`,
     html: `
       <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
         <h1 style="color:#FF6B35">Žádost o vrácení přijata</h1>
         <p>Ahoj${zadost.jmeno ? ' ' + escH(zadost.jmeno) : ''},</p>
-        <p>potvrzujeme, že jsme přijali vaši žádost o vrácení zboží / odstoupení od smlouvy k objednávce <strong>#${zadost.objednavka_id}</strong>. Ozveme se vám co nejdřív s dalším postupem.</p>
+        <p>potvrzujeme, že jsme přijali vaši žádost o vrácení zboží / odstoupení od smlouvy k objednávce <strong>#${escH(cisloZobrazit)}</strong>. Ozveme se vám co nejdřív s dalším postupem.</p>
         <h3>Položky k vrácení</h3>
         <table style="width:100%;border-collapse:collapse">
           <thead><tr style="background:#f5f5f5"><th style="padding:8px;text-align:left">Produkt</th><th style="padding:8px;text-align:left">Počet</th></tr></thead>
@@ -465,6 +467,8 @@ async function odeslat_potvrzeni_vratky(zadost) {
 
 // Upozornění majitelce o nové žádosti o vrácení/odstoupení
 async function odeslat_upozorneni_vratky(zadost) {
+  // Zákaznické číslo objednávky (RRMMNN); fallback pro staré objednávky bez cisla
+  const cisloZobrazit = zadost.cislo || zadost.objednavka_id;
   const polozky_html = zadost.polozky.map(p => `
     <tr>
       <td style="padding:8px;border-bottom:1px solid #eee">${p.nazev ? escH(p.nazev) : ('produkt #' + p.produkt_id)} - vel. ${escH(p.velikost)}</td>
@@ -473,7 +477,7 @@ async function odeslat_upozorneni_vratky(zadost) {
   `).join('');
 
   const obsahHtml = `
-    <p style="margin:0 0 16px 0;font-size:14px"><strong>Objednávka:</strong> #${escH(zadost.objednavka_id)}</p>
+    <p style="margin:0 0 16px 0;font-size:14px"><strong>Objednávka:</strong> #${escH(cisloZobrazit)}</p>
     <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
       <thead><tr>
         <th style="text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY};border-bottom:2px solid ${BARVA_RAMECEK};padding:10px 8px">Produkt</th>
@@ -493,10 +497,10 @@ async function odeslat_upozorneni_vratky(zadost) {
 
   await odeslatEmail({
     to: MAJITELKA_EMAIL,
-    subject: `↩️ Žádost o vrácení – objednávka #${zadost.objednavka_id}`,
+    subject: `↩️ Žádost o vrácení – objednávka #${cisloZobrazit}`,
     html: obalitBrandovanyEmail({ nadpis: 'Nová žádost o vrácení / odstoupení', obsahHtml })
   });
-  console.log('Upozorneni na zadost o vratku odeslano majitelce, objednavka #', zadost.objednavka_id);
+  console.log('Upozorneni na zadost o vratku odeslano majitelce, objednavka #', cisloZobrazit);
 }
 
 // Potvrzení přijetí krátkého dotazu z "Poradny velikostí" zákaznici
