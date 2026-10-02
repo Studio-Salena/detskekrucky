@@ -127,3 +127,59 @@ test('veřejný GET /api/sklad: primary fotka se získá v JEDINÉM dotazu (žá
   assert.equal(pool.pocetVolani(), 1); // jediný SQL dotaz pro celý seznam produktů
   assert.match(res.body[0].primary_image_url, /^https:\/\/res\.cloudinary\.com\/demo\/image\/upload\/f_auto,q_auto,w_700,c_limit\//);
 });
+
+// Produkty skryté v adminu (jen pro prodejnu, např. tašky) veřejný výpis
+// nesmí vracet - filtruje se přímo v SQL. Admin výpis je vidí dál.
+function nacistSkladSeZachycenimSql() {
+  const dotazy = [];
+  const routePath = require.resolve('../routes/sklad.js');
+  const poolPath = require.resolve('../db/pool');
+  delete require.cache[routePath];
+  delete require.cache[poolPath];
+  const pool = {
+    async query(sql, params) {
+      const s = sql.replace(/\s+/g, ' ').trim();
+      dotazy.push({ sql: s, params });
+      if (s.startsWith('ALTER TABLE') || s.startsWith('CREATE TABLE')) return {};
+      if (s.startsWith('UPDATE produkty SET na_eshopu')) {
+        return { rows: params[1] === '404' ? [] : [{ id: Number(params[1]), na_eshopu: params[0] }] };
+      }
+      return { rows: [] };
+    }
+  };
+  require.cache[poolPath] = { id: poolPath, filename: poolPath, loaded: true, exports: pool };
+  const router = require(routePath);
+  delete require.cache[poolPath];
+  delete require.cache[routePath];
+  return { router, dotazy };
+}
+
+test('veřejný GET /api/sklad vrací jen produkty s na_eshopu, admin výpis všechny', async () => {
+  const { router, dotazy } = nacistSkladSeZachycenimSql();
+  await najitHandler(router, 'get', '/')({}, vytvoritRes());
+  await najitHandler(router, 'get', '/admin')({}, vytvoritRes());
+
+  const verejny = dotazy.find(d => d.sql.startsWith('SELECT') && d.sql.includes('product_images'));
+  const admin = dotazy.find(d => d.sql.startsWith('SELECT') && d.sql.includes('min_pocet'));
+  assert.match(verejny.sql, /WHERE p\.na_eshopu/);
+  assert.doesNotMatch(admin.sql, /WHERE p\.na_eshopu/);
+  assert.match(admin.sql, /p\.na_eshopu/); // admin hodnotu dostane, aby ukázal přepínač
+});
+
+test('PATCH /api/sklad/produkty/:id/na-eshopu přepne zobrazení, jinou hodnotu než true/false odmítne', async () => {
+  const { router } = nacistSkladSeZachycenimSql();
+  const handler = najitHandler(router, 'patch', '/produkty/:id/na-eshopu');
+
+  const ok = vytvoritRes();
+  await handler({ params: { id: '5' }, body: { na_eshopu: false } }, ok);
+  assert.equal(ok.statusCode, 200);
+  assert.deepEqual(ok.body, { id: 5, na_eshopu: false });
+
+  const spatne = vytvoritRes();
+  await handler({ params: { id: '5' }, body: { na_eshopu: 'ne' } }, spatne);
+  assert.equal(spatne.statusCode, 400);
+
+  const neexistuje = vytvoritRes();
+  await handler({ params: { id: '404' }, body: { na_eshopu: true } }, neexistuje);
+  assert.equal(neexistuje.statusCode, 404);
+});

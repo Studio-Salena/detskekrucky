@@ -243,7 +243,7 @@ router.post('/', async (req, res) => {
     );
     for (const p of polozkyKZamceni) {
       const sklad = await client.query(
-        'SELECT s.pocet_kusu, s.dostupnost, p.cena, p.nazev FROM sklad s JOIN produkty p ON p.id = s.produkt_id WHERE s.produkt_id = $1 AND s.velikost = $2 FOR UPDATE',
+        'SELECT s.pocet_kusu, s.dostupnost, p.cena, p.nazev, p.na_eshopu FROM sklad s JOIN produkty p ON p.id = s.produkt_id WHERE s.produkt_id = $1 AND s.velikost = $2 FOR UPDATE',
         [p.produkt_id, p.velikost]
       );
       if (sklad.rows.length === 0) {
@@ -251,6 +251,12 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ chyba: `Nedostatek zbozi na sklade: produkt ${p.produkt_id} velikost ${p.velikost}` });
       }
       const radek = sklad.rows[0];
+      // Produkt skrytý v adminu (jen pro prodejnu) - mohl zůstat zákazníkovi
+      // v košíku z dřívějška, objednat ho přes e-shop ale nejde.
+      if (!radek.na_eshopu) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ chyba: `Produkt "${radek.nazev}" už není v nabídce e-shopu. Odeberte ho prosím z košíku.` });
+      }
       const jeUDodavatele = radek.dostupnost === 'dodavatel';
       if (!jeUDodavatele && radek.pocet_kusu < p.pocet) {
         await client.query('ROLLBACK');

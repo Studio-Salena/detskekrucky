@@ -13,6 +13,7 @@ async function initSkladSloupce() {
       ALTER TABLE sklad ADD COLUMN IF NOT EXISTS sirka_mm INTEGER;
       ALTER TABLE sklad ADD COLUMN IF NOT EXISTS dostupnost TEXT NOT NULL DEFAULT 'skladem';
       ALTER TABLE produkty ADD COLUMN IF NOT EXISTS typ_nohy TEXT;
+      ALTER TABLE produkty ADD COLUMN IF NOT EXISTS na_eshopu BOOLEAN NOT NULL DEFAULT true;
     `);
     // Postgres nemá "ADD CONSTRAINT IF NOT EXISTS" - když constraint už existuje, chybu tiše ignorujeme.
     await pool.query(`ALTER TABLE sklad ADD CONSTRAINT sklad_pocet_kusu_nezaporny CHECK (pocet_kusu >= 0)`);
@@ -54,6 +55,8 @@ router.get('/', async (req, res) => {
         FROM product_images
         WHERE produkt_id = p.id
       ) imgs ON true
+      -- Produkty skryté v adminu (např. zboží jen pro prodejnu) e-shop vůbec nedostane
+      WHERE p.na_eshopu
       ORDER BY p.nazev, s.velikost
     `);
     // Transformace (formát/kvalita/resize) se do URL vkládá až tady, ne při
@@ -77,7 +80,7 @@ router.use(vyzadovatAdmina);
 router.get('/admin', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT p.id, p.nazev, p.znacka, p.emoji, p.kategorie, p.cena, p.cena_puvodni, p.typ_nohy, p.popis,
+      SELECT p.id, p.nazev, p.znacka, p.emoji, p.kategorie, p.cena, p.cena_puvodni, p.typ_nohy, p.popis, p.na_eshopu,
              s.velikost, s.ean, s.pocet_kusu, s.min_pocet, s.delka_mm, s.sirka_mm, s.dostupnost,
              CASE WHEN s.pocet_kusu <= s.min_pocet THEN true ELSE false END as nizky_stav
       FROM produkty p
@@ -197,13 +200,13 @@ router.get('/nizky-stav', async (req, res) => {
 
 // Přidat nový produkt (volitelně rovnou i s první variantou - velikost/počet/EAN)
 router.post('/produkty', async (req, res) => {
-  const { nazev, znacka, emoji, popis, kategorie, cena, cena_puvodni, typ_nohy, velikost, pocet, ean, delka_mm, sirka_mm, dostupnost } = req.body;
+  const { nazev, znacka, emoji, popis, kategorie, cena, cena_puvodni, typ_nohy, velikost, pocet, ean, delka_mm, sirka_mm, dostupnost, na_eshopu } = req.body;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const result = await client.query(
-      'INSERT INTO produkty (nazev, znacka, emoji, popis, kategorie, cena, cena_puvodni, typ_nohy) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
-      [nazev, znacka, emoji||'', popis||'', kategorie, cena, cena_puvodni||null, typ_nohy || null]
+      'INSERT INTO produkty (nazev, znacka, emoji, popis, kategorie, cena, cena_puvodni, typ_nohy, na_eshopu) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',
+      [nazev, znacka, emoji||'', popis||'', kategorie, cena, cena_puvodni||null, typ_nohy || null, na_eshopu !== false]
     );
     const produkt = result.rows[0];
     if (velikost) {
@@ -237,6 +240,27 @@ router.patch('/produkty/:id', async (req, res) => {
       'UPDATE produkty SET nazev=$1, znacka=$2, cena=$3, cena_puvodni=$4, popis=$5, kategorie=$6, emoji=$7, typ_nohy=$8 WHERE id=$9 RETURNING *',
       [nazev, znacka, cena, cena_puvodni||null, popis||'', kategorie, emoji||'', typ_nohy || null, req.params.id]
     );
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ chyba: err.message });
+  }
+});
+
+// Zobrazit/skrýt produkt na e-shopu (na prodejně a ve skladu zůstává dál).
+// Samostatný endpoint, ať přepínač v přehledu produktů nemusí posílat celý produkt.
+router.patch('/produkty/:id/na-eshopu', async (req, res) => {
+  const { na_eshopu } = req.body;
+  if (typeof na_eshopu !== 'boolean') {
+    return res.status(400).json({ chyba: 'Chybí hodnota na_eshopu (true/false).' });
+  }
+  try {
+    const result = await pool.query(
+      'UPDATE produkty SET na_eshopu=$1 WHERE id=$2 RETURNING id, na_eshopu',
+      [na_eshopu, req.params.id]
+    );
+    if (!result.rows.length) {
+      return res.status(404).json({ chyba: 'Produkt nenalezen.' });
+    }
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ chyba: err.message });

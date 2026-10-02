@@ -134,7 +134,8 @@ function vytvoritMockClient(stav) {
       if (s.includes('FROM sklad s JOIN produkty p')) {
         const [produkt_id, velikost] = params;
         const radek = stav.sklad.find(r => r.produkt_id === produkt_id && r.velikost === velikost);
-        return { rows: radek ? [{ pocet_kusu: radek.pocet_kusu, dostupnost: radek.dostupnost, cena: radek.cena }] : [] };
+        // na_eshopu má v DB výchozí hodnotu true - stejně tady, pokud test neřekne jinak
+        return { rows: radek ? [{ pocet_kusu: radek.pocet_kusu, dostupnost: radek.dostupnost, cena: radek.cena, nazev: radek.nazev, na_eshopu: radek.na_eshopu !== false }] : [] };
       }
 
       if (s.startsWith('SELECT * FROM darkove_poukazy')) {

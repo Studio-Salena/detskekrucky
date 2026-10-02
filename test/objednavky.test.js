@@ -212,3 +212,17 @@ test('sklad se zamyká v pevném pořadí (produkt_id, velikost), ne v pořadí 
   assert.deepEqual(zamykaciDotazy[0].params, [1, 24]); // produkt 1 se zamyká první bez ohledu na pořadí v košíku
   assert.deepEqual(zamykaciDotazy[1].params, [2, 25]);
 });
+
+test('produkt skrytý v adminu (na_eshopu = false) nejde objednat a sklad zůstane nedotčen', async () => {
+  const stav = pocatecniStav();
+  stav.sklad.push({ produkt_id: 3, velikost: 0, pocet_kusu: 10, dostupnost: 'skladem', cena: 300, nazev: 'Taška', na_eshopu: false });
+  const handler = pripravitHandler(stav);
+  // Vlastní IP - ostatní testy v souboru už vyčerpaly limit objednávek pro 127.0.0.1
+  const res = vytvoritRes();
+  await handler({ body: objednavkovyPozadavek({ polozky: [{ produkt_id: 3, velikost: 0, pocet: 1, cena: 300 }] }), ip: '10.0.0.3' }, res);
+
+  assert.equal(res.statusCode, 400);
+  assert.match(res.body.chyba, /už není v nabídce e-shopu/);
+  assert.equal(stav.objednavky.length, 0);
+  assert.equal(stav.sklad.find(r => r.produkt_id === 3).pocet_kusu, 10); // sklad nedotčen
+});
