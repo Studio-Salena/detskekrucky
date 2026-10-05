@@ -6,6 +6,12 @@ const { jeZablokovana, zaznamenatZadost } = require('../middleware/vratkyLimiter
 const { odeslat_potvrzeni_vratky, odeslat_upozorneni_vratky } = require('./emaily');
 const { sestavitProhlaseniOdstoupeni } = require('../lib/prohlaseniOdstoupeni');
 
+// Jméno spotřebitele pro online odstoupení (B3.2) - vždy ze serverových dat:
+// snímek objednávky (obj_jmeno), u objednávek bez snímku aktuální zákazník.
+// Stejné pravidlo jako SQL_UDAJE_OBJEDNAVKY, ale jen pro jméno - e-mail se
+// záměrně dál ověřuje proti z.email (změna ověřování mimo rozsah B3.2).
+const SQL_JMENO_SPOTREBITELE = 'CASE WHEN o.obj_email IS NOT NULL THEN o.obj_jmeno ELSE z.jmeno END AS jmeno';
+
 async function initTabulka() {
   try {
     await pool.query(`
@@ -59,7 +65,7 @@ router.post('/overit', async (req, res) => {
     // zavedením cisla. Dál v handleru se VŽDY používá jen skutečné interní
     // id (objednavka.rows[0].id), ne to, co zákazník zadal.
     const objednavka = await pool.query(`
-      SELECT o.id, o.stav, o.celkem, o.vytvoreno, z.email
+      SELECT o.id, o.stav, o.celkem, o.vytvoreno, z.email, ${SQL_JMENO_SPOTREBITELE}
       FROM objednavky o
       JOIN zakaznici z ON o.zakaznik_id = z.id
       WHERE o.cislo = $1 OR o.id::text = $1
@@ -107,7 +113,7 @@ router.post('/', async (req, res) => {
     // ale i číslo objednávky (cislo, RRMMNN). Dál v handleru se VŽDY používá
     // jen skutecneId (reálný interní id), ne to, co přišlo v requestu.
     const objednavka = await pool.query(`
-      SELECT o.id, o.cislo, z.email FROM objednavky o
+      SELECT o.id, o.cislo, z.email, ${SQL_JMENO_SPOTREBITELE} FROM objednavky o
       JOIN zakaznici z ON o.zakaznik_id = z.id
       WHERE o.cislo = $1 OR o.id::text = $1
     `, [String(objednavka_id).trim()]);
@@ -151,14 +157,17 @@ router.post('/', async (req, res) => {
     }
 
     const objednavkaCislo = objednavka.rows[0].cislo;
+    // Jméno do důkazního záznamu jen ze serveru (snímek objednávky) - req.body.jmeno
+    // se ignoruje; zákazník jméno v kroku 2 jen vidí a odesláním potvrzuje.
+    const jmenoSpotrebitele = objednavka.rows[0].jmeno;
     // Snapshot prohlášení z odeslaných údajů a ověřených položek (ne z requestu)
     const prohlaseniText = sestavitProhlaseniOdstoupeni({
-      cislo: objednavkaCislo, objednavkaId: skutecneId, jmeno, email, polozky: overenePolozky, duvod
+      cislo: objednavkaCislo, objednavkaId: skutecneId, jmeno: jmenoSpotrebitele, email, polozky: overenePolozky, duvod
     });
 
     const result = await pool.query(
       'INSERT INTO vratky_zadosti (objednavka_id, jmeno, email, telefon, polozky, duvod, prohlaseni_text, objednavka_cislo) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
-      [skutecneId, jmeno || null, email, telefon || null, JSON.stringify(overenePolozky), duvod || null, prohlaseniText, objednavkaCislo || null]
+      [skutecneId, jmenoSpotrebitele || null, email, telefon || null, JSON.stringify(overenePolozky), duvod || null, prohlaseniText, objednavkaCislo || null]
     );
     const ulozena = result.rows[0];
 
@@ -171,6 +180,7 @@ router.post('/', async (req, res) => {
     // Potvrzení zákazníkovi (zákonná povinnost) i upozornění majitelce se posílají
     // až po odpovědi, ať prodleva/chyba s odesláním žádost o vrácení nezablokuje.
     // cislo (RRMMNN) jen pro zobrazení v e-mailech - interní logika dál používá skutecneId
+    // jmeno v e-mailech zatím beze změny (z requestu) - obsah e-mailů řeší až B3.3
     const zadost = { objednavka_id, cislo: objednavkaCislo, jmeno, email, telefon, polozky: overenePolozky, duvod };
     // Evidence potvrzení spotřebiteli: potvrzeni_odeslano = odesílací služba
     // požadavek přijala (ne doručení). Při chybě se uloží jen její text, bez retry.

@@ -12,18 +12,32 @@ const SKUTECNE_POLOZKY = [
   { produkt_id: 6, velikost: 25, pocet: 1, cena: 700, nazev: 'Bota B' }
 ];
 
+// B3.2 - jméno spotřebitele bere server ze snímku objednávky, bez snímku ze zákazníka
+const SQL_JMENO = 'CASE WHEN o.obj_email IS NOT NULL THEN o.obj_jmeno ELSE z.jmeno END AS jmeno';
+// Data objednávky #1 v "DB": snímek (obj_*) a aktuální profil zákazníka (z.*)
+const VYCHOZI_OBJEDNAVKA = { obj_email: 'jana@example.com', obj_jmeno: 'Jana Nováková', zakaznikJmeno: 'Jana Nováková' };
+
 // dotazy: volitelný log všech SQL (B3.1 - inicializace tabulky, evidence potvrzení)
-function vytvoritMockPool(vlozeneZadosti, dotazy = []) {
+// objednavkaDb: volitelně jiný snímek/profil (B3.2 fallback)
+function vytvoritMockPool(vlozeneZadosti, dotazy = [], objednavkaDb = VYCHOZI_OBJEDNAVKA) {
+  // Mock vyhodnotí stejné pravidlo jako SQL_JMENO (CASE nad snímkem a zákazníkem)
+  const jmenoZDb = () => (objednavkaDb.obj_email != null ? objednavkaDb.obj_jmeno : objednavkaDb.zakaznikJmeno);
   return {
     async query(sql, params = []) {
       const s = sql.replace(/\s+/g, ' ').trim();
       dotazy.push({ sql: s, params });
       if (s.startsWith('CREATE TABLE')) return {};
       // Objednávku lze dohledat interním id (1) i zákaznickým číslem (261012) - jako WHERE o.cislo = $1 OR o.id::text = $1
-      if (s.startsWith('SELECT o.id, o.cislo, z.email FROM objednavky')) {
+      if (s.startsWith(`SELECT o.id, o.cislo, z.email, ${SQL_JMENO} FROM objednavky`)) {
         const [id] = params;
         if (id !== '1' && id !== '261012') return { rows: [] };
-        return { rows: [{ id: 1, cislo: '261012', email: 'jana@example.com' }] };
+        return { rows: [{ id: 1, cislo: '261012', email: 'jana@example.com', jmeno: jmenoZDb() }] };
+      }
+      // /overit
+      if (s.startsWith(`SELECT o.id, o.stav, o.celkem, o.vytvoreno, z.email, ${SQL_JMENO} FROM objednavky`)) {
+        const [id] = params;
+        if (id !== '1' && id !== '261012') return { rows: [] };
+        return { rows: [{ id: 1, stav: 'dorucena', celkem: 1200, vytvoreno: new Date('2026-10-01T10:00:00Z'), email: 'jana@example.com', jmeno: jmenoZDb() }] };
       }
       if (s.startsWith('SELECT op.produkt_id, op.velikost, op.pocet, op.cena, p.nazev')) {
         return { rows: SKUTECNE_POLOZKY };
@@ -44,14 +58,14 @@ function vytvoritMockPool(vlozeneZadosti, dotazy = []) {
   };
 }
 
-function nacistSMockPoolem(vlozeneZadosti, odeslaneEmaily = [], { dotazy = [], selhaniPotvrzeni = null } = {}) {
+function nacistSMockPoolem(vlozeneZadosti, odeslaneEmaily = [], { dotazy = [], selhaniPotvrzeni = null, objednavkaDb = VYCHOZI_OBJEDNAVKA } = {}) {
   const routePath = require.resolve('../routes/vratkyZadosti.js');
   const poolPath = require.resolve('../db/pool');
   const emailyPath = require.resolve('../routes/emaily');
   delete require.cache[routePath];
   delete require.cache[poolPath];
   delete require.cache[emailyPath];
-  require.cache[poolPath] = { id: poolPath, filename: poolPath, loaded: true, exports: vytvoritMockPool(vlozeneZadosti, dotazy) };
+  require.cache[poolPath] = { id: poolPath, filename: poolPath, loaded: true, exports: vytvoritMockPool(vlozeneZadosti, dotazy, objednavkaDb) };
   require.cache[emailyPath] = { id: emailyPath, filename: emailyPath, loaded: true, exports: {
     odeslat_potvrzeni_vratky: async (zadost) => {
       odeslaneEmaily.push({ typ: 'potvrzeni', zadost });
@@ -210,15 +224,16 @@ test('B3.1 B + C: INSERT uloží prohlášení a číslo objednávky z DB, objed
     assert.match(t, /E-mail pro potvrzení: jana@example\.com/);
     assert.match(t, /- Bota A, vel\. 24, 1 ks/);
     assert.match(t, /Důvod \(nepovinný\): nesedí velikost/);
-    assert.doesNotMatch(t, /undefined|null|Jméno:/); // jméno v requestu nepřišlo
+    assert.match(t, /Jméno: Jana Nováková/); // B3.2: jméno ze snímku objednávky, i když v requestu nepřišlo
+    assert.doesNotMatch(t, /undefined|null/);
     assert.doesNotMatch(t, /</); // prostý text, ne HTML
   }
 });
 
-test('B3.1 C: bez důvodu se řádek s důvodem vynechá, jméno se přidá jen když přijde', async () => {
+test('B3.1 C: bez důvodu se řádek s důvodem vynechá, jméno je ze snímku objednávky', async () => {
   const vlozene = [];
   const handler = najitHandler(nacistSMockPoolem(vlozene), 'post', '/');
-  await handler({ ip: novaIp(), body: { objednavka_id: 1, email: 'jana@example.com', jmeno: 'Jana Nováková', polozky: [{ produkt_id: 6, velikost: 25, pocet: 1 }] } }, vytvoritRes());
+  await handler({ ip: novaIp(), body: { objednavka_id: 1, email: 'jana@example.com', polozky: [{ produkt_id: 6, velikost: 25, pocet: 1 }] } }, vytvoritRes());
   const t = vlozene[0].prohlaseni_text;
   assert.match(t, /Jméno: Jana Nováková/);
   assert.match(t, /- Bota B, vel\. 25, 1 ks/);
@@ -283,4 +298,88 @@ test('B3.1 G: veřejná odpověď má jen dosavadní pole, bez interní evidence
   for (const interni of ['prohlaseni_text', 'objednavka_cislo', 'potvrzeni_odeslano', 'potvrzeni_chyba']) {
     assert.equal(interni in res.body, false, `${interni} nesmí být ve veřejné odpovědi`);
   }
+});
+
+// ═══ B3.2 - jméno spotřebitele u online odstoupení ═══
+
+test('B3.2: /overit vrací jméno ze snímku objednávky (serverový výraz CASE)', async () => {
+  const dotazy = [];
+  const handler = najitHandler(nacistSMockPoolem([], [], { dotazy }), 'post', '/overit');
+  const res = vytvoritRes();
+  await handler({ ip: novaIp(), body: { objednavka_id: '261012', email: 'jana@example.com' } }, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.objednavka.jmeno, 'Jana Nováková');
+  const dotaz = dotazy.find(d => d.sql.startsWith('SELECT o.id, o.stav'));
+  assert.ok(dotaz.sql.includes(SQL_JMENO), 'jméno musí být podle pravidla snímek / zákazník');
+  assert.ok(dotaz.sql.includes('z.email,'), 'ověření e-mailu zůstává proti z.email');
+});
+
+test('B3.2: jméno ze snímku se uloží do sloupce jmeno i do prohlaseni_text', async () => {
+  const vlozene = [];
+  const handler = najitHandler(nacistSMockPoolem(vlozene), 'post', '/');
+  const res = vytvoritRes();
+  await handler({ ip: novaIp(), body: { objednavka_id: 1, email: 'jana@example.com', polozky: [{ produkt_id: 5, velikost: 24, pocet: 1 }] } }, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(vlozene[0].jmeno, 'Jana Nováková');
+  assert.match(vlozene[0].prohlaseni_text, /^Oznamuji.*\nObjednávka č\.: 261012\nJméno: Jana Nováková\nE-mail pro potvrzení:/);
+});
+
+test('B3.2: podvržené req.body.jmeno se ignoruje (ve sloupci, v prohlášení i ve veřejné odpovědi)', async () => {
+  const vlozene = [];
+  const handler = najitHandler(nacistSMockPoolem(vlozene), 'post', '/');
+  const res = vytvoritRes();
+  await handler({ ip: novaIp(), body: { objednavka_id: 1, email: 'jana@example.com', jmeno: 'Podvržený Útočník', polozky: [{ produkt_id: 5, velikost: 24, pocet: 1 }] } }, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(vlozene[0].jmeno, 'Jana Nováková');
+  assert.match(vlozene[0].prohlaseni_text, /Jméno: Jana Nováková/);
+  assert.doesNotMatch(vlozene[0].prohlaseni_text, /Podvržený/);
+  assert.equal(res.body.jmeno, 'Jana Nováková');
+});
+
+test('B3.2: objednávka bez snímku použije jméno zákazníka (fallback), se snímkem jméno ze snímku', async () => {
+  // Bez snímku (obj_email NULL) -> z.jmeno
+  const bezSnimku = [];
+  const h1 = najitHandler(nacistSMockPoolem(bezSnimku, [], { objednavkaDb: { obj_email: null, obj_jmeno: null, zakaznikJmeno: 'Eva Starší' } }), 'post', '/');
+  await h1({ ip: novaIp(), body: { objednavka_id: 1, email: 'jana@example.com', polozky: [{ produkt_id: 5, velikost: 24, pocet: 1 }] } }, vytvoritRes());
+  assert.equal(bezSnimku[0].jmeno, 'Eva Starší');
+  assert.match(bezSnimku[0].prohlaseni_text, /Jméno: Eva Starší/);
+
+  // Se snímkem -> obj_jmeno, i když se profil zákazníka mezitím změnil
+  const seSnimkem = [];
+  const h2 = najitHandler(nacistSMockPoolem(seSnimkem, [], { objednavkaDb: { obj_email: 'jana@example.com', obj_jmeno: 'Jana Nováková', zakaznikJmeno: 'Jana Změněná' } }), 'post', '/');
+  await h2({ ip: novaIp(), body: { objednavka_id: 1, email: 'jana@example.com', polozky: [{ produkt_id: 5, velikost: 24, pocet: 1 }] } }, vytvoritRes());
+  assert.equal(seSnimkem[0].jmeno, 'Jana Nováková');
+  assert.doesNotMatch(seSnimkem[0].prohlaseni_text, /Změněná/);
+});
+
+test('B3.2: veřejná odpověď POST má dál stejných 9 klíčů', async () => {
+  const handler = najitHandler(nacistSMockPoolem([]), 'post', '/');
+  const res = vytvoritRes();
+  await handler({ ip: novaIp(), body: { objednavka_id: 1, email: 'jana@example.com', polozky: [{ produkt_id: 5, velikost: 24, pocet: 1 }] } }, res);
+  assert.deepEqual(Object.keys(res.body).sort(), ['duvod', 'email', 'id', 'jmeno', 'objednavka_id', 'polozky', 'stav', 'telefon', 'vytvoreno']);
+});
+
+test('B3.2: e-maily zatím dostávají jmeno beze změny (obsah e-mailů řeší B3.3)', async () => {
+  const emaily = [];
+  const handler = najitHandler(nacistSMockPoolem([], emaily), 'post', '/');
+  await handler({ ip: novaIp(), body: { objednavka_id: 1, email: 'jana@example.com', polozky: [{ produkt_id: 5, velikost: 24, pocet: 1 }] } }, vytvoritRes());
+  assert.equal(emaily.length, 2);
+  for (const { zadost } of emaily) assert.equal(zadost.jmeno, undefined); // e-shop jméno neposílá -> beze změny jako před B3.2
+});
+
+test('B3.2: e-shop zobrazuje jméno v kroku 2 jen pro čtení přes escHtml, bez vstupního pole', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const eshop = fs.readFileSync(path.join(__dirname, '..', 'eshop.html'), 'utf8');
+  const modal = eshop.slice(eshop.indexOf('id="modalVratky"'), eshop.indexOf('<!-- POUKAZY MODAL -->'));
+  assert.ok(modal.includes('<div id="vratkyJmeno"'), 'v kroku 2 chybí prvek pro jméno');
+  assert.doesNotMatch(modal, /<input[^>]*id="vratkyJmeno"|<textarea[^>]*id="vratkyJmeno"/);
+  assert.doesNotMatch(modal, /<(input|textarea)[^>]*[Jj]meno/, 'jméno nesmí jít v okně vratky editovat');
+  assert.match(eshop, /getElementById\('vratkyJmeno'\)\.innerHTML = `[^`]*\$\{escHtml\(vratkyOverenaObjednavka\.jmeno/);
+  // POST na vratky jméno neposílá - server ho bere sám
+  const odeslani = eshop.slice(eshop.indexOf('async function odeslatZadostVratky'), eshop.indexOf('async function odeslatZadostVratky') + 2500);
+  assert.doesNotMatch(odeslani, /jmeno/);
 });
