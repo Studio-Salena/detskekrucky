@@ -12,10 +12,12 @@ const SKUTECNE_POLOZKY = [
   { produkt_id: 6, velikost: 25, pocet: 1, cena: 700, nazev: 'Bota B' }
 ];
 
-function vytvoritMockPool(vlozeneZadosti) {
+// dotazy: volitelný log všech SQL (B3.1 - inicializace tabulky, evidence potvrzení)
+function vytvoritMockPool(vlozeneZadosti, dotazy = []) {
   return {
     async query(sql, params = []) {
       const s = sql.replace(/\s+/g, ' ').trim();
+      dotazy.push({ sql: s, params });
       if (s.startsWith('CREATE TABLE')) return {};
       // Objednávku lze dohledat interním id (1) i zákaznickým číslem (261012) - jako WHERE o.cislo = $1 OR o.id::text = $1
       if (s.startsWith('SELECT o.id, o.cislo, z.email FROM objednavky')) {
@@ -27,26 +29,34 @@ function vytvoritMockPool(vlozeneZadosti) {
         return { rows: SKUTECNE_POLOZKY };
       }
       if (s.startsWith('INSERT INTO vratky_zadosti')) {
-        const [objednavka_id, jmeno, email, telefon, polozkyJson, duvod] = params;
-        const zaznam = { id: vlozeneZadosti.length + 1, objednavka_id, jmeno, email, telefon, polozky: JSON.parse(polozkyJson), duvod };
+        const [objednavka_id, jmeno, email, telefon, polozkyJson, duvod, prohlaseni_text, objednavka_cislo] = params;
+        // Řádek jako z RETURNING * - včetně interních sloupců B3.1
+        const zaznam = { id: vlozeneZadosti.length + 1, objednavka_id, jmeno, email, telefon, polozky: JSON.parse(polozkyJson), duvod,
+          stav: 'nova', vytvoreno: new Date('2026-10-05T10:00:00Z'), prohlaseni_text, objednavka_cislo, potvrzeni_odeslano: null, potvrzeni_chyba: null };
         vlozeneZadosti.push(zaznam);
         return { rows: [zaznam] };
+      }
+      if (s.startsWith('UPDATE vratky_zadosti SET potvrzeni_')) {
+        return { rows: [] };
       }
       throw new Error('Mock nezná dotaz: ' + s);
     }
   };
 }
 
-function nacistSMockPoolem(vlozeneZadosti, odeslaneEmaily = []) {
+function nacistSMockPoolem(vlozeneZadosti, odeslaneEmaily = [], { dotazy = [], selhaniPotvrzeni = null } = {}) {
   const routePath = require.resolve('../routes/vratkyZadosti.js');
   const poolPath = require.resolve('../db/pool');
   const emailyPath = require.resolve('../routes/emaily');
   delete require.cache[routePath];
   delete require.cache[poolPath];
   delete require.cache[emailyPath];
-  require.cache[poolPath] = { id: poolPath, filename: poolPath, loaded: true, exports: vytvoritMockPool(vlozeneZadosti) };
+  require.cache[poolPath] = { id: poolPath, filename: poolPath, loaded: true, exports: vytvoritMockPool(vlozeneZadosti, dotazy) };
   require.cache[emailyPath] = { id: emailyPath, filename: emailyPath, loaded: true, exports: {
-    odeslat_potvrzeni_vratky: async (zadost) => { odeslaneEmaily.push({ typ: 'potvrzeni', zadost }); },
+    odeslat_potvrzeni_vratky: async (zadost) => {
+      odeslaneEmaily.push({ typ: 'potvrzeni', zadost });
+      if (selhaniPotvrzeni) throw new Error(selhaniPotvrzeni);
+    },
     odeslat_upozorneni_vratky: async (zadost) => { odeslaneEmaily.push({ typ: 'upozorneni', zadost }); }
   } };
   const router = require(routePath);
@@ -163,4 +173,114 @@ test('B2.2: e-maily dostanou cislo z DB, objednavka_id zůstane, INSERT použív
   assert.equal(vlozene2[0].objednavka_id, 1);
   assert.equal(emaily2.length, 2);
   assert.equal(emaily2[0].zadost.cislo, '261012');
+});
+
+// ═══ B3.1 - evidence online odstoupení (§ 1830a) ═══
+
+// Fire-and-forget evidence potvrzení běží až po res.json - počkat, než doběhne
+async function pockatNaAsynchronniPrace() {
+  for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r));
+}
+
+test('B3.1 A: inicializace tabulky přidá idempotentně sloupce evidence', async () => {
+  const dotazy = [];
+  nacistSMockPoolem([], [], { dotazy });
+  await pockatNaAsynchronniPrace();
+  const init = dotazy.find(d => d.sql.startsWith('CREATE TABLE IF NOT EXISTS vratky_zadosti'));
+  assert.ok(init, 'chybí inicializace tabulky');
+  for (const sloupec of ['prohlaseni_text TEXT', 'objednavka_cislo TEXT', 'potvrzeni_odeslano TIMESTAMPTZ', 'potvrzeni_chyba TEXT']) {
+    assert.ok(init.sql.includes(`ALTER TABLE vratky_zadosti ADD COLUMN IF NOT EXISTS ${sloupec};`), `chybí ALTER pro ${sloupec}`);
+  }
+});
+
+test('B3.1 B + C: INSERT uloží prohlášení a číslo objednávky z DB, objednavka_id zůstává interní', async () => {
+  for (const vstup of [1, '261012']) {
+    const vlozene = [];
+    const handler = najitHandler(nacistSMockPoolem(vlozene), 'post', '/');
+    const res = vytvoritRes();
+    await handler({ ip: novaIp(), body: { objednavka_id: vstup, email: 'jana@example.com', polozky: [{ produkt_id: 5, velikost: 24, pocet: 1 }], duvod: 'nesedí velikost' } }, res);
+
+    assert.equal(res.statusCode, 200);
+    const z = vlozene[0];
+    assert.equal(z.objednavka_id, 1); // skutecneId
+    assert.equal(z.objednavka_cislo, '261012'); // z DB, ne z requestu
+    const t = z.prohlaseni_text;
+    assert.match(t, /^Oznamuji, že tímto odstupuji od smlouvy o koupi tohoto zboží\./);
+    assert.match(t, /Objednávka č\.: 261012/);
+    assert.match(t, /E-mail pro potvrzení: jana@example\.com/);
+    assert.match(t, /- Bota A, vel\. 24, 1 ks/);
+    assert.match(t, /Důvod \(nepovinný\): nesedí velikost/);
+    assert.doesNotMatch(t, /undefined|null|Jméno:/); // jméno v requestu nepřišlo
+    assert.doesNotMatch(t, /</); // prostý text, ne HTML
+  }
+});
+
+test('B3.1 C: bez důvodu se řádek s důvodem vynechá, jméno se přidá jen když přijde', async () => {
+  const vlozene = [];
+  const handler = najitHandler(nacistSMockPoolem(vlozene), 'post', '/');
+  await handler({ ip: novaIp(), body: { objednavka_id: 1, email: 'jana@example.com', jmeno: 'Jana Nováková', polozky: [{ produkt_id: 6, velikost: 25, pocet: 1 }] } }, vytvoritRes());
+  const t = vlozene[0].prohlaseni_text;
+  assert.match(t, /Jméno: Jana Nováková/);
+  assert.match(t, /- Bota B, vel\. 25, 1 ks/);
+  assert.doesNotMatch(t, /Důvod|undefined|null/);
+});
+
+test('B3.1 D: podvržený název ani cena z requestu se do prohlášení nedostanou', async () => {
+  const vlozene = [];
+  const handler = najitHandler(nacistSMockPoolem(vlozene), 'post', '/');
+  await handler({ ip: novaIp(), body: { objednavka_id: 1, email: 'jana@example.com', polozky: [{ produkt_id: 5, velikost: 24, pocet: 1, nazev: 'Podvržená bota <b>', cena: 1 }] } }, vytvoritRes());
+  const t = vlozene[0].prohlaseni_text;
+  assert.match(t, /- Bota A, vel\. 24, 1 ks/);
+  assert.doesNotMatch(t, /Podvržená|<b>/);
+});
+
+test('B3.1 E: po úspěšném potvrzení se zapíše potvrzeni_odeslano a vynuluje chyba', async () => {
+  const vlozene = [];
+  const dotazy = [];
+  const emaily = [];
+  const handler = najitHandler(nacistSMockPoolem(vlozene, emaily, { dotazy }), 'post', '/');
+  const res = vytvoritRes();
+  await handler({ ip: novaIp(), body: { objednavka_id: 1, email: 'jana@example.com', polozky: [{ produkt_id: 5, velikost: 24, pocet: 1 }] } }, res);
+  await pockatNaAsynchronniPrace();
+
+  assert.equal(res.statusCode, 200);
+  const update = dotazy.filter(d => d.sql.startsWith('UPDATE vratky_zadosti'));
+  assert.equal(update.length, 1);
+  assert.equal(update[0].sql, 'UPDATE vratky_zadosti SET potvrzeni_odeslano = NOW(), potvrzeni_chyba = NULL WHERE id = $1');
+  assert.deepEqual(update[0].params, [vlozene[0].id]);
+  assert.equal(emaily.filter(e => e.typ === 'upozorneni').length, 1); // upozornění majitelce dál chodí, ale neeviduje se
+});
+
+test('B3.1 F: chyba potvrzení se uloží do potvrzeni_chyba (max 500 znaků), odpověď zůstane 200', async () => {
+  const vlozene = [];
+  const dotazy = [];
+  const dlouhaChyba = 'Resend 500: ' + 'x'.repeat(600);
+  const handler = najitHandler(nacistSMockPoolem(vlozene, [], { dotazy, selhaniPotvrzeni: dlouhaChyba }), 'post', '/');
+  const res = vytvoritRes();
+  const puvodniError = console.error;
+  console.error = () => {}; // očekávaná chyba - nezahlcovat výstup testů
+  try {
+    await handler({ ip: novaIp(), body: { objednavka_id: 1, email: 'jana@example.com', polozky: [{ produkt_id: 5, velikost: 24, pocet: 1 }] } }, res);
+    await pockatNaAsynchronniPrace();
+  } finally { console.error = puvodniError; }
+
+  assert.equal(res.statusCode, 200);
+  const update = dotazy.filter(d => d.sql.startsWith('UPDATE vratky_zadosti'));
+  assert.equal(update.length, 1);
+  assert.equal(update[0].sql, 'UPDATE vratky_zadosti SET potvrzeni_chyba = $1 WHERE id = $2');
+  assert.equal(update[0].params[0], dlouhaChyba.slice(0, 500));
+  assert.equal(update[0].params[1], vlozene[0].id);
+  assert.equal(dotazy.some(d => d.sql.includes('potvrzeni_odeslano = NOW()')), false);
+});
+
+test('B3.1 G: veřejná odpověď má jen dosavadní pole, bez interní evidence', async () => {
+  const handler = najitHandler(nacistSMockPoolem([]), 'post', '/');
+  const res = vytvoritRes();
+  await handler({ ip: novaIp(), body: { objednavka_id: 1, email: 'jana@example.com', telefon: '777 123 456', polozky: [{ produkt_id: 5, velikost: 24, pocet: 1 }], duvod: 'x' } }, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(Object.keys(res.body).sort(), ['duvod', 'email', 'id', 'jmeno', 'objednavka_id', 'polozky', 'stav', 'telefon', 'vytvoreno']);
+  for (const interni of ['prohlaseni_text', 'objednavka_cislo', 'potvrzeni_odeslano', 'potvrzeni_chyba']) {
+    assert.equal(interni in res.body, false, `${interni} nesmí být ve veřejné odpovědi`);
+  }
 });

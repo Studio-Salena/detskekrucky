@@ -4,6 +4,7 @@ const pool = require('../db/pool');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const { jeZablokovana, zaznamenatZadost } = require('../middleware/vratkyLimiter');
 const { odeslat_potvrzeni_vratky, odeslat_upozorneni_vratky } = require('./emaily');
+const { sestavitProhlaseniOdstoupeni } = require('../lib/prohlaseniOdstoupeni');
 
 async function initTabulka() {
   try {
@@ -19,6 +20,12 @@ async function initTabulka() {
         stav TEXT DEFAULT 'nova',
         vytvoreno TIMESTAMPTZ DEFAULT NOW()
       );
+      -- Evidence online odstoupení (§ 1830a): snapshot prohlášení, číslo objednávky
+      -- v okamžiku odstoupení a odeslání potvrzení spotřebiteli
+      ALTER TABLE vratky_zadosti ADD COLUMN IF NOT EXISTS prohlaseni_text TEXT;
+      ALTER TABLE vratky_zadosti ADD COLUMN IF NOT EXISTS objednavka_cislo TEXT;
+      ALTER TABLE vratky_zadosti ADD COLUMN IF NOT EXISTS potvrzeni_odeslano TIMESTAMPTZ;
+      ALTER TABLE vratky_zadosti ADD COLUMN IF NOT EXISTS potvrzeni_chyba TEXT;
     `);
     console.log('Vratky_zadosti tabulka OK');
   } catch (e) {
@@ -143,19 +150,40 @@ router.post('/', async (req, res) => {
       overenePolozky.push({ produkt_id: p.produkt_id, velikost: p.velikost, pocet: p.pocet, nazev: objednano.nazev, cena: Number(objednano.cena) });
     }
 
+    const objednavkaCislo = objednavka.rows[0].cislo;
+    // Snapshot prohlášení z odeslaných údajů a ověřených položek (ne z requestu)
+    const prohlaseniText = sestavitProhlaseniOdstoupeni({
+      cislo: objednavkaCislo, objednavkaId: skutecneId, jmeno, email, polozky: overenePolozky, duvod
+    });
+
     const result = await pool.query(
-      'INSERT INTO vratky_zadosti (objednavka_id, jmeno, email, telefon, polozky, duvod) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
-      [skutecneId, jmeno || null, email, telefon || null, JSON.stringify(overenePolozky), duvod || null]
+      'INSERT INTO vratky_zadosti (objednavka_id, jmeno, email, telefon, polozky, duvod, prohlaseni_text, objednavka_cislo) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
+      [skutecneId, jmeno || null, email, telefon || null, JSON.stringify(overenePolozky), duvod || null, prohlaseniText, objednavkaCislo || null]
     );
+    const ulozena = result.rows[0];
 
     zaznamenatZadost(req.ip);
-    res.json(result.rows[0]);
+    // Veřejná odpověď jen s dosavadními poli - interní evidence (prohlaseni_text,
+    // objednavka_cislo, potvrzeni_*) se ven neposílá
+    const { id, stav, vytvoreno } = ulozena;
+    res.json({ id, objednavka_id: ulozena.objednavka_id, jmeno: ulozena.jmeno, email: ulozena.email, telefon: ulozena.telefon, polozky: ulozena.polozky, duvod: ulozena.duvod, stav, vytvoreno });
 
     // Potvrzení zákazníkovi (zákonná povinnost) i upozornění majitelce se posílají
     // až po odpovědi, ať prodleva/chyba s odesláním žádost o vrácení nezablokuje.
     // cislo (RRMMNN) jen pro zobrazení v e-mailech - interní logika dál používá skutecneId
-    const zadost = { objednavka_id, cislo: objednavka.rows[0].cislo, jmeno, email, telefon, polozky: overenePolozky, duvod };
-    odeslat_potvrzeni_vratky(zadost).catch(e => console.error('Potvrzeni zadosti o vratku se nepodarilo odeslat:', e.message));
+    const zadost = { objednavka_id, cislo: objednavkaCislo, jmeno, email, telefon, polozky: overenePolozky, duvod };
+    // Evidence potvrzení spotřebiteli: potvrzeni_odeslano = odesílací služba
+    // požadavek přijala (ne doručení). Při chybě se uloží jen její text, bez retry.
+    // .then(ok, chyba) - selhání samotného zápisu evidence se nesmí vydávat za chybu odeslání
+    odeslat_potvrzeni_vratky(zadost)
+      .then(
+        () => pool.query('UPDATE vratky_zadosti SET potvrzeni_odeslano = NOW(), potvrzeni_chyba = NULL WHERE id = $1', [ulozena.id]),
+        e => {
+          console.error('Potvrzeni zadosti o vratku se nepodarilo odeslat:', e && e.message);
+          return pool.query('UPDATE vratky_zadosti SET potvrzeni_chyba = $1 WHERE id = $2', [String((e && e.message) || e).slice(0, 500), ulozena.id]);
+        }
+      )
+      .catch(e => console.error('Evidenci potvrzeni vratky se nepodarilo ulozit:', e && e.message));
     odeslat_upozorneni_vratky(zadost).catch(e => console.error('Upozorneni majitelce o vratce se nepodarilo odeslat:', e.message));
   } catch (err) {
     res.status(500).json({ chyba: err.message });
