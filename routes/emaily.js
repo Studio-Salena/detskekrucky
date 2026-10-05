@@ -439,6 +439,9 @@ async function odeslat_potvrzeni_vratky(zadost) {
       <td style="padding:8px;border-bottom:1px solid #eee">${p.pocet} ks</td>
     </tr>
   `).join('');
+  // B3.3: čas přijetí a přesně uložený text prohlášení (vratky_zadosti) - jen pokud jsou k dispozici
+  const prijato = formatovatDatumCasObjednavky(zadost.vytvoreno);
+  const prohlaseni = typeof zadost.prohlaseni_text === 'string' && zadost.prohlaseni_text.trim() ? zadost.prohlaseni_text : null;
 
   await odeslatEmail({
     to: zadost.email,
@@ -448,12 +451,15 @@ async function odeslat_potvrzeni_vratky(zadost) {
         <h1 style="color:#FF6B35">Žádost o vrácení přijata</h1>
         <p>Ahoj${zadost.jmeno ? ' ' + escH(zadost.jmeno) : ''},</p>
         <p>potvrzujeme, že jsme přijali vaši žádost o vrácení zboží / odstoupení od smlouvy k objednávce <strong>#${escH(cisloZobrazit)}</strong>. Ozveme se vám co nejdřív s dalším postupem.</p>
+        ${prijato ? `<p><strong>Datum a čas přijetí:</strong> ${escH(prijato)}</p>` : ''}
         <h3>Položky k vrácení</h3>
         <table style="width:100%;border-collapse:collapse">
           <thead><tr style="background:#f5f5f5"><th style="padding:8px;text-align:left">Produkt</th><th style="padding:8px;text-align:left">Počet</th></tr></thead>
           <tbody>${polozky_html}</tbody>
         </table>
         ${zadost.duvod ? `<p style="margin-top:12px"><strong>Uvedený důvod:</strong> ${escH(zadost.duvod)}</p>` : ''}
+        ${prohlaseni ? `<h3>Text vašeho prohlášení</h3>
+        <div style="white-space:pre-line;background:#f5f5f5;border-radius:6px;padding:12px">${escH(prohlaseni)}</div>` : ''}
         <p style="margin-top:16px">Zboží prosím zašlete na adresu prodejny (Holešovská 752, 768 24 Hulín). Odpovídáte pouze za snížení hodnoty zboží, které vzniklo v důsledku nakládání s tímto zbožím jinak, než je nutné k obeznámení se s povahou, vlastnostmi a funkčností zboží.</p>
         <hr>
         <p style="color:#666;font-size:13px">

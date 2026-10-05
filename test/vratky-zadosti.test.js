@@ -362,12 +362,41 @@ test('B3.2: veřejná odpověď POST má dál stejných 9 klíčů', async () =>
   assert.deepEqual(Object.keys(res.body).sort(), ['duvod', 'email', 'id', 'jmeno', 'objednavka_id', 'polozky', 'stav', 'telefon', 'vytvoreno']);
 });
 
-test('B3.2: e-maily zatím dostávají jmeno beze změny (obsah e-mailů řeší B3.3)', async () => {
+// ═══ B3.3 - e-maily o online odstoupení z uloženého záznamu ═══
+
+test('B3.3 A: podvržené req.body.jmeno se do e-mailů nedostane, oba dostanou serverové jméno', async () => {
   const emaily = [];
   const handler = najitHandler(nacistSMockPoolem([], emaily), 'post', '/');
-  await handler({ ip: novaIp(), body: { objednavka_id: 1, email: 'jana@example.com', polozky: [{ produkt_id: 5, velikost: 24, pocet: 1 }] } }, vytvoritRes());
+  await handler({ ip: novaIp(), body: { objednavka_id: 1, email: 'jana@example.com', jmeno: 'Podvržený Zákazník', polozky: [{ produkt_id: 5, velikost: 24, pocet: 1 }] } }, vytvoritRes());
+  assert.deepEqual(emaily.map(e => e.typ), ['potvrzeni', 'upozorneni']);
+  for (const { zadost } of emaily) {
+    assert.equal(zadost.jmeno, 'Jana Nováková');
+    assert.doesNotMatch(JSON.stringify(zadost), /Podvržený/);
+  }
+});
+
+test('B3.3 B + C: jméno v e-mailech ze snímku objednávky, bez snímku ze zákazníka', async () => {
+  const seSnimkem = [];
+  const h1 = najitHandler(nacistSMockPoolem([], seSnimkem, { objednavkaDb: { obj_email: 'jana@example.com', obj_jmeno: 'Jana Nováková', zakaznikJmeno: 'Jana Změněná' } }), 'post', '/');
+  await h1({ ip: novaIp(), body: { objednavka_id: 1, email: 'jana@example.com', polozky: [{ produkt_id: 5, velikost: 24, pocet: 1 }] } }, vytvoritRes());
+  for (const { zadost } of seSnimkem) assert.equal(zadost.jmeno, 'Jana Nováková');
+
+  const bezSnimku = [];
+  const h2 = najitHandler(nacistSMockPoolem([], bezSnimku, { objednavkaDb: { obj_email: null, obj_jmeno: null, zakaznikJmeno: 'Eva Starší' } }), 'post', '/');
+  await h2({ ip: novaIp(), body: { objednavka_id: 1, email: 'jana@example.com', polozky: [{ produkt_id: 5, velikost: 24, pocet: 1 }] } }, vytvoritRes());
+  for (const { zadost } of bezSnimku) assert.equal(zadost.jmeno, 'Eva Starší');
+});
+
+test('B3.3 D: e-maily dostanou přesně uložený prohlaseni_text a vytvoreno', async () => {
+  const vlozene = [];
+  const emaily = [];
+  const handler = najitHandler(nacistSMockPoolem(vlozene, emaily), 'post', '/');
+  await handler({ ip: novaIp(), body: { objednavka_id: 1, email: 'jana@example.com', polozky: [{ produkt_id: 5, velikost: 24, pocet: 1 }], duvod: 'nesedí velikost' } }, vytvoritRes());
   assert.equal(emaily.length, 2);
-  for (const { zadost } of emaily) assert.equal(zadost.jmeno, undefined); // e-shop jméno neposílá -> beze změny jako před B3.2
+  for (const { zadost } of emaily) {
+    assert.equal(zadost.prohlaseni_text, vlozene[0].prohlaseni_text);
+    assert.equal(zadost.vytvoreno, vlozene[0].vytvoreno);
+  }
 });
 
 test('B3.2: e-shop zobrazuje jméno v kroku 2 jen pro čtení přes escHtml, bez vstupního pole', () => {

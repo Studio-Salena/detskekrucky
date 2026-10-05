@@ -91,7 +91,7 @@ router.post('/overit', async (req, res) => {
 
 // POST /api/vratky-zadosti – podat žádost o vrácení
 router.post('/', async (req, res) => {
-  const { objednavka_id, email, jmeno, telefon, polozky, duvod, webova_stranka } = req.body;
+  const { objednavka_id, email, telefon, polozky, duvod, webova_stranka } = req.body;
 
   // Honeypot - skryté pole, které reální uživatelé nikdy nevyplní.
   if (webova_stranka) {
@@ -180,8 +180,10 @@ router.post('/', async (req, res) => {
     // Potvrzení zákazníkovi (zákonná povinnost) i upozornění majitelce se posílají
     // až po odpovědi, ať prodleva/chyba s odesláním žádost o vrácení nezablokuje.
     // cislo (RRMMNN) jen pro zobrazení v e-mailech - interní logika dál používá skutecneId
-    // jmeno v e-mailech zatím beze změny (z requestu) - obsah e-mailů řeší až B3.3
-    const zadost = { objednavka_id, cislo: objednavkaCislo, jmeno, email, telefon, polozky: overenePolozky, duvod };
+    // jmeno, prohlaseni_text a vytvoreno z uloženého záznamu (B3.3) - e-mail ukazuje
+    // totéž, co je uložené jako důkaz; jméno nikdy z requestu
+    const zadost = { objednavka_id, cislo: objednavkaCislo, jmeno: ulozena.jmeno, email, telefon, polozky: overenePolozky, duvod,
+      prohlaseni_text: ulozena.prohlaseni_text, vytvoreno: ulozena.vytvoreno };
     // Evidence potvrzení spotřebiteli: potvrzeni_odeslano = odesílací služba
     // požadavek přijala (ne doručení). Při chybě se uloží jen její text, bez retry.
     // .then(ok, chyba) - selhání samotného zápisu evidence se nesmí vydávat za chybu odeslání
