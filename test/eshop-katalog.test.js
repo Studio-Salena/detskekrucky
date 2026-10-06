@@ -161,3 +161,73 @@ test('eshop.html: starý filtr a neescapovaná karta jsou pryč, dlaždice kateg
   assert.match(vytahnout('vykreslitKategorieGrid'), /\$\{escHtml\(k\.nazev\)\}/);
   assert.match(vytahnout('vykreslitKategorieGrid'), /data-slug="\$\{escAttr\(k\.slug\)\}"/);
 });
+
+// ═══ Krok 2 - stránka produktu ═══
+
+const detail = new vm.Script([
+  ...['DETAIL_NART', 'DETAIL_MATERIAL', 'DETAIL_PALEC'].map(vytahnoutKonstantu),
+  ...['popisVolby', 'cm', 'velikostiDetailuHtml', 'nozickaHtml', 'parametryHtml', 'podobneProdukty', 'fotkyProduktu'].map(vytahnout)
+].join('\n'));
+detail.runInContext(sandbox);
+
+const BOTA = {
+  ...PRODUKTY[0], typ_nohy: 'Na vyšší <nárt>', nart: ['stredni', 'vysoky'], dominantniPalec: 'vhodna', material: 'kuze',
+  velikosti: [{ velikost: 24, dostupnost: 'skladem', delka_mm: 165, sirka_mm: 65 }, { velikost: 25, dostupnost: 'dodavatel', delka_mm: 172 }],
+  vyprodane: [23]
+};
+
+test('detail: tabulka velikostí s vyprodanou (nejde vybrat), u dodavatele a vnitřními rozměry v cm', () => {
+  const h = run(`velikostiDetailuHtml(${JSON.stringify(BOTA)})`);
+  const radky = h.split('</button>').filter(x => x.trim());
+  assert.equal(radky.length, 3);
+  assert.match(radky[0], /data-velikost="23" disabled/);
+  assert.match(radky[0], /Vyprodáno/);
+  assert.doesNotMatch(radky[0], /onclick/);
+  assert.match(radky[1], /onclick="vybrVelikost\(24,this\)" aria-pressed="false"/);
+  assert.match(radky[1], /Skladem<\/span><span class="mm">vnitřní 16,5 × 6,5 cm/);
+  assert.match(radky[2], /U dodavatele \(7–14 dní\)/);
+  assert.match(radky[2], /vnitřní délka 17,2 cm/);
+});
+
+test('detail: Pro jakou nožičku a parametry z vlastností modelu, text escapovaný', () => {
+  const n = run(`nozickaHtml(${JSON.stringify(BOTA)})`);
+  assert.match(n, /<dt>Typ<\/dt><dd>barefoot<\/dd>/);
+  assert.match(n, /<dt>Šířka<\/dt><dd>široká<\/dd>/);
+  assert.match(n, /<dt>Nárt<\/dt><dd>střední \/ vysoký<\/dd>/);
+  assert.match(n, /<dt>Dominantní palec<\/dt><dd>vhodná<\/dd>/);
+  assert.match(n, /Na vyšší &lt;nárt&gt;/);
+  assert.match(n, /poraditKProduktu\(\)/);
+  const bez = run(`nozickaHtml(${JSON.stringify({ ...PRODUKTY[2], typ_nohy: '' })})`);
+  assert.doesNotMatch(bez, /<dl>/, 'bez vyplněných vlastností jen výzva k poradě');
+  assert.match(bez, /Poradíme vám/);
+
+  const p = run(`parametryHtml(${JSON.stringify(BOTA)}, 'Celoročky')`);
+  assert.match(p, /Značka<\/th><td>Froddo/);
+  assert.match(p, /Kategorie<\/th><td>Celoročky/);
+  assert.match(p, /Barefoot<\/th><td>ano/);
+  assert.match(p, /Materiál<\/th><td>kůže/);
+  assert.match(p, /Zapínání<\/th><td>suchý zip/);
+  assert.match(p, /Membrána<\/th><td>ne/);
+  const xss = run(`parametryHtml(${JSON.stringify({ ...BOTA, znacka: '<img src=x onerror=alert(1)>' })}, '<b>')`);
+  assert.equal(xss.includes('<img'), false);
+  assert.equal(xss.includes('<b>'), false);
+});
+
+test('detail: podobné boty ze stejné kategorie, bez sebe sama, nejvýš 4, přednost společné velikosti', () => {
+  const dalsi = [
+    { klic: 'x1', kategorie: 'celorocky', znacka: 'Jonap', velikosti: [{ velikost: 30 }] },
+    { klic: 'x2', kategorie: 'celorocky', znacka: 'Jonap', velikosti: [{ velikost: 24 }, { velikost: 25 }] },
+    { klic: 'x3', kategorie: 'papuce', znacka: 'Froddo', velikosti: [{ velikost: 24 }] },
+    { klic: 'x4', kategorie: 'celorocky', znacka: 'Froddo', velikosti: [{ velikost: 31 }] },
+    { klic: 'x5', kategorie: 'celorocky', znacka: 'Beda', velikosti: [{ velikost: 22 }] },
+    { klic: 'x6', kategorie: 'celorocky', znacka: 'Beda', velikosti: [{ velikost: 40 }] }
+  ];
+  const vysledek = run(`podobneProdukty(${JSON.stringify(PRODUKTY[0])}, ${JSON.stringify([PRODUKTY[0], ...dalsi])})`).map(p => p.klic);
+  assert.deepEqual(vysledek, ['x2', 'x5', 'x4', 'x1']);
+});
+
+test('detail: fotky pro galerii - nahrané, jinak hlavní fotka, nebezpečné URL vynechané', () => {
+  assert.deepEqual(run(`fotkyProduktu(${JSON.stringify({ images: [{ url: 'javascript:alert(1)' }, { url: 'https://a/1.jpg' }] })})`), [{ url: 'https://a/1.jpg' }]);
+  assert.deepEqual(run(`fotkyProduktu(${JSON.stringify({ images: [], primaryImageUrl: 'https://a/h.jpg', primaryImageAlt: 'x' })})`), [{ url: 'https://a/h.jpg', alt: 'x' }]);
+  assert.deepEqual(run(`fotkyProduktu(${JSON.stringify({ images: [], emoji: '👟' })})`), []);
+});

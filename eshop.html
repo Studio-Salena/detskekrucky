@@ -236,6 +236,61 @@ nav{display:flex;align-items:center;gap:8px}
 #modalDetail{--detail-foto-vyska:min(440px,50vh)}
 #modalDetail .modal{max-width:760px}
 @media(max-width:768px){#modalDetail{--detail-foto-vyska:min(300px,42vh)}}
+/* STRÁNKA PRODUKTU (krok 2): galerie vlevo, výběr velikosti vpravo, pod tím podrobnosti */
+#modalDetail .modal.detail-stranka{max-width:1080px;padding:28px 32px 32px;position:relative}
+.detail-zavrit{position:absolute;top:14px;right:16px;width:40px;height:40px;border-radius:50%;border:2px solid var(--tan-light);background:#fff;font-size:1.1rem;cursor:pointer;color:var(--text-light);z-index:2}
+.detail-hlavni{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:32px;align-items:start}
+.detail-foto{position:relative;overflow:hidden;cursor:zoom-in;margin-bottom:10px;padding:12px}
+.detail-foto img{transition:transform 0.15s ease-out;will-change:transform}
+.detail-foto-lupa{position:absolute;right:12px;bottom:12px;background:rgba(255,255,255,0.9);border-radius:20px;padding:4px 10px;font-size:0.75rem;font-weight:700;color:var(--text-light);pointer-events:none}
+#detailThumbs img:focus-visible{outline:2px solid var(--brown);outline-offset:2px}
+.detail-info .modal-name{font-family:'Cormorant',serif;font-weight:600;font-size:2rem;line-height:1.15;color:var(--text);margin:4px 0 10px;text-wrap:balance}
+.detail-info .modal-price{margin-bottom:6px}
+.detail-velikosti{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.detail-velikosti .size-btn{display:grid;grid-template-columns:56px minmax(0,1fr) auto;align-items:center;gap:10px;text-align:left;padding:10px 14px;width:100%;font-weight:400}
+.detail-velikosti .size-btn .vel{font-weight:700;font-size:1rem;font-variant-numeric:tabular-nums}
+.detail-velikosti .size-btn .stav{font-size:0.82rem;font-weight:700;color:#2e7d32}
+.detail-velikosti .size-btn .stav.dodavatel{color:#1565c0}
+.detail-velikosti .size-btn .stav.vyprodano{color:#9b8f86;font-weight:400}
+.detail-velikosti .size-btn .mm{font-size:0.78rem;color:var(--text-light);font-variant-numeric:tabular-nums;white-space:nowrap}
+.detail-velikosti .size-btn.selected .stav,.detail-velikosti .size-btn.selected .mm{color:#fff}
+.detail-velikosti .size-btn:disabled .vel{text-decoration:line-through}
+.detail-odkaz{background:none;border:none;padding:4px 0;color:var(--brown);font-weight:700;font-family:'Nunito',sans-serif;font-size:0.88rem;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.detail-mereni{background:var(--cream);border-radius:14px;padding:12px 16px;margin:6px 0 14px;font-size:0.86rem}
+.detail-mereni ol{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:6px}
+.detail-koupit{margin-top:8px}
+.detail-nozicka{background:#fbf8f3;border:2px solid var(--tan-light);border-radius:16px;padding:14px 16px;margin-top:6px;font-size:0.88rem}
+.detail-nozicka h3,.detail-sekce h3{font-family:'Cormorant',serif;font-size:1.35rem;font-weight:600;color:var(--text);margin:0 0 8px}
+.detail-nozicka dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 14px;margin:0 0 8px}
+.detail-nozicka dt{color:var(--text-light)}
+.detail-nozicka dd{margin:0;font-weight:700}
+.detail-poradit{margin-top:8px;padding:8px 16px;border-radius:20px;border:2px solid var(--brown);background:#fff;color:var(--brown);font-weight:700;font-family:'Nunito',sans-serif;cursor:pointer}
+.detail-sekce{border-top:1px solid var(--tan-light);margin-top:24px;padding-top:20px}
+.detail-proc{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px}
+.detail-proc li::before{content:"✓";color:var(--sage);font-weight:700;margin-right:8px}
+.detail-parametry{border-collapse:collapse;width:100%;max-width:520px;font-size:0.9rem}
+.detail-parametry th,.detail-parametry td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--tan-light)}
+.detail-parametry th{color:var(--text-light);font-weight:400;width:40%}
+.detail-podobne{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.detail-podobne .product-card .product-img{height:160px}
+@media(max-width:900px){.detail-hlavni{grid-template-columns:1fr;gap:16px}.detail-podobne{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:768px){
+  #modalDetail{padding:0}
+  #modalDetail .modal.detail-stranka{max-height:100%;height:100%;border-radius:0;padding:56px 16px 0}
+  .detail-koupit{position:sticky;bottom:0;margin:8px -16px 0;width:calc(100% + 32px);border-radius:0;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:1}
+}
+/* Galerie přes celou obrazovku */
+.galerie{position:fixed;inset:0;z-index:2000;background:rgba(20,14,12,0.95);display:flex;align-items:center;justify-content:center;touch-action:pan-y}
+.galerie[hidden]{display:none}
+.galerie-foto{max-width:92vw;max-height:86vh;object-fit:contain;cursor:zoom-in;transition:transform 0.15s ease-out;user-select:none}
+.galerie.zoom .galerie-foto{cursor:zoom-out}
+.galerie button{position:absolute;background:rgba(255,255,255,0.15);color:#fff;border:none;border-radius:50%;width:48px;height:48px;font-size:1.6rem;cursor:pointer}
+.galerie button:focus-visible{outline:2px solid #fff}
+.galerie-zavrit{top:calc(14px + env(safe-area-inset-top,0px));right:14px}
+.galerie-predchozi{left:14px;top:50%;transform:translateY(-50%)}
+.galerie-dalsi{right:14px;top:50%;transform:translateY(-50%)}
+.galerie-pocitadlo{position:absolute;bottom:calc(18px + env(safe-area-inset-bottom,0px));left:0;right:0;text-align:center;color:#fff;font-size:0.9rem;font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){.detail-foto img,.galerie-foto{transition:none}}
 .modal-brand{font-size:0.8rem;color:var(--text-light);text-transform:uppercase;letter-spacing:1px}
 .modal-name{font-family:'Dancing Script',cursive;font-size:1.8rem;color:var(--brown);margin:8px 0}
 .modal-popis{color:var(--text-light);line-height:1.6;margin-bottom:20px}
@@ -720,22 +775,43 @@ body:has(.cart-sidebar.open) #back-to-top {
 
 <!-- DETAIL MODAL -->
 <div class="modal-overlay" id="modalDetail">
-  <div class="modal">
+  <div class="modal detail-stranka" role="dialog" aria-modal="true" aria-labelledby="detailName">
+    <button type="button" class="detail-zavrit" onclick="closeModal()" aria-label="Zavřít">&#10005;</button>
     <nav class="drobecky drobecky-detail" id="detailDrobecky" aria-label="Kde jste" onclick="kliknutiNaDrobek(event)"></nav>
-    <div class="modal-icon" id="detailIcon"></div>
-    <div id="detailThumbs" style="display:none;gap:8px;margin:10px 0;overflow-x:auto;padding-bottom:2px"></div>
-    <div class="modal-brand" id="detailBrand"></div>
-    <div class="modal-name" id="detailName"></div>
-    <div class="modal-popis" id="detailPopis"></div>
-    <div id="detailTypNohy" style="display:none;font-size:0.82rem;color:var(--text-light);background:var(--cream);border-radius:10px;padding:8px 12px;margin-bottom:12px">&#128094; <span id="detailTypNohyText"></span></div>
-    <div class="modal-price" id="detailPrice"></div>
-    <div class="size-label">Vyberte velikost:</div>
-    <div class="sizes-grid" id="detailSizes"></div>
-    <div id="detailRozmery" style="display:none;font-size:0.8rem;color:var(--text-light);margin:0 0 6px"></div>
-    <div id="detailDostupnost" style="display:none;font-size:0.85rem;font-weight:700;margin:0 0 16px"></div>
-    <button class="modal-add-btn" onclick="addToCartFromModal()">&#128722; Přidat do košíku</button>
-    <button class="modal-close" onclick="closeModal()">Zavřít</button>
+    <div class="detail-hlavni">
+      <div class="detail-galerie">
+        <div class="modal-icon detail-foto" id="detailIcon" onclick="otevritGalerii()" onmousemove="lupaPohyb(event)" onmouseleave="lupaKonec()" role="button" tabindex="0" aria-label="Zvětšit fotografii" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();otevritGalerii()}"></div>
+        <div id="detailThumbs" style="display:none;gap:8px;margin:10px 0;overflow-x:auto;padding-bottom:2px"></div>
+      </div>
+      <div class="detail-info">
+        <div class="modal-brand" id="detailBrand"></div>
+        <h2 class="modal-name" id="detailName"></h2>
+        <div class="modal-price" id="detailPrice"></div>
+        <div class="karta-sklad" id="detailSklad"></div>
+        <div class="size-label" id="detailVelikostiNadpis">Vyberte velikost:</div>
+        <div class="detail-velikosti" id="detailSizes" role="group" aria-labelledby="detailVelikostiNadpis"></div>
+        <div id="detailRozmery" style="display:none;font-size:0.8rem;color:var(--text-light);margin:0 0 6px"></div>
+        <div id="detailDostupnost" style="display:none;font-size:0.85rem;font-weight:700;margin:0 0 10px"></div>
+        <button type="button" class="detail-odkaz" onclick="prepnoutMereni()" aria-expanded="false" aria-controls="detailMereni" id="detailMereniBtn">&#128207; Jakou velikost vybrat? Jak změřit nožičku</button>
+        <div class="detail-mereni" id="detailMereni" hidden></div>
+        <button class="modal-add-btn detail-koupit" onclick="addToCartFromModal()">&#128722; Přidat do košíku</button>
+        <div class="detail-nozicka" id="detailNozicka"></div>
+      </div>
+    </div>
+    <section class="detail-sekce" id="detailProcSekce" hidden><h3>Proč jsme ji vybrali</h3><ul class="detail-proc" id="detailProc"></ul></section>
+    <section class="detail-sekce"><h3>Popis</h3><div class="modal-popis" id="detailPopis"></div></section>
+    <section class="detail-sekce" id="detailParametrySekce" hidden><h3>Parametry</h3><table class="detail-parametry" id="detailParametry"></table></section>
+    <section class="detail-sekce" id="detailPodobneSekce" hidden><h3>Podobné boty</h3><div class="detail-podobne" id="detailPodobne"></div></section>
   </div>
+</div>
+
+<!-- GALERIE PŘES CELOU OBRAZOVKU (detail produktu) -->
+<div class="galerie" id="galerie" hidden role="dialog" aria-modal="true" aria-label="Fotografie produktu" onclick="if(event.target===this)zavritGalerii()">
+  <button type="button" class="galerie-zavrit" onclick="zavritGalerii()" aria-label="Zavřít fotografie">&#10005;</button>
+  <button type="button" class="galerie-predchozi" id="galeriePredchozi" onclick="posunGalerie(-1)" aria-label="Předchozí fotografie">&#8249;</button>
+  <img class="galerie-foto" id="galerieFoto" alt="" onclick="prepnoutZoomGalerie(event)" onmousemove="pohybZoomGalerie(event)">
+  <button type="button" class="galerie-dalsi" id="galerieDalsi" onclick="posunGalerie(1)" aria-label="Další fotografie">&#8250;</button>
+  <div class="galerie-pocitadlo" id="galeriePocitadlo"></div>
 </div>
 
 <!-- CHECKOUT MODAL -->
@@ -1055,6 +1131,7 @@ async function nacistProdukty() {
           klic, slug: s.model_slug || '', nazev: (s.nazev || '').trim(), znacka: s.znacka,
           popis: s.popis || '', typ_nohy: s.typ_nohy || '',
           barefoot: s.barefoot ?? null, sirkaNohy: s.sirka_nohy || [], zapinani: s.zapinani || [], membrana: s.membrana ?? null,
+          nart: s.nart || [], dominantniPalec: s.dominantni_palec || null, material: s.material || null, procJsmeVybrali: s.proc_jsme_vybrali || [],
           maxId: 0, _vyprodane: new Set(),
           kategorieCitac: {}, emoji: '', primaryImageUrl: '', primaryImageAlt: '', images: [], _seenObrazky: new Set(), velikosti: []
         };
@@ -1696,34 +1773,165 @@ async function odeslatPoradnu() {
   }
 }
 
+// ═══ STRÁNKA PRODUKTU (krok 2) ═══
+const DETAIL_NART = { nizky: 'nízký', stredni: 'střední', vysoky: 'vysoký' };
+const DETAIL_MATERIAL = { kuze: 'kůže', textil: 'textil', syntetika: 'syntetika', kombinace: 'kombinace' };
+const DETAIL_PALEC = { vhodna: 'vhodná', nevhodna: 'nevhodná' };
+
+function popisVolby(mapa, hodnoty) {
+  return (hodnoty || []).map(h => mapa[h]).filter(Boolean).join(' / ');
+}
+
+// Rozměr v mm jako centimetry s desetinnou čárkou (165 -> "16,5")
+function cm(mm) {
+  return (mm / 10).toLocaleString('cs-CZ', { maximumFractionDigits: 1 });
+}
+
+// Tabulka velikostí: skladem, u dodavatele i vyprodané (vyprodané nejdou vybrat)
+function velikostiDetailuHtml(p) {
+  const radky = [
+    ...p.velikosti.map(v => ({ ...v, vyprodano: false })),
+    ...(p.vyprodane || []).map(v => ({ velikost: v, vyprodano: true }))
+  ].sort((a, b) => a.velikost - b.velikost);
+  return radky.map(v => {
+    const stav = v.vyprodano ? ['vyprodano', 'Vyprodáno'] : v.dostupnost === 'dodavatel' ? ['dodavatel', 'U dodavatele (7–14 dní)'] : ['', 'Skladem'];
+    const mm = v.delka_mm && v.sirka_mm ? `vnitřní ${cm(v.delka_mm)} × ${cm(v.sirka_mm)} cm`
+      : v.delka_mm ? `vnitřní délka ${cm(v.delka_mm)} cm` : '';
+    const vel = Number(v.velikost);
+    return `<button type="button" class="size-btn" data-velikost="${vel}"${v.vyprodano ? ' disabled' : ` onclick="vybrVelikost(${vel},this)" aria-pressed="false"`} aria-label="Velikost ${vel}, ${stav[1]}${mm ? ', ' + mm : ''}">
+      <span class="vel">${vel}</span><span class="stav${stav[0] ? ' ' + stav[0] : ''}">${stav[1]}</span><span class="mm">${mm}</span></button>`;
+  }).join('');
+}
+
+// "Pro jakou nožičku": vlastnosti z adminu (Modely bot) + dosavadní text o nožičce
+function nozickaHtml(p) {
+  const radky = [];
+  if (p.barefoot === true || p.barefoot === false) radky.push(['Typ', p.barefoot ? 'barefoot' : 'klasická bota']);
+  if ((p.sirkaNohy || []).length) radky.push(['Šířka', popisVolby(KATALOG_SIRKA, p.sirkaNohy)]);
+  if ((p.nart || []).length) radky.push(['Nárt', popisVolby(DETAIL_NART, p.nart)]);
+  if (p.dominantniPalec && DETAIL_PALEC[p.dominantniPalec]) radky.push(['Dominantní palec', DETAIL_PALEC[p.dominantniPalec]]);
+  return '<h3>Pro jakou nožičku</h3>'
+    + (radky.length ? `<dl>${radky.map(([k, v]) => `<dt>${escHtml(k)}</dt><dd>${escHtml(v)}</dd>`).join('')}</dl>` : '')
+    + (p.typ_nohy ? `<p style="margin:0 0 8px">${escHtml(p.typ_nohy)}</p>` : '')
+    + '<p style="margin:0">Nejste si jistí? Pošlete nám délku a šířku chodidla.</p>'
+    + '<button type="button" class="detail-poradit" onclick="poraditKProduktu()">Poradíme vám</button>';
+}
+
+function parametryHtml(p, nazevKategorie) {
+  const radky = [['Značka', p.znacka], ['Kategorie', nazevKategorie]];
+  if (p.barefoot === true || p.barefoot === false) radky.push(['Barefoot', p.barefoot ? 'ano' : 'ne']);
+  if (p.material && DETAIL_MATERIAL[p.material]) radky.push(['Materiál', DETAIL_MATERIAL[p.material]]);
+  if ((p.zapinani || []).length) radky.push(['Zapínání', popisVolby(KATALOG_ZAPINANI, p.zapinani)]);
+  if (p.membrana === true || p.membrana === false) radky.push(['Membrána', p.membrana ? 'ano' : 'ne']);
+  if ((p.sirkaNohy || []).length) radky.push(['Šířka', popisVolby(KATALOG_SIRKA, p.sirkaNohy)]);
+  return radky.filter(([, v]) => v).map(([k, v]) => `<tr><th scope="row">${escHtml(k)}</th><td>${escHtml(v)}</td></tr>`).join('');
+}
+
+// Podobné boty: stejná kategorie, přednost mají společné velikosti, stejná značka a fotka
+function podobneProdukty(p, vsechny, pocet = 4) {
+  const velikosti = new Set(p.velikosti.map(v => v.velikost));
+  const maFoto = x => jeBezpecnaHttpUrl(x.primaryImageUrl) || jeBezpecnaHttpUrl(x.emoji);
+  return vsechny
+    .map((x, i) => ({ x, i, skore: x.velikosti.filter(v => velikosti.has(v.velikost)).length * 2 + (x.znacka === p.znacka ? 1 : 0) + (maFoto(x) ? 1 : 0) }))
+    .filter(({ x }) => x.klic !== p.klic && x.kategorie === p.kategorie)
+    .sort((a, b) => b.skore - a.skore || a.i - b.i)
+    .slice(0, pocet)
+    .map(({ x }) => x);
+}
+
+// Fotky pro galerii: nahrané fotky, jinak hlavní fotka nebo starší URL v emoji
+function fotkyProduktu(p) {
+  const fotky = (p.images || []).filter(o => jeBezpecnaHttpUrl(o.url));
+  if (fotky.length) return fotky;
+  if (jeBezpecnaHttpUrl(p.primaryImageUrl)) return [{ url: p.primaryImageUrl, alt: p.primaryImageAlt }];
+  if (jeBezpecnaHttpUrl(p.emoji)) return [{ url: p.emoji, alt: p.nazev }];
+  return [];
+}
+
+function lupaHtml(p) {
+  return fotkyProduktu(p).length ? '<span class="detail-foto-lupa" aria-hidden="true">&#128269; Zvětšit</span>' : '';
+}
+
 function openDetail(klic, { zHistorie = false } = {}) {
   aktivniProdukt = vsechnyProdukty.find(p => p.klic === klic);
   vybranaVelikost = null;
   if (!aktivniProdukt) return;
-  // Bota má vlastní adresu (?produkt=slug) - jde poslat odkazem a Zpět detail zavře
-  if (!zHistorie && aktivniProdukt.slug && katalogStav) {
-    katalogStav = { ...katalogStav, produkt: aktivniProdukt.slug };
-    history.pushState(null, '', location.pathname + urlZeStavu(katalogStav));
-    detailVlozenDoHistorie = true;
+  const p = aktivniProdukt;
+  const modal = document.getElementById('modalDetail');
+  const uzOtevreny = modal.classList.contains('open');
+  // Bota má vlastní adresu (?produkt=slug) - jde poslat odkazem a Zpět detail zavře.
+  // Přechod na podobnou botu adresu jen přepíše, ať Zavřít vede rovnou do katalogu.
+  if (!zHistorie && p.slug && katalogStav) {
+    katalogStav = { ...katalogStav, produkt: p.slug };
+    const url = location.pathname + urlZeStavu(katalogStav);
+    if (uzOtevreny) history.replaceState(null, '', url);
+    else { history.pushState(null, '', url); detailVlozenDoHistorie = true; }
   }
-  document.getElementById('detailDrobecky').innerHTML = katalogStav ? drobeckyHtml(drobeckyKatalogu(katalogStav, aktivniProdukt)) : '';
-  document.title = `${aktivniProdukt.znacka || ''} ${aktivniProdukt.nazev} – ${ZAKLADNI_TITULEK}`.trim();
-  detailAktivniObrazekUrl = aktivniProdukt.primaryImageUrl;
-  document.getElementById('detailIcon').innerHTML = obrazekProduktuHtml(aktivniProdukt, "var(--detail-foto-vyska)");
+  document.getElementById('detailDrobecky').innerHTML = katalogStav ? drobeckyHtml(drobeckyKatalogu(katalogStav, p)) : '';
+  document.title = `${p.znacka || ''} ${p.nazev} – ${ZAKLADNI_TITULEK}`.trim();
+  detailAktivniObrazekUrl = p.primaryImageUrl;
+  document.getElementById('detailIcon').innerHTML = obrazekProduktuHtml(p, "var(--detail-foto-vyska)") + lupaHtml(p);
   vykreslitDetailThumbs();
-  document.getElementById('detailBrand').textContent = aktivniProdukt.znacka;
-  document.getElementById('detailName').textContent = aktivniProdukt.nazev;
-  document.getElementById('detailPopis').textContent = aktivniProdukt.popis || 'Kvalitní barefoot obuv pro zdravý vývoj dětských nožiček.';
-  document.getElementById('detailPrice').textContent = (aktivniProdukt.cenaOd ? 'od ' : '') + aktivniProdukt.cena + ' Kč';
-  const typNohyEl = document.getElementById('detailTypNohy');
-  if (aktivniProdukt.typ_nohy) { document.getElementById('detailTypNohyText').textContent = aktivniProdukt.typ_nohy; typNohyEl.style.display = 'block'; }
-  else { typNohyEl.style.display = 'none'; }
-  document.getElementById('detailSizes').innerHTML = aktivniProdukt.velikosti.map(v =>
-    `<button class="size-btn" onclick="vybrVelikost(${v.velikost},this)" title="${v.dostupnost === 'dodavatel' ? 'Skladem u dodavatele, dodání do 7–14 dní' : 'Skladem'}">${v.velikost}${v.dostupnost === 'dodavatel' ? ' 🚚' : ''}</button>`
-  ).join('');
+  document.getElementById('detailBrand').textContent = p.znacka;
+  document.getElementById('detailName').textContent = p.nazev;
+  document.getElementById('detailPopis').textContent = p.popis || 'Kvalitní barefoot obuv pro zdravý vývoj dětských nožiček.';
+  document.getElementById('detailPrice').textContent = (p.cenaOd ? 'od ' : '') + p.cena + ' Kč';
+  const skladem = p.velikosti.some(jeSkladem);
+  const skladEl = document.getElementById('detailSklad');
+  skladEl.className = 'karta-sklad' + (skladem ? '' : ' dodavatel');
+  skladEl.innerHTML = skladem ? '&#9679; Skladem' : '&#128666; U dodavatele (7–14 dní)';
+  document.getElementById('detailSizes').innerHTML = velikostiDetailuHtml(p);
   document.getElementById('detailRozmery').style.display = 'none';
   document.getElementById('detailDostupnost').style.display = 'none';
-  document.getElementById('modalDetail').classList.add('open');
+  document.getElementById('detailMereni').hidden = true;
+  document.getElementById('detailMereniBtn').setAttribute('aria-expanded', 'false');
+  document.getElementById('detailNozicka').innerHTML = nozickaHtml(p);
+
+  const proc = (p.procJsmeVybrali || []).filter(Boolean);
+  document.getElementById('detailProcSekce').hidden = !proc.length;
+  document.getElementById('detailProc').innerHTML = proc.map(x => `<li>${escHtml(x)}</li>`).join('');
+  const parametry = parametryHtml(p, nazevKategorie(p.kategorie));
+  document.getElementById('detailParametrySekce').hidden = !parametry;
+  document.getElementById('detailParametry').innerHTML = parametry;
+  const podobne = podobneProdukty(p, vsechnyProdukty);
+  document.getElementById('detailPodobneSekce').hidden = !podobne.length;
+  document.getElementById('detailPodobne').innerHTML = podobne.map(x => kartaProduktuHtml(x, katalogStav || prazdnyStavKatalogu())).join('');
+
+  modal.classList.add('open');
+  modal.querySelector('.modal').scrollTop = 0;
+}
+
+// Návod na měření z Textů webu (stejný jako na úvodní stránce), načte se při prvním otevření
+let mereniKroky = null;
+async function prepnoutMereni() {
+  const el = document.getElementById('detailMereni');
+  const btn = document.getElementById('detailMereniBtn');
+  const otevrit = el.hidden;
+  el.hidden = !otevrit;
+  btn.setAttribute('aria-expanded', String(otevrit));
+  if (!otevrit) return;
+  if (!mereniKroky) {
+    el.textContent = 'Načítám návod…';
+    try {
+      const data = await fetch(API + '/nastaveni/texty').then(r => r.json());
+      mereniKroky = Array.isArray(data.mereniKroky) ? data.mereniKroky : [];
+    } catch (e) { mereniKroky = []; }
+  }
+  el.innerHTML = (mereniKroky.length
+    ? `<ol>${mereniKroky.map(k => `<li><strong>${escHtml(k.nadpis)}</strong> ${escHtml(k.text)}</li>`).join('')}</ol>`
+    : '<p style="margin:0">Návod na měření najdete na <a href="index.html" style="color:var(--brown)">úvodní stránce</a>.</p>')
+    + '<p style="margin:8px 0 0">U každé velikosti výše vidíte vnitřní rozměry boty, pokud je máme změřené.</p>';
+}
+
+// "Poradíme vám" - zavře detail a otevře poradnu velikostí s názvem boty v poznámce
+function poraditKProduktu() {
+  const p = aktivniProdukt;
+  closeModal();
+  const poznamka = document.getElementById('poradnaPoznamka');
+  if (p && !poznamka.value.trim()) poznamka.value = `Zajímá mě: ${p.znacka || ''} ${p.nazev}`.trim();
+  const panel = document.getElementById('poradnaPanel');
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 // Náhledy dalších fotografií produktu pod hlavním obrázkem v detailu -
@@ -1740,7 +1948,8 @@ function vykreslitDetailThumbs() {
   kont.innerHTML = obrazky.map((o, i) => {
     const aktivni = o.url === detailAktivniObrazekUrl;
     return `<img src="${escAttr(o.url)}" alt="${escAttr(o.alt || aktivniProdukt.nazev || '')}" loading="lazy" decoding="async"
-      onclick="vybratDetailFotku(${i})"
+      onclick="vybratDetailFotku(${i})" tabindex="0" role="button" aria-pressed="${aktivni}"
+      onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();vybratDetailFotku(${i})}"
       style="width:56px;height:56px;object-fit:contain;background:#fff8f0;border-radius:8px;flex:0 0 auto;cursor:pointer;border:2px solid ${aktivni ? 'var(--brown)' : 'transparent'}">`;
   }).join('');
 }
@@ -1751,14 +1960,102 @@ function vybratDetailFotku(index) {
   if (!o || !jeBezpecnaHttpUrl(o.url)) return;
   detailAktivniObrazekUrl = o.url;
   const alt = o.alt || aktivniProdukt.nazev || '';
-  document.getElementById('detailIcon').innerHTML = `<img src="${escAttr(o.url)}" alt="${escAttr(alt)}" loading="lazy" decoding="async" style="width:100%;height:var(--detail-foto-vyska);object-fit:contain;border-radius:12px">`;
+  document.getElementById('detailIcon').innerHTML = `<img src="${escAttr(o.url)}" alt="${escAttr(alt)}" loading="lazy" decoding="async" style="width:100%;height:var(--detail-foto-vyska);object-fit:contain;border-radius:12px">` + lupaHtml(aktivniProdukt);
   vykreslitDetailThumbs();
 }
 
+// Lupa na hlavní fotce (jen myš na počítači): fotka se zvětší a sleduje kurzor
+function lupaPohyb(e) {
+  if (!window.matchMedia || !window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+  const img = document.querySelector('#detailIcon img');
+  if (!img) return;
+  const r = img.getBoundingClientRect();
+  img.style.transformOrigin = `${((e.clientX - r.left) / r.width) * 100}% ${((e.clientY - r.top) / r.height) * 100}%`;
+  img.style.transform = 'scale(1.8)';
+}
+function lupaKonec() {
+  const img = document.querySelector('#detailIcon img');
+  if (img) img.style.transform = '';
+}
+
+// Galerie přes celou obrazovku: šipky, klávesy, přejetí prstem, klik = zoom
+let galerieIndex = 0;
+function otevritGalerii() {
+  const fotky = aktivniProdukt ? fotkyProduktu(aktivniProdukt) : [];
+  if (!fotky.length) return;
+  lupaKonec();
+  galerieIndex = Math.max(0, fotky.findIndex(o => o.url === detailAktivniObrazekUrl));
+  zobrazitFotkuGalerie();
+  const g = document.getElementById('galerie');
+  g.hidden = false;
+  g.querySelector('.galerie-zavrit').focus();
+}
+function zobrazitFotkuGalerie() {
+  const fotky = fotkyProduktu(aktivniProdukt);
+  const o = fotky[galerieIndex];
+  const img = document.getElementById('galerieFoto');
+  img.src = o.url;
+  img.alt = o.alt || aktivniProdukt.nazev || '';
+  img.style.transform = '';
+  document.getElementById('galerie').classList.remove('zoom');
+  const vice = fotky.length > 1;
+  document.getElementById('galeriePredchozi').hidden = !vice;
+  document.getElementById('galerieDalsi').hidden = !vice;
+  document.getElementById('galeriePocitadlo').textContent = vice ? `${galerieIndex + 1} / ${fotky.length}` : '';
+}
+function posunGalerie(smer) {
+  const pocet = fotkyProduktu(aktivniProdukt).length;
+  if (pocet < 2) return;
+  galerieIndex = (galerieIndex + smer + pocet) % pocet;
+  zobrazitFotkuGalerie();
+}
+function zavritGalerii() {
+  const g = document.getElementById('galerie');
+  if (g.hidden) return;
+  g.hidden = true;
+  document.getElementById('detailIcon').focus();
+}
+function prepnoutZoomGalerie(e) {
+  const g = document.getElementById('galerie');
+  const img = document.getElementById('galerieFoto');
+  const zoom = !g.classList.contains('zoom');
+  g.classList.toggle('zoom', zoom);
+  if (zoom) pohybZoomGalerie(e, true); else img.style.transform = '';
+}
+function pohybZoomGalerie(e, vynutit) {
+  const g = document.getElementById('galerie');
+  if (!vynutit && !g.classList.contains('zoom')) return;
+  const img = document.getElementById('galerieFoto');
+  const r = img.getBoundingClientRect();
+  img.style.transformOrigin = `${((e.clientX - r.left) / r.width) * 100}% ${((e.clientY - r.top) / r.height) * 100}%`;
+  img.style.transform = 'scale(2.2)';
+}
+(function ovladaniGalerie() {
+  const g = document.getElementById('galerie');
+  let startX = null;
+  g.addEventListener('touchstart', e => { startX = e.touches.length === 1 ? e.touches[0].clientX : null; }, { passive: true });
+  g.addEventListener('touchend', e => {
+    if (startX === null || g.classList.contains('zoom')) return;
+    const dx = e.changedTouches[0].clientX - startX;
+    startX = null;
+    if (Math.abs(dx) > 50) posunGalerie(dx < 0 ? 1 : -1);
+  });
+  document.addEventListener('keydown', e => {
+    if (!g.hidden) {
+      if (e.key === 'Escape') { e.preventDefault(); zavritGalerii(); }
+      else if (e.key === 'ArrowLeft') posunGalerie(-1);
+      else if (e.key === 'ArrowRight') posunGalerie(1);
+      return;
+    }
+    if (e.key === 'Escape' && document.getElementById('modalDetail').classList.contains('open')) closeModal();
+  });
+})();
+
 function vybrVelikost(vel, btn) {
   vybranaVelikost = vel;
-  document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('selected'));
+  document.querySelectorAll('#detailSizes .size-btn').forEach(b => { b.classList.remove('selected'); b.setAttribute('aria-pressed', 'false'); });
   btn.classList.add('selected');
+  btn.setAttribute('aria-pressed', 'true');
   const velData = aktivniProdukt.velikosti.find(v => v.velikost === vel);
 
   // Ceny se mezi velikostmi stejného modelu občas liší - po výběru konkrétní
@@ -1805,6 +2102,7 @@ function closeModal(id) {
 }
 
 function zavritDetailBezHistorie() {
+  zavritGalerii();
   document.getElementById('modalDetail').classList.remove('open');
   if (katalogStav) document.title = (katalogStav.kategorie || katalogStav.velikost ? nadpisKatalogu(katalogStav) + ' – ' : '') + ZAKLADNI_TITULEK;
 }
@@ -1944,9 +2242,10 @@ function otevritProduktZKosiku(idx) {
   closeCart();
   openDetail(produkt.klic);
   detailZKosiku = true;
-  const velIdx = produkt.velikosti.findIndex(v => String(v.velikost) === String(item.velikost));
-  const btn = document.querySelectorAll('#detailSizes .size-btn')[velIdx];
-  if (btn) vybrVelikost(produkt.velikosti[velIdx].velikost, btn);
+  // Tabulka velikostí obsahuje i vyprodané - tlačítko se hledá podle velikosti, ne podle pořadí
+  const velData = produkt.velikosti.find(v => String(v.velikost) === String(item.velikost));
+  const btn = velData && document.querySelector(`#detailSizes .size-btn[data-velikost="${Number(velData.velikost)}"]:not(:disabled)`);
+  if (btn) vybrVelikost(velData.velikost, btn);
 }
 
 function closeCart() {
