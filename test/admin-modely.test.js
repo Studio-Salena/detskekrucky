@@ -137,3 +137,28 @@ test('admin: doplňky bez vlastností, filtr nevyplněných, sloupec pohlaví a 
   assert.match(hledani, /data-model-id="3"/);
   assert.doesNotMatch(hledani, /data-model-id="1"/);
 });
+
+test('admin Texty webu: pruh e-shopu se načte (výchozí text, dokud není uložený) a uloží spolu s ostatními texty', async () => {
+  const prvky = {};
+  const el = id => (prvky[id] = prvky[id] || { value: '', innerHTML: '' });
+  const odeslano = [];
+  const sandbox = {
+    document: { getElementById: el },
+    API: 'https://x/api',
+    adminFetch: async (url, opts) => {
+      if (opts && opts.method === 'POST') { odeslano.push(JSON.parse(opts.body)); return { ok: true }; }
+      return { json: async () => ({ procBarefoot: [], mereniKroky: [], typyChodidel: [], vyberteSi: [{ nadpis: 'X' }] }) };
+    },
+    setTimeout: () => {}
+  };
+  vm.createContext(sandbox);
+  const konst = ADMIN_HTML.match(/const VYCHOZI_ESHOP_PRUH = [^;]+;/)[0];
+  vm.runInContext(`let textyWebuData = {}; const vychoziTrustBadges = []; ${konst}\n${vytahnoutFunkci('loadTexty')}\n${vytahnoutFunkci('ulozitTexty')}`, sandbox);
+  await vm.runInContext('loadTexty()', sandbox);
+  assert.match(prvky.txEshopPruh.value, /Dětské kroky s jistotou/);
+  prvky.txEshopPruh.value = '  Akce týdne  ';
+  await vm.runInContext('ulozitTexty()', sandbox);
+  assert.equal(odeslano[0].eshopPruh, 'Akce týdne');
+  assert.deepEqual(odeslano[0].vyberteSi, [{ nadpis: 'X' }], 'ostatní texty zůstanou');
+  assert.match(ADMIN_HTML, /id="txEshopPruh"[^>]*maxlength="300"/);
+});

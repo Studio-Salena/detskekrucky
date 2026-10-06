@@ -604,6 +604,12 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
   <div id="textyMsg"></div>
 
   <div class="card" style="margin-bottom:20px">
+    <h3 style="margin-bottom:16px">Pruh nad hlavičkou e-shopu</h3>
+    <p style="color:var(--text-light);font-size:0.85rem;margin-bottom:12px">Hnědý pruh s textem úplně nahoře v e-shopu. Když pole vyprázdníte, pruh se skryje.</p>
+    <textarea id="txEshopPruh" rows="2" maxlength="300" style="width:100%;padding:6px;border:1px solid var(--tan-light);border-radius:6px;font-family:inherit;resize:vertical"></textarea>
+  </div>
+
+  <div class="card" style="margin-bottom:20px">
     <h3 style="margin-bottom:16px">Sekce „Proč barefoot?" (3 karty)</h3>
     <div id="txProcBarefoot" style="display:flex;flex-direction:column;gap:16px"></div>
   </div>
@@ -5235,6 +5241,7 @@ function closeModal(id) { document.getElementById(id).classList.remove('open'); 
 
 // TEXTY WEBU
 let textyWebuData = {};
+const VYCHOZI_ESHOP_PRUH = '🦔 Dětské kroky s jistotou. Objevte kompletní sortiment a dopřejte dětem maximální pohodlí doma i venku. 🦔';
 const vychoziTrustBadges = [
   { ikona:'🌿', nadpis:'Přírodní materiály', podnadpis:'Kůže, bavlna, textil' },
   { ikona:'👣', nadpis:'Zdravý vývoj', podnadpis:'Barefoot filozofie' },
@@ -5258,6 +5265,9 @@ async function loadTexty() {
   try {
     const data = await adminFetch(API+'/nastaveni/texty').then(r=>r.json());
     textyWebuData = data || {};
+
+    // Pruh nad hlavičkou e-shopu (dokud se neuloží, platí výchozí text z eshop.html)
+    document.getElementById('txEshopPruh').value = typeof textyWebuData.eshopPruh === 'string' ? textyWebuData.eshopPruh : VYCHOZI_ESHOP_PRUH;
 
     // Proč barefoot karty
     const kontBarefoot = document.getElementById('txProcBarefoot');
@@ -5390,7 +5400,8 @@ async function ulozitTexty() {
   }));
 
   // Zachovat i ostatní klíče (např. vyberteSi), server ukládá celý objekt
-  const payload = { ...textyWebuData, procBarefoot, trustBadges, mereniKroky, typyChodidel };
+  const eshopPruh = document.getElementById('txEshopPruh').value.trim().slice(0, 300);
+  const payload = { ...textyWebuData, procBarefoot, trustBadges, mereniKroky, typyChodidel, eshopPruh };
 
   try {
     const res = await adminFetch(API+'/nastaveni/texty', {

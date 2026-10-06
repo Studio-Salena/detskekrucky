@@ -231,3 +231,65 @@ test('detail: fotky pro galerii - nahrané, jinak hlavní fotka, nebezpečné UR
   assert.deepEqual(run(`fotkyProduktu(${JSON.stringify({ images: [], primaryImageUrl: 'https://a/h.jpg', primaryImageAlt: 'x' })})`), [{ url: 'https://a/h.jpg', alt: 'x' }]);
   assert.deepEqual(run(`fotkyProduktu(${JSON.stringify({ images: [], emoji: '👟' })})`), []);
 });
+
+// ═══ Krok 3 - navigace, hledání, výprodej ═══
+
+new vm.Script(['sekceMenu', 'navrhyHledani', 'navrhyHtml'].map(vytahnout).join('\n')).runInContext(sandbox);
+const SE_SLEVOU = PRODUKTY.map((p, i) => i === 1 ? { ...p, cena_puvodni: 890 } : p);
+const KATEGORIE = [{ slug: 'celorocky', nazev: 'Celoročky' }, { slug: 'papuce', nazev: 'Papuče' }, { slug: 'holinky', nazev: 'Holínky' }];
+
+test('výprodej: filtr sleva v adrese i ve výsledcích', () => {
+  assert.equal(zavolat('urlZeStavu', stav({ sleva: true })), '?sleva=ano');
+  assert.equal(zavolat('stavZUrl', '?sleva=ano').sleva, true);
+  const ve = run(`filtrovatProdukty(${JSON.stringify(SE_SLEVOU)}, ${JSON.stringify(stav({ sleva: true }))}, ${JSON.stringify(CTX)})`).map(p => p.slug);
+  assert.deepEqual(ve, ['beda-zuzi']);
+});
+
+test('menu: jen položky, pod kterými je aspoň jedna bota, s počty', () => {
+  const sekce = run(`sekceMenu(${JSON.stringify(SE_SLEVOU)}, ${JSON.stringify(KATEGORIE)}, ${JSON.stringify(CTX)})`);
+  const najit = n => sekce.find(s => s.nadpis === n);
+  assert.deepEqual(najit('Podle typu').odkazy.map(o => [o.text, o.pocet]), [['Celoročky', 2], ['Papuče', 1]], 'prázdné Holínky v menu nejsou');
+  assert.deepEqual(najit('Podle vlastností').odkazy.map(o => [o.text, o.pocet]),
+    [['Barefoot', 1], ['Na širokou nožičku', 2], ['S membránou', 1], ['Ve slevě', 1]], 'bez úzké nožičky (nikdo ji nemá)');
+  assert.deepEqual(najit('Podle věku').odkazy.map(o => o.text), ['První krůčky (17–21)', 'Batolata (22–25)', 'Školáci (31–42)']);
+  assert.deepEqual(najit('Značky').odkazy.map(o => o.text), ['Beda', 'Froddo', 'Protetika']);
+  assert.deepEqual(najit('Podle typu').odkazy[0].stav, stav({ kategorie: 'celorocky' }));
+});
+
+test('našeptávač: boty, kategorie a značky; krátký dotaz nic', () => {
+  const ctx = { ...CTX, nazvyKategorii: { celorocky: 'Celoročky', papuce: 'Papuče' } };
+  const n = run(`navrhyHledani('froddo 25', ${JSON.stringify(PRODUKTY)}, ${JSON.stringify(KATEGORIE)}, ${JSON.stringify(ctx)})`);
+  assert.deepEqual(n.produkty.map(p => p.slug), ['froddo-autumn']);
+  assert.deepEqual(n.znacky, ['Froddo']);
+  assert.equal(n.celkem, 1);
+  const k = run(`navrhyHledani('papuce', ${JSON.stringify(PRODUKTY)}, ${JSON.stringify(KATEGORIE)}, ${JSON.stringify(ctx)})`);
+  assert.deepEqual(k.kategorie.map(x => x.slug), ['papuce']);
+  assert.deepEqual(k.produkty.map(p => p.slug), ['beda-zuzi'], 'bota z kategorie Papuče');
+  assert.equal(run(`navrhyHledani('f', [], [], {})`), null);
+});
+
+test('našeptávač: HTML odkazy na botu, kategorii a značku, XSS escapované, prázdný výsledek s radou', () => {
+  const PAYLOAD = '<img src=x onerror=alert(1)>';
+  const navrhy = { produkty: [{ ...PRODUKTY[0], znacka: PAYLOAD, nazev: '"><b>x</b>' }], celkem: 7, kategorie: [{ slug: 'a"b', nazev: PAYLOAD }], znacky: [PAYLOAD] };
+  const h = run(`navrhyHtml(${JSON.stringify(navrhy)}, 'x')`);
+  assert.equal(h.includes(PAYLOAD), false);
+  assert.equal(h.includes('<b>x</b>'), false);
+  assert.match(h, /href="eshop.html\?produkt=froddo-autumn" data-klic="m:a"/);
+  assert.match(h, /Zobrazit všechny výsledky \(7\)/);
+  const prazdne = run(`navrhyHtml({ produkty: [], celkem: 0, kategorie: [], znacky: [] }, '<script>')`);
+  assert.match(prazdne, /jsme nic nenašli/);
+  assert.equal(prazdne.includes('<script>'), false);
+});
+
+test('eshop.html: logo vede na úvod, patička zachovává autora webu, 404 stránka existuje', () => {
+  assert.match(ESHOP_HTML, /<a class="logo" href="index.html"/);
+  assert.match(ESHOP_HTML, /Vytvořilo <a href="https:\/\/www.studiosalena.cz"/);
+  const stranka404 = fs.readFileSync(path.join(__dirname, '..', '404.html'), 'utf8');
+  assert.match(stranka404, /Jejda, tady botička není/);
+  assert.match(stranka404, /href="\/eshop.html"/);
+});
+
+test('eshop.html: pruh „Dětské kroky s jistotou“ zůstává nad hlavičkou', () => {
+  const pruh = ESHOP_HTML.indexOf('Dětské kroky s jistotou. Objevte kompletní sortiment');
+  assert.ok(pruh > ESHOP_HTML.indexOf('class="horni-lista"') && pruh < ESHOP_HTML.indexOf('<header>'));
+});
