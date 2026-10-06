@@ -16,7 +16,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 const path = require('path');
-app.use(express.static(path.join(__dirname)));
+// Jen soubory webu (stránky, obrázky, fonty) - zdrojový kód serveru ne (lib/statickeSoubory.js)
+const { statickeSoubory } = require('./lib/statickeSoubory');
+app.use(statickeSoubory(express.static(path.join(__dirname))));
 const kategorieRoutes = require('./routes/kategorie');
 const newsletterRoutes = require('./routes/newsletter');
 const mobilniSkenRoutes = require('./routes/mobilnisken');
@@ -26,6 +28,7 @@ const poradnaZadostiRoutes = require('./routes/poradnaZadosti');
 const poukazyRoutes = require('./routes/poukazy');
 const produktyImagesRoutes = require('./routes/produktyImages');
 const poukazDlazdiceRoutes = require('./routes/poukazDlazdice');
+const modelyRoutes = require('./routes/modely');
 const vyzadovatAdmina = require('./middleware/adminAuth');
 const { jeZablokovana, zaznamenatNeuspech, resetovat } = require('./middleware/loginLimiter');
 const { jeZablokovana: jeZablokovanaRezervace, zaznamenatRezervaci } = require('./middleware/rezervaceLimiter');
@@ -91,6 +94,7 @@ app.use('/api/vratky-zadosti', vratkyZadostiRoutes);
 app.use('/api/poradna-zadosti', poradnaZadostiRoutes);
 app.use('/api/poukazy', poukazyRoutes);
 app.use('/api/poukaz-dlazdice', poukazDlazdiceRoutes);
+app.use('/api/modely', modelyRoutes);
 
 // Texty webu (výchozí hodnoty, přepíšou se z DB)
 let textyWebu = {

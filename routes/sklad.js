@@ -3,6 +3,17 @@ const router = express.Router();
 const pool = require('../db/pool');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const { ziskatOptimalizovanouUrl } = require('../lib/cloudinary');
+const { priraditModel } = require('../lib/modely');
+
+// Produkt patří k modelu podle značky a názvu (lib/modely.js). Chyba přiřazení
+// nesmí shodit uložení produktu - model mu doplní migrace při dalším startu.
+async function priraditModelBezpecne(produktId) {
+  try {
+    await priraditModel(pool, produktId);
+  } catch (e) {
+    console.error('Přiřazení modelu produktu', produktId, 'selhalo:', e.message);
+  }
+}
 
 // Idempotentní migrace - rozměry patří k velikosti (sklad), typ nohy k produktu.
 // Stejný vzor jako routes/prodejna.js:initTabulky.
@@ -223,6 +234,7 @@ router.post('/produkty', async (req, res) => {
       }
     }
     await client.query('COMMIT');
+    await priraditModelBezpecne(produkt.id);
     res.json(produkt);
   } catch (err) {
     await client.query('ROLLBACK');
@@ -240,6 +252,8 @@ router.patch('/produkty/:id', async (req, res) => {
       'UPDATE produkty SET nazev=$1, znacka=$2, cena=$3, cena_puvodni=$4, popis=$5, kategorie=$6, emoji=$7, typ_nohy=$8 WHERE id=$9 RETURNING *',
       [nazev, znacka, cena, cena_puvodni||null, popis||'', kategorie, emoji||'', typ_nohy || null, req.params.id]
     );
+    // Přejmenovaný produkt (jiná značka/název) se přesune k odpovídajícímu modelu
+    if (result.rows.length) await priraditModelBezpecne(result.rows[0].id);
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ chyba: err.message });

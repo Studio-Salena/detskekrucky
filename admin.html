@@ -248,6 +248,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <div class="nav-label">🔄 Společné</div>
       <div class="nav-item" onclick="showPage('sklad',this)"><span class="icon">🏪</span> Sklad</div>
       <div class="nav-item" onclick="showPage('produkty',this)"><span class="icon">👟</span> Produkty</div>
+      <div class="nav-item" onclick="showPage('modely',this)"><span class="icon">👣</span> Modely bot</div>
       <div class="nav-item" onclick="showPage('kategorie',this)"><span class="icon">🏷️</span> Kategorie</div>
       <div class="nav-item" onclick="showPage('zakaznici',this)"><span class="icon">👥</span> Zákazníci</div>
       <div class="nav-item" onclick="showPage('poukazy',this)" id="navPoukazy"><span class="icon">🎁</span> Poukazy <span class="nav-badge" id="navBadgePoukazy" style="display:none">0</span></div>
@@ -420,6 +421,41 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           </div>
         </div>
         <div id="pohybySkladTable"><div class="loading">Načítám...</div></div>
+      </div>
+    </div>
+
+    <!-- MODELY BOT - vlastnosti pro filtry nového e-shopu (krok 0) -->
+    <div class="page" id="page-modely">
+      <div class="page-header">
+        <div class="page-title">👣 Modely bot</div>
+        <div class="table-actions">
+          <input type="text" class="search-input" id="modelyHledat" placeholder="🔍 Značka nebo název..." oninput="vykreslitModely()">
+          <select id="modelyFiltrKategorie" class="search-input" style="width:auto" onchange="vykreslitModely()"><option value="">Všechny kategorie</option></select>
+          <label style="font-size:0.82rem;display:flex;gap:5px;align-items:center"><input type="checkbox" id="modelyJenNevyplnene" onchange="vykreslitModely()"> Jen nevyplněné</label>
+          <button class="btn btn-outline btn-sm" onclick="otevritNastaveniKatalogu()">⚙️ Věk a pohlaví</button>
+          <button class="refresh-btn" onclick="loadModely()">↻</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <div class="table-header"><h3 id="modelyPocet">Modely</h3></div>
+        <p style="padding:0 18px 12px;color:var(--text-light);font-size:0.82rem">Jeden řádek = jedna bota se všemi velikostmi. Vlastnosti se použijí pro filtry a parametry na novém e-shopu. Po úpravě řádku klikněte na 💾. Kategorie, značka a název se propíšou do všech velikostí modelu.</p>
+        <div id="modelyHromadne" style="display:none;margin:0 18px 12px;padding:10px 14px;background:#fff8e6;border-radius:10px;gap:8px;align-items:center;flex-wrap:wrap;font-size:0.85rem">
+          <strong id="modelyVybranoPocet">Vybráno: 0</strong>
+          <span>Nastavit</span>
+          <select id="hromadnePole" onchange="naplnitHromadnouHodnotu()" aria-label="Co změnit">
+            <option value="kategorie">kategorii</option>
+            <option value="barefoot">barefoot</option>
+            <option value="membrana">membránu</option>
+            <option value="material">materiál</option>
+            <option value="dominantni_palec">dominantní palec</option>
+            <option value="pohlavi" id="hromadnePohlaviVolba">pro koho</option>
+          </select>
+          <span>na</span>
+          <select id="hromadneHodnota" aria-label="Nová hodnota"></select>
+          <button class="btn btn-green btn-sm" onclick="pouzitHromadnouZmenu()">Použít na vybrané</button>
+          <button class="btn btn-outline btn-sm" onclick="zrusitVyberModelu()">Zrušit výběr</button>
+        </div>
+        <div id="modelyTable" style="overflow-x:auto"><div class="loading">Načítám...</div></div>
       </div>
     </div>
 
@@ -983,6 +1019,41 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
 </div>
 
 <!-- MODAL NOVÁ KATEGORIE -->
+<div class="modal-overlay" id="modalUpravitModel">
+  <div class="modal" style="max-width:480px">
+    <h3>✏️ Upravit model</h3>
+    <div id="upravitModelMsg"></div>
+    <input type="hidden" id="umId">
+    <div class="form-group"><label>Značka</label><input type="text" id="umZnacka" maxlength="255"></div>
+    <div class="form-group"><label>Název *</label><input type="text" id="umNazev" maxlength="255"></div>
+    <small style="color:var(--text-light);display:block;margin:-4px 0 12px">Značka a název se změní u všech velikostí. Adresa boty na e-shopu zůstane stejná.</small>
+    <div class="form-group"><label>Proč jsme ji vybrali (až 3 krátké body, nepovinné)</label>
+      <input type="text" id="umProc1" maxlength="120" placeholder="Např. měkká podrážka">
+      <input type="text" id="umProc2" maxlength="120" placeholder="Např. široká špička">
+      <input type="text" id="umProc3" maxlength="120" placeholder="Např. snadné obouvání">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modalUpravitModel')">Zrušit</button>
+      <button class="btn btn-primary" onclick="ulozitUpravuModelu()">💾 Uložit</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalNastaveniKatalogu">
+  <div class="modal" style="max-width:480px">
+    <h3>⚙️ Věk a pohlaví</h3>
+    <div id="nastaveniKataloguMsg"></div>
+    <p style="font-size:0.83rem;color:var(--text-light);margin-bottom:12px">Věkové skupiny v menu e-shopu se počítají z velikostí, které bota má. Nastavte rozsah velikostí pro každou skupinu.</p>
+    <div id="vekoveSkupinyRadky" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px"></div>
+    <button class="btn btn-outline btn-sm" id="pridatVekovouSkupinuBtn" onclick="pridatVekovouSkupinu()">+ Přidat skupinu</button>
+    <label style="display:flex;gap:8px;align-items:center;margin-top:16px;font-size:0.88rem"><input type="checkbox" id="nkPohlavi"> Rozlišovat holčička / chlapeček (přidá sloupec „Pro koho“)</label>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modalNastaveniKatalogu')">Zrušit</button>
+      <button class="btn btn-primary" onclick="ulozitNastaveniKatalogu()">💾 Uložit</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modalNovaKategorie">
   <div class="modal" style="max-width:420px">
     <h3>🏷️ Nová kategorie</h3>
@@ -1355,6 +1426,7 @@ function showPage(name, el) {
   if (name==='zakaznici') loadZakaznici();
   if (name==='sklad') { loadSklad(); loadPohyby(); }
   if (name==='produkty') loadProdukty();
+  if (name==='modely') loadModely();
   if (name==='ucetnictvi') loadUcetnictvi();
   if (name==='kategorie') loadKategorie();
   if (name==='prodejna') { loadProdejna(); nacistSkladProProdejna(); }
@@ -4846,6 +4918,317 @@ function escAttr(s) { return escH(s).replace(/"/g,'&quot;'); }
 // Pro vkládání hodnoty do JS řetězcového literálu (např. při psaní do nového
 // okna přes document.write) - escH/escAttr escapují jen HTML, ne uvozovky/zpětná lomítka.
 function escJs(s) { return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/</g,'\\x3C').replace(/\r/g,'\\r').replace(/\n/g,'\\n').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029'); }
+
+// MODELY BOT - vlastnosti pro filtry nového e-shopu (routes/modely.js)
+let modelyData = { volby: {}, kategorieBezVlastnosti: [], modely: [] };
+let modelyKategorie = [];
+let nastaveniKatalogu = { vekoveSkupiny: [], pohlavi: false };
+
+async function loadModely() {
+  const el = document.getElementById('modelyTable');
+  el.innerHTML = '<div class="loading">Načítám...</div>';
+  try {
+    const [rModely, rKategorie, rNastaveni] = await Promise.all([
+      adminFetch(API + '/modely'), fetch(API + '/kategorie'), fetch(API + '/modely/nastaveni-katalogu')
+    ]);
+    if (!rModely.ok || !rKategorie.ok || !rNastaveni.ok) throw new Error('načtení selhalo');
+    modelyData = await rModely.json();
+    modelyKategorie = await rKategorie.json();
+    nastaveniKatalogu = await rNastaveni.json();
+    const filtr = document.getElementById('modelyFiltrKategorie');
+    const vybrana = filtr.value;
+    filtr.innerHTML = '<option value="">Všechny kategorie</option>' +
+      modelyKategorie.map(k => `<option value="${escAttr(k.slug)}">${escH(k.nazev)}</option>`).join('');
+    filtr.value = vybrana;
+    // Vybrané modely, které po obnovení už neexistují, z výběru vypadnou
+    const existujici = new Set(modelyData.modely.map(m => m.id));
+    [...modelyVybrane].forEach(id => { if (!existujici.has(id)) modelyVybrane.delete(id); });
+    vykreslitModely();
+    naplnitHromadnouHodnotu();
+    aktualizovatHromadnyPanel();
+  } catch (e) {
+    el.innerHTML = '<div class="error-msg">Modely se nepodařilo načíst. Zkuste to znovu tlačítkem ↻.</div>';
+  }
+}
+
+function modelBezVlastnosti(m) {
+  return modelyData.kategorieBezVlastnosti.includes(m.kategorie);
+}
+
+function vyberAnoNe(pole, hodnota) {
+  const v = hodnota === true ? 'true' : hodnota === false ? 'false' : '';
+  return `<select data-pole="${pole}">
+    <option value=""${v === '' ? ' selected' : ''}>–</option>
+    <option value="true"${v === 'true' ? ' selected' : ''}>ano</option>
+    <option value="false"${v === 'false' ? ' selected' : ''}>ne</option>
+  </select>`;
+}
+
+function vyberJedna(pole, hodnota) {
+  const volby = modelyData.volby[pole] || {};
+  return `<select data-pole="${pole}"><option value="">–</option>${Object.entries(volby).map(([k, text]) =>
+    `<option value="${escAttr(k)}"${hodnota === k ? ' selected' : ''}>${escH(text)}</option>`).join('')}</select>`;
+}
+
+function vyberVice(pole, hodnoty) {
+  const volby = modelyData.volby[pole] || {};
+  return `<div style="display:flex;flex-direction:column;gap:2px;white-space:nowrap">${Object.entries(volby).map(([k, text]) =>
+    `<label style="font-size:0.78rem;display:flex;gap:4px;align-items:center"><input type="checkbox" data-pole="${pole}" value="${escAttr(k)}"${(hodnoty || []).includes(k) ? ' checked' : ''}> ${escH(text)}</label>`).join('')}</div>`;
+}
+
+function vyberKategorie(hodnota) {
+  const znama = modelyKategorie.some(k => k.slug === hodnota);
+  return `<select data-pole="kategorie">${!hodnota ? '<option value="">–</option>' : ''}${!znama && hodnota ? `<option value="${escAttr(hodnota)}" selected>${escH(hodnota)} (neexistuje)</option>` : ''}${modelyKategorie.map(k =>
+    `<option value="${escAttr(k.slug)}"${k.slug === hodnota ? ' selected' : ''}>${escH(k.nazev)}</option>`).join('')}</select>`;
+}
+
+function vykreslitModely() {
+  const el = document.getElementById('modelyTable');
+  const hledat = document.getElementById('modelyHledat').value.trim().toLowerCase();
+  const kategorie = document.getElementById('modelyFiltrKategorie').value;
+  const jenNevyplnene = document.getElementById('modelyJenNevyplnene').checked;
+  const vsechny = modelyData.modely || [];
+  const boty = vsechny.filter(m => !modelBezVlastnosti(m));
+  document.getElementById('modelyPocet').textContent =
+    `Modely (${vsechny.length}) · vyplněno ${boty.filter(m => m.vyplneno).length} z ${boty.length} bot`;
+
+  const list = vsechny.filter(m =>
+    (!hledat || `${m.znacka || ''} ${m.nazev}`.toLowerCase().includes(hledat)) &&
+    (!kategorie || m.kategorie === kategorie) &&
+    (!jenNevyplnene || !m.vyplneno || m.kategorie_ke_kontrole));
+  if (!list.length) { el.innerHTML = '<div class="empty">Žádné modely neodpovídají filtru</div>'; return; }
+
+  const pohlavi = !!nastaveniKatalogu.pohlavi;
+  const vseVybrano = list.every(m => modelyVybrane.has(m.id));
+  el.innerHTML = `<table onchange="oznacitZmenuModelu(event)"><thead><tr>
+      <th><input type="checkbox" data-vyber-vse aria-label="Vybrat všechny zobrazené"${vseVybrano ? ' checked' : ''}></th><th>Model</th><th>Kategorie</th><th>Barefoot</th><th>Šířka</th><th>Nárt</th><th>Palec</th><th>Zapínání</th><th>Membrána</th><th>Materiál</th>${pohlavi ? '<th>Pro koho</th>' : ''}<th>Stav</th><th></th>
+    </tr></thead><tbody>${list.map(m => {
+      const vel = m.velikosti.length ? (m.velikosti.length > 1 ? `${m.velikosti[0]}–${m.velikosti[m.velikosti.length - 1]}` : `${m.velikosti[0]}`) : '—';
+      const bez = modelBezVlastnosti(m);
+      const vlastnosti = bez
+        ? `<td colspan="${pohlavi ? 8 : 7}" style="color:var(--text-light);font-size:0.8rem">Není bota, vlastnosti se nevyplňují</td>`
+        : `<td>${vyberAnoNe('barefoot', m.barefoot)}</td><td>${vyberVice('sirka', m.sirka)}</td><td>${vyberVice('nart', m.nart)}</td>
+           <td>${vyberJedna('dominantni_palec', m.dominantni_palec)}</td><td>${vyberVice('zapinani', m.zapinani)}</td>
+           <td>${vyberAnoNe('membrana', m.membrana)}</td><td>${vyberJedna('material', m.material)}</td>${pohlavi ? `<td>${vyberJedna('pohlavi', m.pohlavi)}</td>` : ''}`;
+      return `<tr data-model-id="${Number(m.id)}">
+        <td><input type="checkbox" data-vyber value="${Number(m.id)}" aria-label="Vybrat model"${modelyVybrane.has(m.id) ? ' checked' : ''}></td>
+        <td style="min-width:180px"><strong>${escH(m.znacka || '')}</strong> ${escH(m.nazev)}
+          <div style="font-size:0.75rem;color:var(--text-light)">vel. ${escH(vel)} · ${Number(m.kusu)} ks · ${m.ma_fotku ? '📷 fotka' : '<span style="color:var(--red)">bez fotky</span>'}${m.na_eshopu ? '' : ' · 🙈 skryto'}</div>
+          ${m.kategorie_ke_kontrole ? '<div style="font-size:0.75rem;color:#e67e22">⚠️ velikosti jsou ve více kategoriích – vyberte jednu a uložte</div>' : ''}
+        </td>
+        <td>${vyberKategorie(m.kategorie)}</td>
+        ${vlastnosti}
+        <td>${m.vyplneno && !m.kategorie_ke_kontrole ? '<span class="badge badge-ok">✓ vyplněno</span>' : '<span class="badge badge-nizky">chybí</span>'}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-green btn-sm" data-ulozit disabled onclick="ulozitModel(${Number(m.id)})">💾</button>
+          <button class="btn btn-outline btn-sm" onclick="otevritUpravuModelu(${Number(m.id)})" title="Značka, název, proč jsme ji vybrali">✏️</button>
+        </td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+// Výběr modelů pro hromadnou změnu - drží se i při filtrování a překreslení
+const modelyVybrane = new Set();
+
+function aktualizovatHromadnyPanel() {
+  const panel = document.getElementById('modelyHromadne');
+  panel.style.display = modelyVybrane.size ? 'flex' : 'none';
+  document.getElementById('modelyVybranoPocet').textContent = 'Vybráno: ' + modelyVybrane.size;
+  document.getElementById('hromadnePohlaviVolba').hidden = !nastaveniKatalogu.pohlavi;
+  if (!nastaveniKatalogu.pohlavi && document.getElementById('hromadnePole').value === 'pohlavi') {
+    document.getElementById('hromadnePole').value = 'kategorie';
+  }
+  if (!document.getElementById('hromadneHodnota').options.length) naplnitHromadnouHodnotu();
+}
+
+function naplnitHromadnouHodnotu() {
+  const pole = document.getElementById('hromadnePole').value;
+  let moznosti;
+  if (pole === 'kategorie') moznosti = modelyKategorie.map(k => [k.slug, k.nazev]);
+  else if (pole === 'barefoot' || pole === 'membrana') moznosti = [['true', 'ano'], ['false', 'ne'], ['', '– (vymazat)']];
+  else moznosti = [...Object.entries(modelyData.volby[pole] || {}), ['', '– (vymazat)']];
+  document.getElementById('hromadneHodnota').innerHTML = moznosti.map(([v, text]) =>
+    `<option value="${escAttr(v)}">${escH(text)}</option>`).join('');
+}
+
+function zrusitVyberModelu() {
+  modelyVybrane.clear();
+  vykreslitModely();
+  aktualizovatHromadnyPanel();
+}
+
+async function pouzitHromadnouZmenu() {
+  const pole = document.getElementById('hromadnePole').value;
+  const vyber = document.getElementById('hromadneHodnota');
+  if (!modelyVybrane.size || !vyber.options.length) return;
+  let hodnota = vyber.value;
+  if (pole === 'barefoot' || pole === 'membrana') hodnota = hodnota === '' ? null : hodnota === 'true';
+  else if (pole !== 'kategorie') hodnota = hodnota || null;
+  const popis = `${document.getElementById('hromadnePole').selectedOptions[0].textContent} na „${vyber.selectedOptions[0].textContent}“`;
+  const neulozene = document.querySelector('#modelyTable [data-ulozit]:not([disabled])')
+    ? '\n\nNeuložené změny v jednotlivých řádcích se zahodí.' : '';
+  if (!confirm(`Nastavit ${popis} u ${modelyVybrane.size} modelů?${neulozene}`)) return;
+  try {
+    const res = await adminFetch(API + '/modely/hromadne', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: [...modelyVybrane], zmeny: { [pole]: hodnota } })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { alert('❌ ' + (data.chyba || 'Hromadná změna se nepodařila.')); return; }
+    modelyVybrane.clear();
+    await loadModely();
+    aktualizovatHromadnyPanel();
+  } catch (e) {
+    alert('❌ Hromadná změna se nepodařila.');
+  }
+}
+
+function oznacitZmenuModelu(e) {
+  if (e.target.matches('[data-vyber-vse]')) {
+    document.querySelectorAll('#modelyTable [data-vyber]').forEach(cb => {
+      cb.checked = e.target.checked;
+      if (cb.checked) modelyVybrane.add(Number(cb.value)); else modelyVybrane.delete(Number(cb.value));
+    });
+    aktualizovatHromadnyPanel();
+    return;
+  }
+  if (e.target.matches('[data-vyber]')) {
+    if (e.target.checked) modelyVybrane.add(Number(e.target.value)); else modelyVybrane.delete(Number(e.target.value));
+    aktualizovatHromadnyPanel();
+    return;
+  }
+  const tr = e.target.closest('tr[data-model-id]');
+  if (!tr) return;
+  tr.style.background = '#fff8e6';
+  tr.querySelector('[data-ulozit]').disabled = false;
+}
+
+function hodnotyRadkuModelu(tr) {
+  const telo = {};
+  tr.querySelectorAll('select[data-pole]').forEach(s => {
+    const pole = s.dataset.pole;
+    if (pole === 'kategorie') { if (s.value) telo.kategorie = s.value; return; }
+    if (pole === 'barefoot' || pole === 'membrana') { telo[pole] = s.value === '' ? null : s.value === 'true'; return; }
+    telo[pole] = s.value || null;
+  });
+  ['sirka', 'nart', 'zapinani'].forEach(pole => {
+    const boxy = tr.querySelectorAll(`input[type=checkbox][data-pole="${pole}"]`);
+    if (boxy.length) telo[pole] = [...boxy].filter(b => b.checked).map(b => b.value);
+  });
+  return telo;
+}
+
+async function poslatUpravuModelu(id, telo) {
+  const res = await adminFetch(API + '/modely/' + id, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(telo)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.chyba || 'Uložení se nepodařilo.');
+  const i = modelyData.modely.findIndex(m => m.id === id);
+  if (i >= 0) {
+    const puvodni = modelyData.modely[i];
+    modelyData.modely[i] = {
+      ...puvodni, ...data,
+      kategorie_ke_kontrole: 'kategorie' in telo ? false : puvodni.kategorie_ke_kontrole
+    };
+  }
+}
+
+async function ulozitModel(id) {
+  const tr = document.querySelector(`tr[data-model-id="${Number(id)}"]`);
+  if (!tr) return;
+  const btn = tr.querySelector('[data-ulozit]');
+  btn.disabled = true;
+  try {
+    await poslatUpravuModelu(id, hodnotyRadkuModelu(tr));
+    vykreslitModely();
+  } catch (e) {
+    btn.disabled = false;
+    alert('❌ ' + e.message);
+  }
+}
+
+function otevritUpravuModelu(id) {
+  const m = modelyData.modely.find(x => x.id === id);
+  if (!m) return;
+  document.getElementById('upravitModelMsg').innerHTML = '';
+  document.getElementById('umId').value = m.id;
+  document.getElementById('umZnacka').value = m.znacka || '';
+  document.getElementById('umNazev').value = m.nazev || '';
+  const proc = m.proc_jsme_vybrali || [];
+  [1, 2, 3].forEach(i => { document.getElementById('umProc' + i).value = proc[i - 1] || ''; });
+  openModal('modalUpravitModel');
+}
+
+async function ulozitUpravuModelu() {
+  const id = Number(document.getElementById('umId').value);
+  const msg = document.getElementById('upravitModelMsg');
+  const telo = {
+    znacka: document.getElementById('umZnacka').value,
+    nazev: document.getElementById('umNazev').value,
+    proc_jsme_vybrali: [1, 2, 3].map(i => document.getElementById('umProc' + i).value)
+  };
+  if (!telo.nazev.trim()) { msg.innerHTML = '<div class="error-msg">Vyplňte název.</div>'; return; }
+  try {
+    await poslatUpravuModelu(id, telo);
+    closeModal('modalUpravitModel');
+    vykreslitModely();
+  } catch (e) {
+    msg.innerHTML = `<div class="error-msg">${escH(e.message)}</div>`;
+  }
+}
+
+function radekVekoveSkupiny(s) {
+  return `<div class="vekova-skupina" style="display:flex;gap:6px;align-items:center">
+    <input type="text" data-vs="nazev" maxlength="40" value="${escAttr(s.nazev || '')}" placeholder="Název" style="flex:1;min-width:0;padding:7px 10px;border:2px solid var(--tan-light);border-radius:8px">
+    <input type="number" data-vs="od" min="1" max="50" value="${s.od ?? ''}" aria-label="Velikost od" style="width:64px;padding:7px;border:2px solid var(--tan-light);border-radius:8px">
+    <span>–</span>
+    <input type="number" data-vs="do" min="1" max="50" value="${s.do ?? ''}" aria-label="Velikost do" style="width:64px;padding:7px;border:2px solid var(--tan-light);border-radius:8px">
+    <button class="btn btn-outline btn-sm" onclick="this.parentElement.remove();aktualizovatPridatVekovou()" title="Odebrat">✕</button>
+  </div>`;
+}
+
+function aktualizovatPridatVekovou() {
+  document.getElementById('pridatVekovouSkupinuBtn').disabled = document.querySelectorAll('.vekova-skupina').length >= 6;
+}
+
+function otevritNastaveniKatalogu() {
+  document.getElementById('nastaveniKataloguMsg').innerHTML = '';
+  document.getElementById('vekoveSkupinyRadky').innerHTML = (nastaveniKatalogu.vekoveSkupiny || []).map(radekVekoveSkupiny).join('');
+  document.getElementById('nkPohlavi').checked = !!nastaveniKatalogu.pohlavi;
+  aktualizovatPridatVekovou();
+  openModal('modalNastaveniKatalogu');
+}
+
+function pridatVekovouSkupinu() {
+  if (document.querySelectorAll('.vekova-skupina').length >= 6) return;
+  document.getElementById('vekoveSkupinyRadky').insertAdjacentHTML('beforeend', radekVekoveSkupiny({}));
+  aktualizovatPridatVekovou();
+}
+
+async function ulozitNastaveniKatalogu() {
+  const msg = document.getElementById('nastaveniKataloguMsg');
+  const telo = {
+    vekoveSkupiny: [...document.querySelectorAll('.vekova-skupina')].map(r => ({
+      nazev: r.querySelector('[data-vs="nazev"]').value,
+      od: parseInt(r.querySelector('[data-vs="od"]').value, 10),
+      do: parseInt(r.querySelector('[data-vs="do"]').value, 10)
+    })),
+    pohlavi: document.getElementById('nkPohlavi').checked
+  };
+  try {
+    const res = await adminFetch(API + '/modely/nastaveni-katalogu', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(telo)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { msg.innerHTML = `<div class="error-msg">${escH(data.chyba || 'Uložení se nepodařilo.')}</div>`; return; }
+    nastaveniKatalogu = data;
+    closeModal('modalNastaveniKatalogu');
+    vykreslitModely();
+  } catch (e) {
+    msg.innerHTML = '<div class="error-msg">Uložení se nepodařilo.</div>';
+  }
+}
 
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
