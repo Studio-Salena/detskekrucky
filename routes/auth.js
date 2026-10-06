@@ -2,6 +2,7 @@
 const router = express.Router();
 const crypto = require('crypto');
 const pool = require('../db/pool');
+const { pripravit } = require('../lib/startServeru');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const vyzadovatAdmina = require('../middleware/adminAuth');
@@ -59,7 +60,7 @@ async function initOvereniEmailu() {
     console.log('Overeni emailu chyba:', e.message);
   }
 }
-initOvereniEmailu();
+pripravit(initOvereniEmailu());
 
 function validovatRegistraci({ jmeno, email, heslo }) {
   if (!jmeno || !String(jmeno).trim()) return 'Vyplňte prosím jméno.';

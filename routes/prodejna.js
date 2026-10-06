@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
+const { pripravit } = require('../lib/startServeru');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 
 // Vše v tomto souboru je admin-only (prodejna i vratky jsou interní data)
@@ -40,7 +41,7 @@ async function initTabulky() {
     console.log('Prodejna/vratky tabulky chyba:', e.message);
   }
 }
-initTabulky();
+pripravit(initTabulky());
 
 // ═══════════════════════════════
 // PRODEJE

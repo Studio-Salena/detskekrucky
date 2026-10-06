@@ -6,6 +6,7 @@ const STAVY_S_EMAILEM = ['vyrizuje', 'zaplacena', 'odeslana', 'dorucena', 'zruse
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
+const { pripravit } = require('../lib/startServeru');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const { jeZablokovana, zaznamenatObjednavku } = require('../middleware/objednavkyLimiter');
 const { migrovatSnapshoty, SQL_UDAJE_OBJEDNAVKY } = require('../lib/objednavkySnapshot');
@@ -56,7 +57,7 @@ async function initObjednavkySloupce() {
     console.log('Snimky udaju objednavek chyba:', e.message);
   }
 }
-initObjednavkySloupce();
+pripravit(initObjednavkySloupce());
 
 // Přidělí "hezké" číslo objednávky (RRMMNN) - volá se uvnitř JIŽ OTEVŘENÉ
 // transakce hned po INSERT INTO objednavky (viz POST / níže), ne lazy jako

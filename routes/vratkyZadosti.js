@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
+const { pripravit } = require('../lib/startServeru');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const { jeZablokovana, zaznamenatZadost } = require('../middleware/vratkyLimiter');
 const { odeslat_potvrzeni_vratky, odeslat_upozorneni_vratky } = require('./emaily');
@@ -38,7 +39,7 @@ async function initTabulka() {
     console.log('Vratky_zadosti tabulka chyba:', e.message);
   }
 }
-initTabulka();
+pripravit(initTabulka());
 
 // ═══════════════════════════════
 // VEŘEJNÉ – zákazník ověří objednávku a podá žádost

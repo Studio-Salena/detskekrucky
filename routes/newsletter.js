@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
+const { pripravit } = require('../lib/startServeru');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 
 // Vytvoření tabulky při startu serveru (stejný vzor jako rezervace)
@@ -18,7 +19,7 @@ async function initNewsletterTabulka() {
     console.log('Newsletter tabulka chyba:', e.message);
   }
 }
-initNewsletterTabulka();
+pripravit(initNewsletterTabulka());
 
 // POST /api/newsletter – zákazník se přihlásí k odběru
 router.post('/', async (req, res) => {

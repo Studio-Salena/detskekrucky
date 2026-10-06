@@ -2,6 +2,7 @@
 const router = express.Router();
 const multer = require('multer');
 const pool = require('../db/pool');
+const { pripravit } = require('../lib/startServeru');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const cloudinaryLib = require('../lib/cloudinary');
 const { MAX_MB, MAX_BYTES, overitSoubor } = require('../lib/overeniObrazku');
@@ -18,7 +19,7 @@ async function initKategorieSloupce() {
     console.log('Kategorie sloupce chyba:', e.message);
   }
 }
-initKategorieSloupce();
+pripravit(initKategorieSloupce());
 
 const upload = multer({
   storage: multer.memoryStorage(),

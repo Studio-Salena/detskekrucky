@@ -3,6 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
+const { pripravit } = require('../lib/startServeru');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const {
   VOLBY, KATEGORIE_BEZ_VLASTNOSTI, VYCHOZI_NASTAVENI_KATALOGU,
@@ -18,7 +19,7 @@ async function initModely() {
     console.log('Modely chyba:', e.message);
   }
 }
-initModely();
+pripravit(initModely());
 
 async function nacistNastaveniKatalogu() {
   const r = await pool.query("SELECT hodnota FROM nastaveni WHERE klic = 'katalog'");

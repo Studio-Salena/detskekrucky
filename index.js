@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
 const pool = require('./db/pool');
+const { pripravit, vsePripraveno } = require('./lib/startServeru');
 const skladRoutes = require('./routes/sklad');
 const objednavkyRoutes = require('./routes/objednavky');
 const authRoutes = require('./routes/auth');
@@ -143,7 +144,7 @@ async function nacistOtevirackaZDB() {
     console.log('Oteviracka z DB nenactena:', e.message);
   }
 }
-nacistOtevirackaZDB();
+pripravit(nacistOtevirackaZDB());
 
 app.get('/api/nastaveni/oteviraci-doba', (req, res) => {
   res.json(oteviracka);
@@ -173,7 +174,7 @@ async function nacistTextyZDB() {
     console.log('Texty z DB nenacteny:', e.message);
   }
 }
-nacistTextyZDB();
+pripravit(nacistTextyZDB());
 
 app.get('/api/nastaveni/texty', (req, res) => {
   res.json(textyWebu);
@@ -226,7 +227,7 @@ async function initRezervaceTabulky() {
     console.log('Rezervace tabulky chyba:', e.message);
   }
 }
-initRezervaceTabulky();
+pripravit(initRezervaceTabulky());
 
 // GET /api/rezervace/sloty – všechny sloty (pro admin i frontend)
 app.get('/api/rezervace/sloty', async (req, res) => {
@@ -423,6 +424,10 @@ app.post('/api/nastaveni/banner', vyzadovatAdmina, (req, res) => {
   res.json({ ok: true });
 });
 
-app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
-  console.log('Server bezi na http://127.0.0.1:3000');
+// Požadavky až po doběhnutí startovních migrací (lib/startServeru.js)
+vsePripraveno().then(vcas => {
+  if (!vcas) console.error('Startovní migrace nedoběhly do 30 s - server startuje i tak.');
+  app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
+    console.log('Server bezi na http://127.0.0.1:3000');
+  });
 });

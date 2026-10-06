@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
+const { pripravit } = require('../lib/startServeru');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const { jeZablokovana, zaznamenatDotaz } = require('../middleware/poradnaLimiter');
 const { odeslat_potvrzeni_poradna, odeslat_upozorneni_poradna } = require('./emaily');
@@ -25,7 +26,7 @@ async function initTabulka() {
     console.log('Poradna_zadosti tabulka chyba:', e.message);
   }
 }
-initTabulka();
+pripravit(initTabulka());
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const TELEFON_RE = /^(\+420\s?)?\d{3}\s?\d{3}\s?\d{3}$/;

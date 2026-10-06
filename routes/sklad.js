@@ -1,6 +1,7 @@
 ﻿const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
+const { pripravit } = require('../lib/startServeru');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const { ziskatOptimalizovanouUrl } = require('../lib/cloudinary');
 const { priraditModel } = require('../lib/modely');
@@ -33,7 +34,7 @@ async function initSkladSloupce() {
     if (e.code !== '42710') console.log('Sklad/produkty sloupce chyba:', e.message);
   }
 }
-initSkladSloupce();
+pripravit(initSkladSloupce());
 
 // Veřejné - frontend (e-shop) nesmí dostat interní skladové údaje jako
 // min_pocet (interní práh pro "nízký stav"), z něj odvozené nizky_stav, ani

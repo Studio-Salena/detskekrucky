@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const pool = require('../db/pool');
+const { pripravit } = require('../lib/startServeru');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const cloudinaryLib = require('../lib/cloudinary');
 
@@ -29,7 +30,7 @@ async function initProductImagesTabulka() {
     console.log('Product images tabulka chyba:', e.message);
   }
 }
-initProductImagesTabulka();
+pripravit(initProductImagesTabulka());
 
 const { MAX_MB, MAX_BYTES, POVOLENE_MIME, TYP_NA_POVOLENE_MIME, zjistitSkutecnyTypObrazku } = require('../lib/overeniObrazku');
 const MAX_POZICE = 1000;
