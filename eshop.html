@@ -175,6 +175,44 @@ footer.paticka .footer-copy{text-align:center;border-top:1px solid rgba(255,255,
 }
 @media(max-width:480px){.paticka-sloupce{grid-template-columns:1fr}}
 
+/* KOŠÍK A OBJEDNÁVKA (krok 4b) */
+.kroky-objednavky{list-style:none;padding:0;margin:0 0 18px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;counter-reset:krok}
+.kroky-objednavky[hidden]{display:none}
+.kroky-objednavky li{counter-increment:krok;font-size:0.78rem;font-weight:700;color:var(--text-light);border-top:4px solid var(--tan-light);padding-top:6px}
+.kroky-objednavky li::before{content:counter(krok) ". "}
+.kroky-objednavky li.hotovo{border-top-color:var(--sage);color:var(--sage)}
+.kroky-objednavky li.aktivni{border-top-color:var(--brown);color:var(--brown)}
+.krok-objednavky[hidden]{display:none}
+.volby{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.volba{display:flex;align-items:center;gap:10px;padding:12px 14px;border:2px solid var(--tan-light);border-radius:12px;cursor:pointer;font-size:0.92rem}
+.volba:has(input:checked){border-color:var(--brown);background:#fbf6f4}
+.volba input{accent-color:var(--brown);width:18px;height:18px;flex:none}
+.volba-nazev{flex:1;font-weight:700}
+.volba-cena{color:var(--text-light);font-variant-numeric:tabular-nums}
+.volba-pozn{font-size:0.84rem;color:var(--text-light);background:var(--cream);border-radius:10px;padding:10px 14px;margin:0 0 12px}
+.volba-pozn[hidden]{display:none}
+.kroky-tlacitka{display:flex;gap:10px;margin-top:18px}
+.kroky-tlacitka .submit-btn,.kroky-tlacitka .cancel-btn{margin:0;flex:1}
+.shrnuti-udaju{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+.shrnuti-blok{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;font-size:0.86rem;line-height:1.5;border:1px solid var(--tan-light);border-radius:10px;padding:10px 12px}
+.shrnuti-blok > div{min-width:0;overflow-wrap:anywhere}
+.potvrzeni-objednavky{text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center}
+.potvrzeni-objednavky[hidden]{display:none}
+.potvrzeni-ikona{width:64px;height:64px;border-radius:50%;background:var(--sage);color:#fff;font-size:2rem;display:flex;align-items:center;justify-content:center}
+.potvrzeni-objednavky h4{font-family:'Cormorant',serif;font-size:1.8rem;font-weight:600;margin:0;color:var(--text)}
+.potvrzeni-objednavky p{margin:0;color:var(--text-light)}
+.potvrzeni-platba{background:var(--cream);border-radius:14px;padding:14px 18px;display:flex;flex-direction:column;gap:4px;align-items:center;font-size:0.9rem;width:100%}
+.potvrzeni-platba img{margin-top:8px;border-radius:8px;max-width:100%}
+.potvrzeni-objednavky .submit-btn{margin-top:8px}
+.pridano-modal{max-width:440px}
+.pridano-modal h3{font-family:'Cormorant',serif;font-size:1.6rem;color:var(--sage);margin:0 0 14px}
+.pridano-polozka{display:flex;gap:14px;align-items:center}
+.pridano-foto{width:72px;height:72px;flex:none;border-radius:12px;background:#fff8f0;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:2rem}
+.pridano-polozka small{display:block;color:var(--text-light);text-transform:uppercase;letter-spacing:0.05em;font-size:0.72rem}
+.pridano-polozka strong{display:block;font-size:1rem}
+.cart-velikost{padding:2px 4px;border:1px solid var(--tan-light);border-radius:6px;font-family:'Nunito',sans-serif;font-size:0.78rem;background:#fff}
+@media(max-width:480px){.kroky-tlacitka{flex-direction:column-reverse}}
+
 /* RYCHLÝ VÝBĚR NAD KATALOGEM (krok 6) */
 .katalog-uvod{max-width:1400px;margin:0 auto 28px;display:flex;flex-direction:column;gap:24px}
 .katalog-uvod[hidden]{display:none}
@@ -946,79 +984,110 @@ body:has(.cart-sidebar.open) #back-to-top {
 
 <!-- CHECKOUT MODAL -->
 <div class="modal-overlay" id="modalCheckout">
-  <div class="checkout-modal">
-    <h3>&#128230; Dokončit objednávku</h3>
-    <div id="checkoutUcetBox" style="background:var(--cream);border-radius:12px;padding:14px;margin-bottom:20px;border:1px solid var(--tan-light);font-size:0.85rem">
-      <strong>Máte účet?</strong> <a href="#" onclick="prepnoutNaPrihlaseni();return false;" style="color:var(--brown);font-weight:700">Přihlaste se</a> a údaje se vyplní samy.
-    </div>
+  <div class="checkout-modal" role="dialog" aria-modal="true" aria-labelledby="checkoutNadpis">
+    <h3 id="checkoutNadpis">&#128230; Dokončit objednávku</h3>
+    <!-- Objednávka ve 3 krocích (krok 4b). Znění tlačítka, souhlasu a odkazu na VOP je beze změny. -->
+    <ol class="kroky-objednavky" id="krokyObjednavky" aria-label="Kroky objednávky">
+      <li data-krok="1">Doprava a platba</li>
+      <li data-krok="2">Údaje</li>
+      <li data-krok="3">Shrnutí</li>
+    </ol>
     <div id="checkoutMsg"></div>
-    <div class="order-summary" id="orderSummary"></div>
-    <div class="form-group">
-      <label>Mám dárkový poukaz</label>
-      <div style="display:flex;gap:8px">
-        <input type="text" id="chPoukazKod" placeholder="DK-XXXX-XXXX">
-        <button type="button" onclick="uplatnitPoukazEshop()" style="padding:0 16px;background:var(--sage);color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;white-space:nowrap">Uplatnit</button>
+
+    <section class="krok-objednavky" data-krok="1" aria-label="Doprava a platba">
+      <div class="section-divider">Jak vám máme objednávku doručit?</div>
+      <div class="volby" id="chDoprava" role="radiogroup" aria-label="Způsob dopravy" onchange="vykreslitSouhrnObjednavky()">
+        <label class="volba"><input type="radio" name="chDoprava" value="zasilkovna" checked><span class="volba-nazev">Zásilkovna</span><span class="volba-cena" data-doprava-cena="zasilkovna"></span></label>
+        <label class="volba"><input type="radio" name="chDoprava" value="ceska_posta"><span class="volba-nazev">Česká pošta</span><span class="volba-cena" data-doprava-cena="ceska_posta"></span></label>
+        <label class="volba"><input type="radio" name="chDoprava" value="osobni_odber"><span class="volba-nazev">Osobní odběr – prodejna Hulín</span><span class="volba-cena" data-doprava-cena="osobni_odber"></span></label>
       </div>
-      <div id="chPoukazMsg" style="margin-top:6px"></div>
-    </div>
-    <div class="section-divider">Kontaktní údaje</div>
-    <div class="form-group"><label>Jméno a příjmení *</label><input type="text" id="chJmeno" placeholder="Jana Nováková"></div>
-    <div class="form-row">
-      <div class="form-group"><label>Email *</label><input type="email" id="chEmail" placeholder="jana@email.cz"></div>
-      <div class="form-group"><label>Telefon *</label><input type="tel" id="chTelefon" placeholder="777 123 456"></div>
-    </div>
-    <div class="section-divider">Doručovací adresa</div>
-    <div class="form-group"><label>Ulice a číslo popisné *</label><input type="text" id="chUlice" placeholder="Hlavní 123"></div>
-    <div class="form-row">
-      <div class="form-group"><label>Město *</label><input type="text" id="chMesto" placeholder="Praha"></div>
-      <div class="form-group"><label>PSČ *</label><input type="text" id="chPsc" placeholder="110 00"></div>
-    </div>
-    <div class="section-divider">Způsob dopravy</div>
-    <div class="form-group">
-      <select id="chDoprava" onchange="vykreslitSouhrnObjednavky()">
-        <option value="zasilkovna">Zásilkovna - 79 Kč</option>
-        <option value="ceska_posta">Česká pošta - 89 Kč</option>
-        <option value="osobni_odber">Osobní odběr - zdarma</option>
-      </select>
-    </div>
-    <div class="vyzkouseni-info" id="vyzkouseniInfo" style="display:none">
-      &#128094; Při osobním odběru si boty rovnou vyzkoušíte přímo na prodejně: <strong>Holešovská 752, Hulín 768 24</strong>. Ozveme se, jakmile bude objednávka připravená k vyzvednutí.
-    </div>
-    <div class="section-divider">Způsob platby</div>
-    <div class="form-group">
-      <select id="chPlatba" onchange="aktualizovatPlatbuInfo()">
-        <option value="dobirka">Dobírka</option>
-        <option value="prevod">Bankovní převod</option>
-      </select>
-    </div>
-    <div class="form-group" id="chPrevodInfo" style="display:none;background:var(--cream);border-radius:12px;padding:14px;text-align:center">
-      <div style="font-size:0.85rem;margin-bottom:8px">Zaplaťte prosím na účet <strong>2003533776/2010</strong>, případně naskenujte QR kód v bankovní aplikaci:</div>
-      <img id="chPrevodQr" style="width:180px;height:180px;border-radius:8px" alt="QR platba">
-    </div>
-    <div class="form-group" style="display:flex;align-items:flex-start;gap:8px">
-      <input type="checkbox" id="chSouhlas" style="width:18px;height:18px;flex-shrink:0;margin-top:2px">
-      <label for="chSouhlas" style="font-size:0.85rem;font-weight:400;color:var(--text);cursor:pointer">
-        Souhlasím s <a href="obchodni-podminky.html" target="_blank" style="color:var(--brown);font-weight:700">obchodními podmínkami</a> a zpracováním osobních údajů pro účely vyřízení objednávky.
-      </label>
-    </div>
-    <div id="chVytvoritUcetBox">
+      <div class="vyzkouseni-info" id="vyzkouseniInfo" style="display:none">
+        &#128094; Při osobním odběru si boty rovnou vyzkoušíte přímo na prodejně: <strong>Holešovská 752, Hulín 768 24</strong>. Ozveme se, jakmile bude objednávka připravená k vyzvednutí.
+      </div>
+      <div class="section-divider">Jak chcete zaplatit?</div>
+      <div class="volby" id="chPlatba" role="radiogroup" aria-label="Způsob platby" onchange="aktualizovatPlatbuInfo()">
+        <label class="volba"><input type="radio" name="chPlatba" value="dobirka" checked><span class="volba-nazev">Dobírka</span></label>
+        <label class="volba"><input type="radio" name="chPlatba" value="prevod"><span class="volba-nazev">Bankovní převod</span></label>
+      </div>
+      <p class="volba-pozn" id="chPrevodInfo" hidden>Číslo účtu, variabilní symbol a QR kód pro platbu uvidíte hned po odeslání objednávky a pošleme je i e-mailem.</p>
+      <div class="kroky-tlacitka">
+        <button type="button" class="cancel-btn" onclick="closeCheckout()">Zpět do košíku</button>
+        <button type="button" class="submit-btn" onclick="prejitNaKrok(2)">Pokračovat</button>
+      </div>
+    </section>
+
+    <section class="krok-objednavky" data-krok="2" aria-label="Údaje" hidden>
+      <div id="checkoutUcetBox" style="background:var(--cream);border-radius:12px;padding:14px;margin-bottom:20px;border:1px solid var(--tan-light);font-size:0.85rem">
+        <strong>Máte účet?</strong> <a href="#" onclick="prepnoutNaPrihlaseni();return false;" style="color:var(--brown);font-weight:700">Přihlaste se</a> a údaje se vyplní samy.
+      </div>
+      <div class="section-divider">Kontaktní údaje</div>
+      <div class="form-group"><label for="chJmeno">Jméno a příjmení *</label><input type="text" id="chJmeno" placeholder="Jana Nováková" autocomplete="name"></div>
+      <div class="form-row">
+        <div class="form-group"><label for="chEmail">Email *</label><input type="email" id="chEmail" placeholder="jana@email.cz" autocomplete="email"></div>
+        <div class="form-group"><label for="chTelefon">Telefon *</label><input type="tel" id="chTelefon" placeholder="777 123 456" autocomplete="tel"></div>
+      </div>
+      <div class="section-divider">Adresa</div>
+      <div class="form-group"><label for="chUlice">Ulice a číslo popisné *</label><input type="text" id="chUlice" placeholder="Hlavní 123" autocomplete="street-address"></div>
+      <div class="form-row">
+        <div class="form-group"><label for="chMesto">Město *</label><input type="text" id="chMesto" placeholder="Praha" autocomplete="address-level2"></div>
+        <div class="form-group"><label for="chPsc">PSČ *</label><input type="text" id="chPsc" placeholder="110 00" autocomplete="postal-code"></div>
+      </div>
+      <div id="chVytvoritUcetBox">
+        <div class="form-group" style="display:flex;align-items:flex-start;gap:8px">
+          <input type="checkbox" id="chVytvoritUcet" onchange="document.getElementById('chUcetHesloWrap').style.display = this.checked ? 'block' : 'none'" style="width:18px;height:18px;flex-shrink:0;margin-top:2px">
+          <label for="chVytvoritUcet" style="font-size:0.85rem;font-weight:400;color:var(--text);cursor:pointer">
+            Chci si zároveň vytvořit účet – příště nebudu muset vyplňovat údaje a uvidím historii objednávek.
+          </label>
+        </div>
+        <div class="form-group" id="chUcetHesloWrap" style="display:none">
+          <label for="chUcetHeslo">Heslo k účtu (alespoň 5 znaků) *</label>
+          <input type="password" id="chUcetHeslo" placeholder="Zvolte heslo" autocomplete="new-password">
+        </div>
+      </div>
+      <div class="kroky-tlacitka">
+        <button type="button" class="cancel-btn" onclick="prejitNaKrok(1)">Zpět</button>
+        <button type="button" class="submit-btn" onclick="prejitNaKrok(3)">Pokračovat ke shrnutí</button>
+      </div>
+    </section>
+
+    <section class="krok-objednavky" data-krok="3" aria-label="Shrnutí" hidden>
+      <div class="order-summary" id="orderSummary"></div>
+      <div class="form-group">
+        <label for="chPoukazKod">Mám dárkový poukaz</label>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="chPoukazKod" placeholder="DK-XXXX-XXXX">
+          <button type="button" onclick="uplatnitPoukazEshop()" style="padding:0 16px;background:var(--sage);color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;white-space:nowrap">Uplatnit</button>
+        </div>
+        <div id="chPoukazMsg" style="margin-top:6px"></div>
+      </div>
+      <div class="shrnuti-udaju" id="shrnutiUdaju"></div>
       <div class="form-group" style="display:flex;align-items:flex-start;gap:8px">
-        <input type="checkbox" id="chVytvoritUcet" onchange="document.getElementById('chUcetHesloWrap').style.display = this.checked ? 'block' : 'none'" style="width:18px;height:18px;flex-shrink:0;margin-top:2px">
-        <label for="chVytvoritUcet" style="font-size:0.85rem;font-weight:400;color:var(--text);cursor:pointer">
-          Chci si zároveň vytvořit účet – příště nebudu muset vyplňovat údaje a uvidím historii objednávek.
+        <input type="checkbox" id="chSouhlas" style="width:18px;height:18px;flex-shrink:0;margin-top:2px">
+        <label for="chSouhlas" style="font-size:0.85rem;font-weight:400;color:var(--text);cursor:pointer">
+          Souhlasím s <a href="obchodni-podminky.html" target="_blank" style="color:var(--brown);font-weight:700">obchodními podmínkami</a> a zpracováním osobních údajů pro účely vyřízení objednávky.
         </label>
       </div>
-      <div class="form-group" id="chUcetHesloWrap" style="display:none">
-        <label>Heslo k účtu (alespoň 5 znaků) *</label>
-        <input type="password" id="chUcetHeslo" placeholder="Zvolte heslo" autocomplete="new-password">
+      <div class="honeypot-pole" aria-hidden="true">
+        <label for="chWebovaStranka">Nevyplňujte toto pole</label>
+        <input type="text" id="chWebovaStranka" name="webova_stranka" tabindex="-1" autocomplete="off">
       </div>
+      <button class="submit-btn" id="submitBtn" onclick="odeslatObjednavku()">Objednávka zavazující k platbě</button>
+      <button type="button" class="cancel-btn" onclick="prejitNaKrok(2)">Zpět</button>
+    </section>
+
+    <section class="krok-objednavky potvrzeni-objednavky" data-krok="4" id="potvrzeniObjednavky" aria-live="polite" hidden></section>
+  </div>
+</div>
+
+<!-- PŘIDÁNO DO KOŠÍKU (krok 4b) -->
+<div class="modal-overlay" id="modalPridano" onclick="if(event.target===this)closeModal('modalPridano')">
+  <div class="modal pridano-modal" role="dialog" aria-modal="true" aria-labelledby="pridanoNadpis">
+    <h3 id="pridanoNadpis">&#10003; Přidáno do košíku</h3>
+    <div class="pridano-polozka" id="pridanoPolozka"></div>
+    <div class="kroky-tlacitka">
+      <button type="button" class="cancel-btn" id="pridanoPokracovat" onclick="closeModal('modalPridano')">Pokračovat v nákupu</button>
+      <button type="button" class="submit-btn" onclick="closeModal('modalPridano');openCart()">Přejít do košíku</button>
     </div>
-    <div class="honeypot-pole" aria-hidden="true">
-      <label for="chWebovaStranka">Nevyplňujte toto pole</label>
-      <input type="text" id="chWebovaStranka" name="webova_stranka" tabindex="-1" autocomplete="off">
-    </div>
-    <button class="submit-btn" id="submitBtn" onclick="odeslatObjednavku()">Objednávka zavazující k platbě</button>
-    <button class="cancel-btn" onclick="closeCheckout()">Zpět do košíku</button>
   </div>
 </div>
 
@@ -2410,7 +2479,8 @@ function pohybZoomGalerie(e, vynutit) {
       return;
     }
     if (e.key !== 'Escape') return;
-    // Esc zavře to, co je nahoře: menu, našeptávač, jinak detail boty
+    // Esc zavře to, co je nahoře: okno Přidáno, menu, našeptávač, jinak detail boty
+    if (document.getElementById('modalPridano').classList.contains('open')) { closeModal('modalPridano'); return; }
     const menu = document.getElementById('mobilMenu');
     if (!menu.hidden) { zavritMobilMenu(); document.getElementById('menuBtn').focus(); return; }
     if (document.querySelector('#hlavniMenu .menu-polozka.otevreno')) { zavritMegaMenu(); return; }
@@ -2491,7 +2561,44 @@ function addToCart(produkt, velikost) {
     kosik.push({key, id: velData.produkt_id, nazev: produkt.nazev, znacka: produkt.znacka, emoji: produkt.emoji, foto: fotoProduktu(produkt), velikost, cena: velData.cena, pocet: 1, max});
   }
   ulozitKosik();
-  showToast(produkt.nazev + ' přidáno do košíku!');
+  zobrazitPridano(produkt, velData);
+}
+
+// Okno "Přidáno do košíku" s volbou pokračovat v nákupu nebo přejít do košíku (krok 4b)
+function zobrazitPridano(produkt, velData) {
+  document.getElementById('pridanoPolozka').innerHTML = `
+    <div class="pridano-foto">${obrazekProduktuHtml(produkt, '72px')}</div>
+    <div><small>${escHtml(produkt.znacka)}</small><strong>${escHtml(produkt.nazev)}</strong>
+      <div>Velikost ${escHtml(velData.velikost)}</div><div class="product-price">${Number(velData.cena)} Kč</div></div>`;
+  openModal('modalPridano');
+  document.getElementById('pridanoPokracovat').focus();
+}
+
+// Velikosti, na které jde položku v košíku přepnout (jen stejný model, skladem nebo u dodavatele)
+function velikostiProPolozku(item) {
+  const p = vsechnyProdukty.find(x => x.velikosti.some(v => v.produkt_id === item.id));
+  return p ? p.velikosti : [];
+}
+
+function zmenitVelikostVKosiku(idx, velikost) {
+  const item = kosik[idx];
+  if (!item) return;
+  const velData = velikostiProPolozku(item).find(v => String(v.velikost) === String(velikost));
+  if (!velData) return;
+  const key = velData.produkt_id + '_' + velData.velikost;
+  const max = maxKusuVelikosti(velData);
+  const jina = kosik.find((x, i) => i !== idx && x.key === key);
+  if (jina) {
+    // Stejná velikost už v košíku je - sloučit, ale ne nad skladovou zásobu
+    jina.pocet = max != null ? Math.min(max, jina.pocet + item.pocet) : jina.pocet + item.pocet;
+    jina.max = max;
+    kosik.splice(idx, 1);
+  } else {
+    Object.assign(item, { key, id: velData.produkt_id, velikost: velData.velikost, cena: velData.cena, max });
+    if (max != null && item.pocet > max) { item.pocet = max; showToast(hlaskaMaxKusu(max)); }
+    if (item.pocet <= 0) kosik.splice(idx, 1);
+  }
+  ulozitKosik();
 }
 
 // Kolik kusů dané velikosti jde objednat. Velikosti "u dodavatele" nemají
@@ -2543,6 +2650,14 @@ function ulozitKosik() {
   renderKosik();
 }
 
+// V košíku jde změnit velikost, když má model víc velikostí v nabídce
+function kosikVelikostHtml(item, idx) {
+  const velikosti = velikostiProPolozku(item);
+  if (velikosti.length < 2 || !velikosti.some(v => String(v.velikost) === String(item.velikost))) return `Vel. ${escHtml(item.velikost)}`;
+  return `<label>Vel. <select class="cart-velikost" onchange="zmenitVelikostVKosiku(${Number(idx)}, this.value)" aria-label="Velikost ${escAttr(item.nazev)}">${velikosti.map(v =>
+    `<option value="${escAttr(v.velikost)}"${String(v.velikost) === String(item.velikost) ? ' selected' : ''}>${escHtml(v.velikost)}${v.dostupnost === 'dodavatel' ? ' (u dodavatele)' : ''}</option>`).join('')}</select></label>`;
+}
+
 function renderKosik() {
   const el = document.getElementById('cartItems');
   const footer = document.getElementById('cartFooter');
@@ -2565,7 +2680,7 @@ function renderKosik() {
       <div class="cart-item-icon cart-item-odkaz" onclick="otevritProduktZKosiku(${idx})" title="Zobrazit produkt">${ikonaPolozkyKosiku(item)}</div>
       <div class="cart-item-info">
         <div class="cart-item-name cart-item-odkaz" onclick="otevritProduktZKosiku(${idx})" title="Zobrazit produkt">${escHtml(item.nazev)}</div>
-        <div class="cart-item-detail">${escHtml(item.znacka)} | Vel. ${escHtml(item.velikost)}</div>
+        <div class="cart-item-detail">${escHtml(item.znacka)} | ${kosikVelikostHtml(item, idx)}</div>
         <div class="cart-item-qty">
           <button class="cart-qty-btn" onclick="zmenitPocetVKosiku(${idx},-1)" aria-label="Ubrat kus">&#8722;</button>
           <span>${item.pocet}</span>
@@ -2628,7 +2743,8 @@ function openCheckout() {
   uplatnenyPoukaz = null;
   document.getElementById('chPoukazKod').value = '';
   document.getElementById('chPoukazMsg').innerHTML = '';
-  vykreslitSouhrnObjednavky();
+  document.getElementById('potvrzeniObjednavky').innerHTML = '';
+  prejitNaKrok(1);
   document.getElementById('modalCheckout').classList.add('open');
   pripravitCheckoutProUcet();
 }
@@ -2672,36 +2788,120 @@ async function pripravitCheckoutProUcet() {
   } catch (e) { /* bez profilu se dá objednat i tak */ }
 }
 
+// Objednávka ve 3 krocích (krok 4b): 1 doprava a platba, 2 údaje, 3 shrnutí, 4 potvrzení
+const DOPRAVA_NAZVY = { zasilkovna: 'Zásilkovna', ceska_posta: 'Česká pošta', osobni_odber: 'Osobní odběr – prodejna Hulín' };
+const PLATBA_NAZVY = { dobirka: 'Dobírka', prevod: 'Bankovní převod' };
+function zvolenaDoprava() {
+  const el = document.querySelector('#chDoprava input:checked');
+  return el ? el.value : 'zasilkovna';
+}
+function zvolenaPlatba() {
+  const el = document.querySelector('#chPlatba input:checked');
+  return el ? el.value : 'dobirka';
+}
+
+// Součty objednávky - stejné pravidlo jako server (doprava zdarma od 2 000 Kč po slevě)
+function spocitatObjednavku(polozky, poukaz, doprava) {
+  const mezisoucet = polozky.reduce((s, i) => s + i.cena * i.pocet, 0);
+  const sleva = poukaz ? Math.min(poukaz.zustatek, mezisoucet) : 0;
+  const dopravaCena = vypocitatDopravu(doprava, mezisoucet - sleva);
+  return { mezisoucet, sleva, dopravaCena, celkem: mezisoucet - sleva + dopravaCena };
+}
+
+function souhrnObjednavkyHtml(polozky, poukaz, doprava) {
+  const s = spocitatObjednavku(polozky, poukaz, doprava);
+  return `
+    ${polozky.map(i => `<div class="order-summary-item"><span>${escHtml(i.nazev)} vel. ${escHtml(i.velikost)} × ${Number(i.pocet)}</span><span>${i.cena * i.pocet} Kč</span></div>`).join('')}
+    ${s.sleva > 0 ? `<div class="order-summary-item" style="color:var(--sage);font-weight:700"><span>🎁 Poukaz ${escHtml(poukaz.kod)}</span><span>−${s.sleva} Kč</span></div>` : ''}
+    <div class="order-summary-item"><span>🚚 Doprava (${escHtml(DOPRAVA_NAZVY[doprava] || doprava)})</span><span>${s.dopravaCena === 0 ? 'Zdarma' : s.dopravaCena + ' Kč'}</span></div>
+    <div class="order-summary-total"><span>Celkem</span><span>${s.celkem} Kč</span></div>`;
+}
+
 function vykreslitSouhrnObjednavky() {
-  const total = kosik.reduce((s, i) => s + i.cena * i.pocet, 0);
-  const sleva = uplatnenyPoukaz ? Math.min(uplatnenyPoukaz.zustatek, total) : 0;
-  const doprava = document.getElementById('chDoprava').value;
-  const dopravaCena = vypocitatDopravu(doprava, total - sleva);
-  const dopravaLabel = doprava === 'osobni_odber' ? 'Osobní odběr' : doprava === 'ceska_posta' ? 'Česká pošta' : 'Zásilkovna';
-  document.getElementById('orderSummary').innerHTML = `
-    ${kosik.map(i => `<div class="order-summary-item"><span>${i.nazev} vel.${i.velikost} x${i.pocet}</span><span>${i.cena * i.pocet} Kč</span></div>`).join('')}
-    ${sleva > 0 ? `<div class="order-summary-item" style="color:var(--sage);font-weight:700"><span>🎁 Poukaz ${uplatnenyPoukaz.kod}</span><span>−${sleva} Kč</span></div>` : ''}
-    <div class="order-summary-item"><span>🚚 Doprava (${dopravaLabel})</span><span>${dopravaCena === 0 ? 'Zdarma' : dopravaCena + ' Kč'}</span></div>
-    <div class="order-summary-total"><span>Celkem</span><span>${total - sleva + dopravaCena} Kč</span></div>`;
+  const doprava = zvolenaDoprava();
+  const { mezisoucet, sleva } = spocitatObjednavku(kosik, uplatnenyPoukaz, doprava);
+  // Ceny u voleb dopravy podle aktuálního košíku (zdarma od 2 000 Kč)
+  document.querySelectorAll('[data-doprava-cena]').forEach(el => {
+    const cena = vypocitatDopravu(el.dataset.dopravaCena, mezisoucet - sleva);
+    el.textContent = cena === 0 ? 'zdarma' : cena + ' Kč';
+  });
+  document.getElementById('orderSummary').innerHTML = souhrnObjednavkyHtml(kosik, uplatnenyPoukaz, doprava);
   document.getElementById('vyzkouseniInfo').style.display = doprava === 'osobni_odber' ? 'block' : 'none';
   aktualizovatPlatbuInfo();
 }
 
-// Platebni QR kod (format SPAYD pouzivany ceskymi bankovnimi aplikacemi)
+// Platebni QR kod (format SPAYD pouzivany ceskymi bankovnimi aplikacemi).
+// Variabilní symbol = číslo objednávky, stejně jako v potvrzovacím e-mailu (routes/emaily.js).
 const UCET_IBAN = 'CZ4620100000002003533776';
-function qrPlatbaUrl(castka, zprava) {
-  const spd = `SPD*1.0*ACC:${UCET_IBAN}*AM:${Number(castka).toFixed(2)}*CC:CZK*MSG:${zprava}`;
+function qrPlatbaUrl(castka, zprava, variabilniSymbol) {
+  const vs = variabilniSymbol && /^\d{1,10}$/.test(String(variabilniSymbol)) ? `*X-VS:${variabilniSymbol}` : '';
+  const spd = `SPD*1.0*ACC:${UCET_IBAN}*AM:${Number(castka).toFixed(2)}*CC:CZK${vs}*MSG:${zprava}`;
   return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(spd)}`;
 }
+// Platební údaje se ukazují až po odeslání (s variabilním symbolem) - VOP:
+// převodem "na základě výzvy prodávajícího"
 function aktualizovatPlatbuInfo() {
-  const platba = document.getElementById('chPlatba').value;
-  document.getElementById('chPrevodInfo').style.display = platba === 'prevod' ? 'block' : 'none';
-  if (platba === 'prevod') {
-    const total = kosik.reduce((s, i) => s + i.cena * i.pocet, 0);
-    const sleva = uplatnenyPoukaz ? Math.min(uplatnenyPoukaz.zustatek, total) : 0;
-    const dopravaCena = vypocitatDopravu(document.getElementById('chDoprava').value, total - sleva);
-    document.getElementById('chPrevodQr').src = qrPlatbaUrl(total - sleva + dopravaCena, 'Eshop Detske krucky');
+  document.getElementById('chPrevodInfo').hidden = zvolenaPlatba() !== 'prevod';
+}
+
+// Rekapitulace údajů ve shrnutí, s odkazy zpět k úpravě
+function shrnutiUdajuHtml(u) {
+  const adresa = u.doprava === 'osobni_odber' ? 'Vyzvednutí na prodejně: Holešovská 752, Hulín 768 24' : `${u.ulice}, ${u.psc} ${u.mesto}`;
+  return `<div class="shrnuti-blok"><div><strong>Doprava:</strong> ${escHtml(DOPRAVA_NAZVY[u.doprava] || u.doprava)}<br>${escHtml(adresa)}</div><button type="button" class="detail-odkaz" onclick="prejitNaKrok(1)">Upravit</button></div>
+    <div class="shrnuti-blok"><div><strong>Platba:</strong> ${escHtml(PLATBA_NAZVY[u.platba] || u.platba)}</div><button type="button" class="detail-odkaz" onclick="prejitNaKrok(1)">Upravit</button></div>
+    <div class="shrnuti-blok"><div><strong>${escHtml(u.jmeno)}</strong><br>${escHtml(u.email)} · ${escHtml(u.telefon)}${u.doprava === 'osobni_odber' ? `<br>${escHtml(`${u.ulice}, ${u.psc} ${u.mesto}`)}` : ''}</div><button type="button" class="detail-odkaz" onclick="prejitNaKrok(2)">Upravit</button></div>`;
+}
+
+function udajeZFormulare() {
+  const hodnota = id => document.getElementById(id).value.trim();
+  return {
+    jmeno: hodnota('chJmeno'), email: hodnota('chEmail'), telefon: hodnota('chTelefon'),
+    ulice: hodnota('chUlice'), mesto: hodnota('chMesto'), psc: hodnota('chPsc'),
+    doprava: zvolenaDoprava(), platba: zvolenaPlatba()
+  };
+}
+
+function prejitNaKrok(krok) {
+  if (krok === 3) {
+    const chyba = validovatCheckoutFormular(udajeZFormulare());
+    if (chyba) { zobrazitChybuCheckoutu(`<div class="msg msg-error">${escHtml(chyba)}</div>`); return; }
+    document.getElementById('shrnutiUdaju').innerHTML = shrnutiUdajuHtml(udajeZFormulare());
   }
+  vykreslitSouhrnObjednavky();
+  document.getElementById('checkoutMsg').innerHTML = '';
+  document.querySelectorAll('#modalCheckout .krok-objednavky').forEach(s => { s.hidden = s.dataset.krok !== String(krok); });
+  document.querySelectorAll('#krokyObjednavky li').forEach(li => {
+    const k = Number(li.dataset.krok);
+    li.classList.toggle('aktivni', k === krok);
+    li.classList.toggle('hotovo', k < krok);
+    if (k === krok) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current');
+  });
+  document.getElementById('krokyObjednavky').hidden = krok === 4;
+  const okno = document.querySelector('#modalCheckout .checkout-modal');
+  okno.scrollTop = 0;
+  const prvni = document.querySelector(`#modalCheckout .krok-objednavky[data-krok="${krok}"] input:not([type=hidden]):not([tabindex="-1"]), #modalCheckout .krok-objednavky[data-krok="${krok}"] button`);
+  if (prvni && krok !== 3) prvni.focus();
+}
+
+// Potvrzení po odeslání: číslo objednávky a u převodu platební údaje s VS
+function potvrzeniObjednavkyHtml({ cislo, celkem, email, platba }) {
+  const vs = /^\d{1,10}$/.test(String(cislo)) ? String(cislo) : '';
+  const prevod = platba === 'prevod' ? `
+    <div class="potvrzeni-platba">
+      <strong>Platba převodem</strong>
+      <div>Účet: <strong>2003533776/2010</strong></div>
+      ${vs ? `<div>Variabilní symbol: <strong>${escHtml(vs)}</strong></div>` : ''}
+      <div>Částka: <strong>${Number(celkem)} Kč</strong></div>
+      <img src="${escAttr(qrPlatbaUrl(celkem, 'Eshop Detske krucky', vs))}" width="180" height="180" alt="QR kód pro platbu">
+    </div>` : '';
+  return `
+    <div class="potvrzeni-ikona" aria-hidden="true">&#10003;</div>
+    <h4>Objednávku jsme obdrželi</h4>
+    <p>Děkujeme za objednávku.${cislo ? ` Číslo objednávky: <strong>${escHtml(cislo)}</strong>` : ''}</p>
+    <p>Potvrzení jsme poslali na <strong>${escHtml(email)}</strong>.</p>
+    ${prevod}
+    <div id="potvrzeniUcet"></div>
+    <button type="button" class="submit-btn" onclick="closeModal('modalCheckout')">Zpět do e-shopu</button>`;
 }
 
 async function uplatnitPoukazEshop() {
@@ -2711,7 +2911,7 @@ async function uplatnitPoukazEshop() {
   try {
     const res = await fetch(API + '/poukazy/overit/' + encodeURIComponent(kod));
     const data = await res.json();
-    if (!res.ok) { msg.innerHTML = `<div class="msg msg-error">${data.chyba}</div>`; uplatnenyPoukaz = null; vykreslitSouhrnObjednavky(); return; }
+    if (!res.ok) { msg.innerHTML = `<div class="msg msg-error">${escHtml(data.chyba || 'Poukaz se nepodařilo ověřit.')}</div>`; uplatnenyPoukaz = null; vykreslitSouhrnObjednavky(); return; }
     uplatnenyPoukaz = data;
     msg.innerHTML = `<div class="msg msg-success">✅ Poukaz uplatněn! Zůstatek ${Number(data.zustatek).toLocaleString('cs-CZ')} Kč</div>`;
     vykreslitSouhrnObjednavky();
@@ -2750,14 +2950,16 @@ async function odeslatObjednavku() {
   const ulice = document.getElementById('chUlice').value.trim();
   const mesto = document.getElementById('chMesto').value.trim();
   const psc = document.getElementById('chPsc').value.trim();
-  const doprava = document.getElementById('chDoprava').value;
-  const platba = document.getElementById('chPlatba').value;
+  const doprava = zvolenaDoprava();
+  const platba = zvolenaPlatba();
   const telefon = document.getElementById('chTelefon').value.trim();
   const webova_stranka = document.getElementById('chWebovaStranka').value;
 
   const chybaValidace = validovatCheckoutFormular({ jmeno, email, telefon, ulice, mesto, psc });
   if (chybaValidace) {
-    zobrazitChybuCheckoutu(`<div class="msg msg-error">${chybaValidace}</div>`);
+    // Údaje jsou v kroku 2 - vrátit se tam, ať je vidět, co opravit
+    prejitNaKrok(2);
+    zobrazitChybuCheckoutu(`<div class="msg msg-error">${escHtml(chybaValidace)}</div>`);
     return;
   }
   if (!document.getElementById('chSouhlas').checked) {
@@ -2791,11 +2993,16 @@ async function odeslatObjednavku() {
     const data = await res.json();
 
     if (res.ok) {
-      document.getElementById('checkoutMsg').innerHTML = '<div class="msg msg-success">&#127881; Objednávka odeslána! Brzy vás zkontaktujeme.</div>';
       kosik = [];
       ulozitKosik();
       uplatnenyPoukaz = null;
-      btn.textContent = 'Hotovo! ✓';
+      // Potvrzení zůstane otevřené (číslo objednávky, u převodu platba s VS),
+      // dokud ho zákaznice sama nezavře. Částka je ta, kterou spočítal server.
+      document.getElementById('potvrzeniObjednavky').innerHTML = potvrzeniObjednavkyHtml({ cislo: data.cislo, celkem: data.celkem, email, platba });
+      prejitNaKrok(4);
+      document.getElementById('chSouhlas').checked = false;
+      btn.disabled = false;
+      btn.textContent = 'Objednávka zavazující k platbě';
       if (vytvoritUcet) {
         // Objednávka už je založená (i se zákazníkem bez hesla) - registrace
         // mu jen doplní heslo. Když selže, objednávka tím nijak neutrpí.
@@ -2806,16 +3013,10 @@ async function odeslatObjednavku() {
         const msg = document.createElement('div');
         msg.className = 'msg ' + (vysledek.chyba ? 'msg-error' : 'msg-success');
         msg.textContent = vysledek.chyba ? 'Účet se nepodařilo vytvořit: ' + vysledek.chyba : vysledek.zprava;
-        document.getElementById('checkoutMsg').appendChild(msg);
+        document.getElementById('potvrzeniUcet').appendChild(msg);
       }
-      setTimeout(() => {
-        document.getElementById('modalCheckout').classList.remove('open');
-        btn.disabled = false;
-        btn.textContent = 'Objednávka zavazující k platbě';
-        document.getElementById('checkoutMsg').innerHTML = '';
-      }, 3000);
     } else {
-      zobrazitChybuCheckoutu(`<div class="msg msg-error">${data.chyba || 'Chyba serveru. Zkuste to prosím znovu.'}</div>`);
+      zobrazitChybuCheckoutu(`<div class="msg msg-error">${escHtml(data.chyba || 'Chyba serveru. Zkuste to prosím znovu.')}</div>`);
       btn.disabled = false;
       btn.textContent = 'Objednávka zavazující k platbě';
     }
