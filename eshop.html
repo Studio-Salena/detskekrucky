@@ -175,6 +175,15 @@ footer.paticka .footer-copy{text-align:center;border-top:1px solid rgba(255,255,
 }
 @media(max-width:480px){.paticka-sloupce{grid-template-columns:1fr}}
 
+/* RYCHLÝ VÝBĚR NAD KATALOGEM (krok 6) */
+.katalog-uvod{max-width:1400px;margin:0 auto 28px;display:flex;flex-direction:column;gap:24px}
+.katalog-uvod[hidden]{display:none}
+.katalog-uvod h3{font-family:'Cormorant',serif;font-size:1.5rem;font-weight:600;color:var(--text);margin:0 0 12px}
+.velikosti-rychle{display:flex;flex-wrap:wrap;gap:8px}
+.velikosti-rychle a{min-width:48px;text-align:center;padding:10px 8px;border:2px solid var(--tan-light);border-radius:12px;background:#fff;color:var(--text);font-weight:700;text-decoration:none;font-variant-numeric:tabular-nums}
+.velikosti-rychle a:hover,.velikosti-rychle a:focus-visible{border-color:var(--brown);color:var(--brown)}
+@media(max-width:768px){#oblibene{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:12px;padding-bottom:6px}#oblibene .product-card{flex:0 0 62%;scroll-snap-align:start}}
+
 /* KATALOG (krok 1): filtry vlevo, produkty vpravo; na mobilu filtry v panelu přes obrazovku */
 .drobecky{max-width:1400px;margin:0 auto 10px;font-size:0.82rem;color:var(--text-light);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .drobecky a{color:var(--brown);text-decoration:none;font-weight:700}
@@ -797,6 +806,17 @@ body:has(.cart-sidebar.open) #back-to-top {
     <h2 class="katalog-nadpis" id="katalogNadpis">Všechny boty</h2>
   </div>
   <div class="katalog-hlaska" id="katalogHlaska"></div>
+  <!-- Rychlý výběr nad katalogem - jen bez filtrů (krok 6) -->
+  <div class="katalog-uvod" id="katalogUvod" hidden onclick="kliknutiNaDrobek(event)">
+    <div>
+      <h3>Jakou velikost hledáte?</h3>
+      <div class="velikosti-rychle" id="rychleVelikosti"></div>
+    </div>
+    <div id="oblibeneBlok" hidden>
+      <h3>Nejčastěji vybíráte</h3>
+      <div class="detail-podobne" id="oblibene"></div>
+    </div>
+  </div>
   <div class="katalog">
     <aside class="katalog-filtry" id="katalogFiltry" aria-label="Filtry">
       <div class="filtry-mobil-hlavicka"><strong>Filtry</strong><button type="button" onclick="zavritFiltry()" aria-label="Zavřít filtry">&#10005;</button></div>
@@ -1859,6 +1879,7 @@ function vykreslitKatalog() {
   const nalezene = seraditProdukty(filtrovatProdukty(vsechnyProdukty, stav, ctx), stav.razeni);
   const pocty = spocitatMoznosti(vsechnyProdukty, stav, ctx);
   vykreslitMenu();
+  vykreslitUvodKatalogu(stav, pocty);
 
   document.getElementById('drobecky').innerHTML = drobeckyHtml(drobeckyKatalogu(stav));
   document.getElementById('katalogNadpis').textContent = nadpisKatalogu(stav);
@@ -1894,6 +1915,34 @@ function vykreslitKatalog() {
   const zbyva = nalezene.length - katalogZobrazeno;
   document.getElementById('katalogDalsi').innerHTML = zbyva > 0
     ? `<button type="button" onclick="zobrazitDalsi()">Zobrazit další (zbývá ${zbyva})</button>` : '';
+}
+
+// ═══ Rychlý výběr nad katalogem (krok 6) ═══
+let oblibeneSlugy = [];
+
+// Výchozí zobrazení = bez filtrů a hledání (řazení a otevřená bota nevadí)
+function jeVychoziStav(stav) {
+  return urlZeStavu({ ...stav, razeni: 'doporucene', produkt: '' }) === '';
+}
+
+// Nejprodávanější modely, které jsou právě v nabídce (skladem nebo u dodavatele)
+function oblibeneProdukty(slugy, produkty, pocet = 4) {
+  const podleSlugu = new Map(produkty.filter(p => p.slug).map(p => [p.slug, p]));
+  return (slugy || []).map(s => podleSlugu.get(s)).filter(Boolean).slice(0, pocet);
+}
+
+function vykreslitUvodKatalogu(stav, pocty) {
+  const uvod = document.getElementById('katalogUvod');
+  uvod.hidden = !jeVychoziStav(stav) || !vsechnyProdukty.length;
+  if (uvod.hidden) return;
+  document.getElementById('rychleVelikosti').innerHTML = Object.keys(pocty.velikost).map(Number).sort((a, b) => a - b).map(v => {
+    const s = { ...prazdnyStavKatalogu(), velikost: v };
+    return `<a href="eshop.html${escAttr(urlZeStavu(s))}" data-stav="${escAttr(JSON.stringify(s))}" aria-label="Velikost ${v}: ${pocetProduktuText(pocty.velikost[v])}" title="${pocetProduktuText(pocty.velikost[v])}">${v}</a>`;
+  }).join('');
+  const oblibene = oblibeneProdukty(oblibeneSlugy, vsechnyProdukty);
+  // Méně než 3 boty nemá smysl ukazovat jako "nejčastěji vybírané"
+  document.getElementById('oblibeneBlok').hidden = oblibene.length < 3;
+  document.getElementById('oblibene').innerHTML = oblibene.length < 3 ? '' : oblibene.map(p => kartaProduktuHtml(p, stav)).join('');
 }
 
 function zobrazitDalsi() {
@@ -2800,6 +2849,13 @@ fetch(API + '/nastaveni/texty').then(r => r.ok ? r.json() : null).then(data => {
     pruh.hidden = !data.eshopPruh.trim();
   }
   if (Array.isArray(data.mereniKroky)) mereniKroky = data.mereniKroky;
+}).catch(() => {});
+// Nejprodávanější boty pro blok "Nejčastěji vybíráte"
+fetch(API + '/modely/oblibene').then(r => r.ok ? r.json() : null).then(data => {
+  if (Array.isArray(data)) {
+    oblibeneSlugy = data.filter(s => typeof s === 'string');
+    if (produktyNacteny) vykreslitKatalog();
+  }
 }).catch(() => {});
 // Věkové skupiny nastavené v adminu (Modely bot -> Věk a pohlaví)
 fetch(API + '/modely/nastaveni-katalogu').then(r => r.ok ? r.json() : null).then(data => {

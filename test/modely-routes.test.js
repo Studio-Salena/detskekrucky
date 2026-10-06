@@ -298,3 +298,34 @@ test('chyba přiřazení modelu neshodí uložení produktu', async () => {
     console.error = puvodniError;
   }
 });
+
+test('oblíbené modely: veřejné, jen slugy (bez počtů), bez zrušených objednávek, s cache', async () => {
+  const routePath = require.resolve('../routes/modely.js');
+  const poolPath = require.resolve('../db/pool');
+  delete require.cache[routePath];
+  const dotazy = [];
+  require.cache[poolPath] = { id: poolPath, filename: poolPath, loaded: true, exports: {
+    async query(sql) {
+      const s = sql.replace(/\s+/g, ' ').trim();
+      dotazy.push(s);
+      if (s.startsWith('WITH prodane AS')) return { rows: [{ slug: 'froddo-autumn' }, { slug: 'beda-zuzi' }] };
+      if (s.startsWith('CREATE TABLE') || s.startsWith('SELECT id, znacka, nazev, kategorie FROM produkty WHERE model_id IS NULL')) return { rows: [] };
+      throw new Error('Mock nezná dotaz: ' + s);
+    }
+  } };
+  const router = require(routePath);
+  delete require.cache[poolPath];
+  delete require.cache[routePath];
+  const layer = router.stack.find(l => l.route && l.route.path === '/oblibene' && l.route.methods.get);
+  assert.ok(router.stack.indexOf(layer) < router.stack.findIndex(l => !l.route && l.name === 'vyzadovatAdmina'), 'route je před admin ochranou');
+  const hlavicky = {};
+  const r = { statusCode: 200, set(k, v) { hlavicky[k] = v; return r; }, status(k) { r.statusCode = k; return r; }, json(b) { r.body = b; return r; } };
+  await layer.route.stack[0].handle({}, r);
+  assert.deepEqual(r.body, ['froddo-autumn', 'beda-zuzi']);
+  assert.equal(hlavicky['Cache-Control'], 'public, max-age=600');
+  const sql = dotazy.find(s => s.startsWith('WITH prodane AS'));
+  assert.match(sql, /o\.stav <> 'zrusena'/);
+  assert.match(sql, /WHERE p\.na_eshopu/);
+  assert.match(sql, /LIMIT 12/);
+  assert.doesNotMatch(sql, /SELECT m\.slug, SUM/, 'počty se ven neposílají');
+});

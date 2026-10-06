@@ -161,3 +161,46 @@ test('API proti PostgreSQL: seznam modelů a úprava s propsáním do produktů'
     await uklid();
   }
 });
+
+test('oblíbené modely proti PostgreSQL: e-shop bez zrušených + prodejna (JSONB), skryté a staré prodeje se nepočítají', { skip: preskocit }, async () => {
+  const { pool, uklid } = await pripravitSchema();
+  const routePath = require.resolve('../routes/modely.js');
+  const poolPath = require.resolve('../db/pool');
+  try {
+    await pool.query(`
+      CREATE TABLE objednavky (id SERIAL PRIMARY KEY, stav TEXT DEFAULT 'nova', vytvoreno TIMESTAMPTZ DEFAULT NOW());
+      CREATE TABLE objednavky_polozky (id SERIAL PRIMARY KEY, objednavka_id INTEGER REFERENCES objednavky(id), produkt_id INTEGER, velikost INTEGER, pocet INTEGER, cena NUMERIC);
+      CREATE TABLE prodejna_prodeje (id SERIAL PRIMARY KEY, datum TIMESTAMPTZ NOT NULL DEFAULT NOW(), polozky JSONB NOT NULL, celkem NUMERIC NOT NULL DEFAULT 0);
+    `);
+    const a = await vlozitProdukt(pool, 'Froddo', 'Autumn', 'celorocky', 24, 1);
+    const a2 = await vlozitProdukt(pool, 'Froddo', 'Autumn', 'celorocky', 25, 1);
+    const b = await vlozitProdukt(pool, 'Beda', 'Zuzi', 'papuce', 22, 1);
+    const c = await vlozitProdukt(pool, 'Jonap', 'Skryta', 'celorocky', 26, 1);
+    const d = await vlozitProdukt(pool, 'Demar', 'Holinka', 'celorocky', 27, 1);
+    await pool.query('UPDATE produkty SET na_eshopu = false WHERE id = $1', [c]);
+    await migrovatModely(pool);
+    // E-shop: Autumn 2 ks (dvě velikosti), Zuzi 5 ks ve zrušené objednávce (nepočítá se), Demar 3 ks před rokem (nepočítá se)
+    await pool.query(`INSERT INTO objednavky (stav, vytvoreno) VALUES ('dorucena', NOW()), ('zrusena', NOW()), ('dorucena', NOW() - INTERVAL '1 year')`);
+    await pool.query('INSERT INTO objednavky_polozky (objednavka_id, produkt_id, velikost, pocet, cena) VALUES (1,$1,24,1,1000), (1,$2,25,1,1000), (2,$3,22,5,500), (3,$4,27,3,800)', [a, a2, b, d]);
+    // Prodejna: Zuzi 3 ks, skrytá bota 9 ks (nepočítá se), nesmyslné položky se přeskočí
+    await pool.query(`INSERT INTO prodejna_prodeje (polozky) VALUES ('{"stary": "zaznam"}')`); // ne pole - nesmí shodit dotaz
+    await pool.query(`INSERT INTO prodejna_prodeje (polozky) VALUES ($1), ($2)`, [
+      JSON.stringify([{ produkt_id: b, velikost: 22, pocet: 3 }, { produkt_id: c, velikost: 26, pocet: 9 }]),
+      JSON.stringify([{ produkt_id: 'x' }, { nazev: 'bez id' }, { produkt_id: String(b), pocet: 'abc' }])
+    ]);
+
+    delete require.cache[routePath];
+    require.cache[poolPath] = { id: poolPath, filename: poolPath, loaded: true, exports: pool };
+    const router = require(routePath);
+    const layer = router.stack.find(l => l.route && l.route.path === '/oblibene');
+    const r = { statusCode: 200, set() { return r; }, status(k) { r.statusCode = k; return r; }, json(x) { r.body = x; return r; } };
+    await layer.route.stack[0].handle({}, r);
+    assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+    // Zuzi 3 + 1 (pocet 'abc' = 1) = 4 > Autumn 2; Demar a skrytá bota vůbec
+    assert.deepEqual(r.body, ['beda-zuzi', 'froddo-autumn']);
+  } finally {
+    delete require.cache[poolPath];
+    delete require.cache[routePath];
+    await uklid();
+  }
+});

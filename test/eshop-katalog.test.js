@@ -293,3 +293,22 @@ test('eshop.html: pruh „Dětské kroky s jistotou“ zůstává nad hlavičkou
   const pruh = ESHOP_HTML.indexOf('Dětské kroky s jistotou. Objevte kompletní sortiment');
   assert.ok(pruh > ESHOP_HTML.indexOf('class="horni-lista"') && pruh < ESHOP_HTML.indexOf('<header>'));
 });
+
+// ═══ Krok 6 - rychlý výběr nad katalogem ═══
+
+new vm.Script(['jeVychoziStav', 'oblibeneProdukty'].map(vytahnout).join('\n')).runInContext(sandbox);
+
+test('rychlý výběr: jen ve výchozím zobrazení (řazení a otevřená bota nevadí)', () => {
+  assert.equal(run(`jeVychoziStav(${JSON.stringify(stav())})`), true);
+  assert.equal(run(`jeVychoziStav(${JSON.stringify(stav({ razeni: 'nejlevnejsi', produkt: 'x' }))})`), true);
+  for (const z of [{ kategorie: 'papuce' }, { velikost: 25 }, { hledat: 'a' }, { sleva: true }, { znacka: ['Beda'] }]) {
+    assert.equal(run(`jeVychoziStav(${JSON.stringify(stav(z))})`), false, JSON.stringify(z));
+  }
+});
+
+test('nejčastěji vybíráte: pořadí ze serveru, jen boty v nabídce, nejvýš 4', () => {
+  const slugy = ['neni-skladem', 'protetika-tery', 'froddo-autumn', 'beda-zuzi', 'dalsi'];
+  assert.deepEqual(run(`oblibeneProdukty(${JSON.stringify(slugy)}, ${JSON.stringify(PRODUKTY)})`).map(p => p.slug), ['protetika-tery', 'froddo-autumn', 'beda-zuzi']);
+  assert.deepEqual(run(`oblibeneProdukty(${JSON.stringify(slugy)}, ${JSON.stringify(PRODUKTY)}, 2)`).map(p => p.slug), ['protetika-tery', 'froddo-autumn']);
+  assert.deepEqual(run(`oblibeneProdukty(null, ${JSON.stringify(PRODUKTY)})`), []);
+});

@@ -35,6 +35,41 @@ router.get('/nastaveni-katalogu', async (req, res) => {
   }
 });
 
+// Veřejné - "Nejčastěji vybíráte" na e-shopu: nejprodávanější modely za 180 dní
+// (e-shop bez zrušených objednávek + prodejna). Vrací jen pořadí (slugy), ne počty
+// prodaných kusů - ty jsou interní.
+const SQL_OBLIBENE = `
+  WITH prodane AS (
+    SELECT op.produkt_id, op.pocet
+    FROM objednavky_polozky op
+    JOIN objednavky o ON o.id = op.objednavka_id
+    WHERE o.stav <> 'zrusena' AND o.vytvoreno > NOW() - INTERVAL '180 days'
+    UNION ALL
+    SELECT (pol->>'produkt_id')::int,
+           CASE WHEN (pol->>'pocet') ~ '^[0-9]{1,4}$' THEN (pol->>'pocet')::int ELSE 1 END
+    FROM prodejna_prodeje pp,
+         jsonb_array_elements(CASE WHEN jsonb_typeof(pp.polozky) = 'array' THEN pp.polozky ELSE '[]'::jsonb END) pol
+    WHERE pp.datum > NOW() - INTERVAL '180 days' AND (pol->>'produkt_id') ~ '^[0-9]{1,9}$'
+  )
+  SELECT m.slug
+  FROM prodane x
+  JOIN produkty p ON p.id = x.produkt_id
+  JOIN modely m ON m.id = p.model_id
+  WHERE p.na_eshopu
+  GROUP BY m.slug
+  ORDER BY SUM(x.pocet) DESC, m.slug
+  LIMIT 12`;
+
+router.get('/oblibene', async (req, res) => {
+  try {
+    const result = await pool.query(SQL_OBLIBENE);
+    res.set('Cache-Control', 'public, max-age=600');
+    res.json(result.rows.map(r => r.slug));
+  } catch (err) {
+    res.status(500).json({ chyba: err.message });
+  }
+});
+
 // Vše pod touto řádkou vyžaduje administraci
 router.use(vyzadovatAdmina);
 
