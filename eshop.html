@@ -1879,7 +1879,7 @@ function vykreslitKatalog() {
   const nalezene = seraditProdukty(filtrovatProdukty(vsechnyProdukty, stav, ctx), stav.razeni);
   const pocty = spocitatMoznosti(vsechnyProdukty, stav, ctx);
   vykreslitMenu();
-  vykreslitUvodKatalogu(stav, pocty);
+  vykreslitUvodKatalogu(stav);
 
   document.getElementById('drobecky').innerHTML = drobeckyHtml(drobeckyKatalogu(stav));
   document.getElementById('katalogNadpis').textContent = nadpisKatalogu(stav);
@@ -1925,19 +1925,35 @@ function jeVychoziStav(stav) {
   return urlZeStavu({ ...stav, razeni: 'doporucene', produkt: '' }) === '';
 }
 
-// Nejprodávanější modely, které jsou právě v nabídce (skladem nebo u dodavatele)
+// Kategorie, které nejsou boty (stejný seznam jako KATEGORIE_BEZ_VLASTNOSTI v lib/modely.js),
+// a nejmenší velikost bot - menší čísla jsou ponožky nebo měsíce u capáčků
+const KATALOG_BEZ_BOT = ['doplnky', 'pece-o-obuv'];
+const MIN_VELIKOST_BOT = 16;
+function jeBota(p) { return !KATALOG_BEZ_BOT.includes(p.kategorie); }
+
+// Nejprodávanější boty, které jsou právě v nabídce (skladem nebo u dodavatele)
 function oblibeneProdukty(slugy, produkty, pocet = 4) {
-  const podleSlugu = new Map(produkty.filter(p => p.slug).map(p => [p.slug, p]));
+  const podleSlugu = new Map(produkty.filter(p => p.slug && jeBota(p)).map(p => [p.slug, p]));
   return (slugy || []).map(s => podleSlugu.get(s)).filter(Boolean).slice(0, pocet);
 }
 
-function vykreslitUvodKatalogu(stav, pocty) {
+// Velikosti bot pro rychlý výběr: { velikost: počet bot }
+function velikostiBot(produkty) {
+  const pocty = {};
+  produkty.filter(jeBota).forEach(p => new Set(p.velikosti.map(v => v.velikost)).forEach(v => {
+    if (v >= MIN_VELIKOST_BOT) pocty[v] = (pocty[v] || 0) + 1;
+  }));
+  return pocty;
+}
+
+function vykreslitUvodKatalogu(stav) {
   const uvod = document.getElementById('katalogUvod');
   uvod.hidden = !jeVychoziStav(stav) || !vsechnyProdukty.length;
   if (uvod.hidden) return;
-  document.getElementById('rychleVelikosti').innerHTML = Object.keys(pocty.velikost).map(Number).sort((a, b) => a - b).map(v => {
+  const velikosti = velikostiBot(vsechnyProdukty);
+  document.getElementById('rychleVelikosti').innerHTML = Object.keys(velikosti).map(Number).sort((a, b) => a - b).map(v => {
     const s = { ...prazdnyStavKatalogu(), velikost: v };
-    return `<a href="eshop.html${escAttr(urlZeStavu(s))}" data-stav="${escAttr(JSON.stringify(s))}" aria-label="Velikost ${v}: ${pocetProduktuText(pocty.velikost[v])}" title="${pocetProduktuText(pocty.velikost[v])}">${v}</a>`;
+    return `<a href="eshop.html${escAttr(urlZeStavu(s))}" data-stav="${escAttr(JSON.stringify(s))}" aria-label="Velikost ${v}: ${pocetProduktuText(velikosti[v])}" title="${pocetProduktuText(velikosti[v])}">${v}</a>`;
   }).join('');
   const oblibene = oblibeneProdukty(oblibeneSlugy, vsechnyProdukty);
   // Méně než 3 boty nemá smysl ukazovat jako "nejčastěji vybírané"

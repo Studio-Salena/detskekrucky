@@ -296,7 +296,8 @@ test('eshop.html: pruh „Dětské kroky s jistotou“ zůstává nad hlavičkou
 
 // ═══ Krok 6 - rychlý výběr nad katalogem ═══
 
-new vm.Script(['jeVychoziStav', 'oblibeneProdukty'].map(vytahnout).join('\n')).runInContext(sandbox);
+new vm.Script([vytahnoutKonstantu('KATALOG_BEZ_BOT'), vytahnoutKonstantu('MIN_VELIKOST_BOT'),
+  ...['jeBota', 'jeVychoziStav', 'oblibeneProdukty', 'velikostiBot'].map(vytahnout)].join('\n')).runInContext(sandbox);
 
 test('rychlý výběr: jen ve výchozím zobrazení (řazení a otevřená bota nevadí)', () => {
   assert.equal(run(`jeVychoziStav(${JSON.stringify(stav())})`), true);
@@ -311,4 +312,12 @@ test('nejčastěji vybíráte: pořadí ze serveru, jen boty v nabídce, nejvý�
   assert.deepEqual(run(`oblibeneProdukty(${JSON.stringify(slugy)}, ${JSON.stringify(PRODUKTY)})`).map(p => p.slug), ['protetika-tery', 'froddo-autumn', 'beda-zuzi']);
   assert.deepEqual(run(`oblibeneProdukty(${JSON.stringify(slugy)}, ${JSON.stringify(PRODUKTY)}, 2)`).map(p => p.slug), ['protetika-tery', 'froddo-autumn']);
   assert.deepEqual(run(`oblibeneProdukty(null, ${JSON.stringify(PRODUKTY)})`), []);
+});
+
+test('rychlý výběr: jen boty - doplňky a péče o obuv ani velikosti pod 16 (ponožky, měsíce u capáčků)', () => {
+  const zbozi = [...PRODUKTY,
+    { klic: 'p', slug: 'voxx-ponozky', kategorie: 'doplnky', velikosti: [{ velikost: 1 }, { velikost: 25 }] },
+    { klic: 'c', slug: 'capiki', kategorie: 'capacky', velikosti: [{ velikost: 6 }, { velikost: 12 }, { velikost: 18 }] }];
+  assert.deepEqual(run(`velikostiBot(${JSON.stringify(zbozi)})`), { 18: 1, 20: 1, 21: 1, 22: 1, 24: 1, 25: 1, 26: 1, 31: 1 });
+  assert.deepEqual(run(`oblibeneProdukty(['voxx-ponozky', 'beda-zuzi', 'capiki'], ${JSON.stringify(zbozi)})`).map(p => p.slug), ['beda-zuzi', 'capiki']);
 });
