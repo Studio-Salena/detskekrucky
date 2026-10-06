@@ -53,8 +53,12 @@ router.get('/', async (req, res) => {
       SELECT p.id, p.nazev, p.znacka, p.emoji, p.kategorie, p.cena, p.cena_puvodni, p.typ_nohy, p.popis,
              s.velikost, s.pocet_kusu, s.delka_mm, s.sirka_mm, s.dostupnost,
              pi.url AS primary_image_url, pi.alt AS primary_image_alt,
-             imgs.obrazky
+             imgs.obrazky,
+             -- Model bot (lib/modely.js): adresa boty na e-shopu a vlastnosti pro filtry
+             m.id AS model_id, m.slug AS model_slug, m.barefoot, m.sirka AS sirka_nohy, m.nart, m.dominantni_palec,
+             m.zapinani, m.membrana, m.material, m.pohlavi, m.proc_jsme_vybrali
       FROM produkty p
+      LEFT JOIN modely m ON m.id = p.model_id
       LEFT JOIN sklad s ON p.id = s.produkt_id
       LEFT JOIN LATERAL (
         SELECT url, alt FROM product_images

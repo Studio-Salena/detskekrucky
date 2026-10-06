@@ -22,10 +22,11 @@ async function pripravitSchema() {
   // Tvar tabulek jako na produkci před zavedením modelů
   await pool.query(`
     CREATE TABLE produkty (id SERIAL PRIMARY KEY, nazev VARCHAR(255) NOT NULL, znacka VARCHAR(255), emoji VARCHAR(10),
-      popis TEXT, kategorie VARCHAR(50), cena INTEGER NOT NULL, cena_puvodni INTEGER, na_eshopu BOOLEAN NOT NULL DEFAULT true);
+      popis TEXT, kategorie VARCHAR(50), cena INTEGER NOT NULL, cena_puvodni INTEGER, na_eshopu BOOLEAN NOT NULL DEFAULT true, typ_nohy TEXT);
     CREATE TABLE sklad (id SERIAL PRIMARY KEY, produkt_id INTEGER REFERENCES produkty(id), velikost INTEGER NOT NULL,
-      pocet_kusu INTEGER NOT NULL DEFAULT 0, UNIQUE(produkt_id, velikost));
-    CREATE TABLE product_images (id SERIAL PRIMARY KEY, produkt_id INTEGER REFERENCES produkty(id), url TEXT);
+      pocet_kusu INTEGER NOT NULL DEFAULT 0, delka_mm INTEGER, sirka_mm INTEGER, dostupnost TEXT NOT NULL DEFAULT 'skladem', UNIQUE(produkt_id, velikost));
+    CREATE TABLE product_images (id SERIAL PRIMARY KEY, produkt_id INTEGER REFERENCES produkty(id), url TEXT, alt TEXT,
+      is_primary BOOLEAN NOT NULL DEFAULT false, position INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE kategorie (id SERIAL PRIMARY KEY, nazev TEXT, slug TEXT);
     CREATE TABLE nastaveni (klic TEXT PRIMARY KEY, hodnota JSONB);
     INSERT INTO kategorie (nazev, slug) VALUES ('Celoročky', 'celorocky'), ('Papuče', 'papuce'), ('Doplňky', 'doplnky');
@@ -126,6 +127,34 @@ test('API proti PostgreSQL: seznam modelů a úprava s propsáním do produktů'
     await najit('post', '/hromadne')({ body: { ids: [m.id, 999999], zmeny: { barefoot: false } } }, r5);
     assert.equal(r5.statusCode, 404);
     assert.equal((await pool.query('SELECT barefoot FROM modely WHERE id = $1', [m.id])).rows[0].barefoot, true, 'transakce vrácena');
+
+    // Veřejné /api/sklad (krok 1): ke každé velikosti adresa modelu a vlastnosti pro filtry
+    const skladPath = require.resolve('../routes/sklad.js');
+    delete require.cache[skladPath];
+    const sklad = require(skladPath);
+    // Načtení routy spustí její startovní migraci (ALTER TABLE) - počkat, než doběhne,
+    // jinak se s ní dotaz může zablokovat (deadlock), stejně jako při startu serveru
+    for (let i = 0; i < 50; i++) {
+      const bezi = await pool.query(`SELECT COUNT(*)::int AS n FROM pg_stat_activity WHERE pid <> pg_backend_pid() AND state = 'active' AND query ILIKE '%ALTER TABLE%'`);
+      if (!bezi.rows[0].n) break;
+      await new Promise(r => setTimeout(r, 50));
+    }
+    await new Promise(r => setTimeout(r, 100));
+    const l = sklad.stack.find(x => x.route && x.route.path === '/' && x.route.methods.get);
+    const r6 = res();
+    await l.route.stack[l.route.stack.length - 1].handle({}, r6);
+    delete require.cache[skladPath];
+    assert.equal(r6.statusCode, 200, JSON.stringify(r6.body));
+    assert.equal(r6.body.length, 2);
+    for (const radek of r6.body) {
+      assert.equal(radek.model_slug, 'froddo-autumn');
+      assert.equal(radek.model_id, m.id);
+      assert.equal(radek.barefoot, true);
+      assert.deepEqual(radek.sirka_nohy, ['siroka']);
+      assert.deepEqual(radek.zapinani, ['suchy_zip', 'tkanicky']);
+      assert.equal(radek.membrana, false);
+      assert.equal('min_pocet' in radek || 'ean' in radek, false);
+    }
   } finally {
     delete require.cache[poolPath];
     delete require.cache[routePath];

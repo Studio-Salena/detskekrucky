@@ -112,6 +112,66 @@ nav{display:flex;align-items:center;gap:8px}
 .section-title{font-family:'Dancing Script',cursive;font-size:1.8rem;color:var(--brown);margin-bottom:24px}
 .products-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px;max-width:1400px;margin:0 auto}
 @media(max-width:1100px){.products-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+/* KATALOG (krok 1): filtry vlevo, produkty vpravo; na mobilu filtry v panelu přes obrazovku */
+.drobecky{max-width:1400px;margin:0 auto 10px;font-size:0.82rem;color:var(--text-light);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.drobecky a{color:var(--brown);text-decoration:none;font-weight:700}
+.drobecky a:hover{text-decoration:underline}
+.drobecky .oddelovac{color:var(--tan)}
+.drobecky [aria-current]{color:var(--text)}
+.katalog-hlavicka{max-width:1400px;margin:0 auto 18px;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.katalog-nadpis{font-family:'Cormorant',serif;font-size:2rem;font-weight:600;color:var(--text);margin:0;text-wrap:balance}
+.katalog{display:grid;grid-template-columns:250px minmax(0,1fr);gap:28px;max-width:1400px;margin:0 auto;align-items:start}
+.katalog .products-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media(max-width:1100px){.katalog .products-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.katalog-filtry{background:#fff;border:2px solid var(--tan-light);border-radius:20px;padding:16px 18px;position:sticky;top:90px;max-height:calc(100vh - 110px);overflow:auto}
+.filtr-skupina{border-bottom:1px solid var(--tan-light);padding:12px 0}
+.filtr-skupina:last-child{border-bottom:0}
+.filtr-skupina h4{font-size:0.78rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-light);margin:0 0 8px}
+.filtr-volba{display:flex;align-items:center;gap:8px;font-size:0.88rem;padding:3px 0;cursor:pointer}
+.filtr-volba input{accent-color:var(--brown);width:16px;height:16px}
+.filtr-volba .pocet{margin-left:auto;color:var(--text-light);font-size:0.78rem;font-variant-numeric:tabular-nums}
+.filtr-volba.prazdna{opacity:0.45}
+.filtr-velikosti{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.filtr-velikost{padding:7px 0;border:2px solid var(--tan-light);border-radius:10px;background:#fff;font-family:'Nunito',sans-serif;font-weight:700;font-size:0.85rem;cursor:pointer;color:var(--text)}
+.filtr-velikost[aria-pressed="true"]{background:var(--brown);border-color:var(--brown);color:#fff}
+.filtr-velikost:disabled{opacity:0.35;cursor:default}
+.filtr-cena{display:flex;gap:6px;align-items:center}
+.filtr-cena input{width:100%;min-width:0;padding:7px 8px;border:2px solid var(--tan-light);border-radius:10px;font-family:'Nunito',sans-serif;font-size:16px}
+.filtry-mobil-hlavicka,.filtry-mobil-potvrdit,.filtry-mobil-btn{display:none}
+.katalog-lista{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.katalog-pocet{font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
+.razeni{font-size:0.85rem;color:var(--text-light);display:flex;align-items:center;gap:6px}
+.razeni select{padding:8px 12px;border:2px solid var(--tan-light);border-radius:20px;font-family:'Nunito',sans-serif;font-size:0.85rem;background:#fff;color:var(--text)}
+.aktivni-filtry{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.aktivni-filtry:empty{display:none}
+.filtr-stitek{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;background:#fff;border:2px solid var(--brown);color:var(--brown);font-weight:700;font-size:0.8rem;cursor:pointer;font-family:'Nunito',sans-serif}
+.filtr-stitek.zrusit{border-color:var(--tan-light);color:var(--text-light)}
+.karta-velikosti{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
+.karta-velikosti span{min-width:28px;text-align:center;padding:2px 5px;border:1px solid var(--tan-light);border-radius:6px;font-size:0.75rem;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
+.karta-velikosti span.vyprodano{color:#b9aca2;border-color:#eee6dd;text-decoration:line-through;font-weight:400}
+.karta-velikosti span.hledana{background:var(--brown);border-color:var(--brown);color:#fff}
+.karta-sklad{font-size:0.78rem;font-weight:700;margin-bottom:8px;color:#2e7d32}
+.karta-sklad.dodavatel{color:#1565c0}
+.product-badge.barefoot{left:auto;right:12px;background:var(--sage)}
+.katalog-dalsi{display:flex;justify-content:center;margin-top:24px}
+.katalog-dalsi button{padding:12px 28px;border-radius:24px;border:2px solid var(--brown);background:#fff;color:var(--brown);font-family:'Nunito',sans-serif;font-weight:700;font-size:0.92rem;cursor:pointer}
+.katalog-hlaska{max-width:1400px;margin:0 auto 18px;background:#fff;border:2px dashed var(--tan);border-radius:20px;padding:18px 22px;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.katalog-hlaska:empty{display:none}
+.katalog-hlaska strong{font-family:'Cormorant',serif;font-size:1.4rem}
+.katalog-hlaska button{padding:8px 18px;border-radius:20px;border:none;background:var(--brown);color:#fff;font-weight:700;font-family:'Nunito',sans-serif;cursor:pointer}
+.drobecky-detail{margin-bottom:12px}
+@media(max-width:900px){
+  .katalog{grid-template-columns:1fr}
+  .katalog .products-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .katalog-filtry{display:none;position:fixed;inset:0;top:0;max-height:none;border-radius:0;border:0;z-index:1500;padding:16px 16px calc(84px + env(safe-area-inset-bottom,0px))}
+  .katalog-filtry.open{display:block}
+  .filtry-mobil-hlavicka{display:flex;justify-content:space-between;align-items:center;font-size:1.1rem;padding-bottom:8px;border-bottom:2px solid var(--tan-light)}
+  .filtry-mobil-hlavicka button{background:none;border:none;font-size:1.3rem;cursor:pointer;padding:6px 10px}
+  .filtry-mobil-potvrdit{display:block;position:fixed;left:16px;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));padding:14px;border:none;border-radius:24px;background:var(--brown);color:#fff;font-weight:700;font-size:1rem;font-family:'Nunito',sans-serif;z-index:1501}
+  .filtry-mobil-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:20px;border:2px solid var(--brown);background:#fff;color:var(--brown);font-weight:700;font-family:'Nunito',sans-serif;font-size:0.85rem;cursor:pointer}
+}
+@media(max-width:400px){.katalog .products-grid{grid-template-columns:1fr}}
 .product-card{background:#fff;border-radius:24px;overflow:hidden;border:2px solid var(--tan-light);transition:all 0.3s;cursor:pointer;position:relative}
 .product-card:hover{transform:translateY(-6px);box-shadow:0 16px 48px rgba(139,69,19,0.2);border-color:var(--tan);background:linear-gradient(180deg,#fff,#fffaf5)}
 .product-img{height:220px;display:flex;align-items:center;justify-content:center;font-size:4rem;position:relative}
@@ -580,23 +640,6 @@ body:has(.cart-sidebar.open) #back-to-top {
   </div>
 </div>
 
-<!-- FILTERS -->
-<div class="filters-wrap">
-  <div>
-    <span class="filters-title">Procházet kolekci</span>
-    <button class="filter-btn active" id="aktivniKategorieChip" onclick="filterBy('vse')" style="display:none">&#10005; <span id="aktivniKategorieNazev"></span></button>
-  </div>
-  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-    <select id="filterVelikost" onchange="filterByVelikost(this.value)" style="padding:10px 14px;border:2px solid var(--tan-light);border-radius:20px;font-family:'Nunito',sans-serif;font-size:0.85rem;background:#fff;color:var(--text-light)">
-      <option value="">Velikost nožičky</option>
-    </select>
-    <div class="search-wrap">
-      <span class="search-icon">&#128269;</span>
-      <input type="text" placeholder="Hledat boty..." oninput="searchProducts(this.value)" id="searchInput">
-    </div>
-  </div>
-</div>
-
 <!-- BENEFITS -->
 <div class="benefits">
   <div class="benefit"><div class="benefit-icon">🌿</div><div class="benefit-text">Barefoot filozofie</div></div>
@@ -605,10 +648,44 @@ body:has(.cart-sidebar.open) #back-to-top {
   <div class="benefit"><div class="benefit-icon">💚</div><div class="benefit-text">Poradíme s výběrem</div></div>
 </div>
 
-<!-- PRODUCTS -->
+<!-- KATALOG (krok 1) - stav filtrů je v adrese stránky (eshop.html?kategorie=...&velikost=...) -->
 <section class="products-section" id="produkty">
-  <div class="products-grid" id="productsGrid">
-    <div class="loading">&#128098; Načítám produkty...</div>
+  <nav class="drobecky" id="drobecky" aria-label="Kde jste" onclick="kliknutiNaDrobek(event)"></nav>
+  <div class="katalog-hlavicka">
+    <h2 class="katalog-nadpis" id="katalogNadpis">Všechny boty</h2>
+    <div class="search-wrap">
+      <span class="search-icon">&#128269;</span>
+      <input type="search" placeholder="Hledat (např. Froddo 25)" oninput="hledatVKatalogu(this.value)" id="searchInput" aria-label="Hledat boty">
+    </div>
+  </div>
+  <div class="katalog-hlaska" id="katalogHlaska"></div>
+  <div class="katalog">
+    <aside class="katalog-filtry" id="katalogFiltry" aria-label="Filtry">
+      <div class="filtry-mobil-hlavicka"><strong>Filtry</strong><button type="button" onclick="zavritFiltry()" aria-label="Zavřít filtry">&#10005;</button></div>
+      <div id="filtrySkupiny" onchange="zmenaFiltru(event)" onclick="kliknutiVeFiltrech(event)"></div>
+      <button type="button" class="filtry-mobil-potvrdit" id="filtryPotvrdit" onclick="zavritFiltry()">Zobrazit produkty</button>
+    </aside>
+    <div class="katalog-obsah">
+      <div class="katalog-lista">
+        <span class="katalog-pocet" id="katalogPocet" aria-live="polite"></span>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button type="button" class="filtry-mobil-btn" id="filtryMobilBtn" onclick="otevritFiltry()">&#9776; Filtry</button>
+          <label class="razeni">Řadit
+            <select id="katalogRazeni" onchange="nastavitStav({ razeni: this.value })">
+              <option value="doporucene">Doporučené</option>
+              <option value="nejnovejsi">Nejnovější</option>
+              <option value="nejlevnejsi">Nejlevnější</option>
+              <option value="nejdrazsi">Nejdražší</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div class="aktivni-filtry" id="aktivniFiltry" onclick="kliknutiVeFiltrech(event)"></div>
+      <div class="products-grid" id="productsGrid">
+        <div class="loading">&#128098; Načítám produkty...</div>
+      </div>
+      <div class="katalog-dalsi" id="katalogDalsi"></div>
+    </div>
   </div>
 </section>
 
@@ -644,6 +721,7 @@ body:has(.cart-sidebar.open) #back-to-top {
 <!-- DETAIL MODAL -->
 <div class="modal-overlay" id="modalDetail">
   <div class="modal">
+    <nav class="drobecky drobecky-detail" id="detailDrobecky" aria-label="Kde jste" onclick="kliknutiNaDrobek(event)"></nav>
     <div class="modal-icon" id="detailIcon"></div>
     <div id="detailThumbs" style="display:none;gap:8px;margin:10px 0;overflow-x:auto;padding-bottom:2px"></div>
     <div class="modal-brand" id="detailBrand"></div>
@@ -853,8 +931,16 @@ body:has(.cart-sidebar.open) #back-to-top {
 <script>
 const API = 'https://detskekrucky1.onrender.com/api';
 let vsechnyProdukty = [];
-let aktualniFiltr = 'vse';
-let aktualniVelikost = '';
+// Stav katalogu (filtry, řazení, otevřená bota) - vždy odpovídá adrese stránky,
+// viz stavZUrl/urlZeStavu. Kolik karet je zobrazeno, v adrese není.
+let katalogStav = null;
+let katalogZobrazeno = 24;
+const KATALOG_STRANKA = 24;
+let nastaveniKatalogu = { vekoveSkupiny: [], pohlavi: false };
+let detailVlozenDoHistorie = false;
+let katalogHlaska = '';
+let produktyNacteny = false;
+const ZAKLADNI_TITULEK = document.title;
 let kosik = JSON.parse(localStorage.getItem('kosik') || '[]');
 let aktivniProdukt = null;
 let vybranaVelikost = null;
@@ -906,12 +992,13 @@ fetch(API + '/poukaz-dlazdice').then(r => r.json()).then(data => {
 }).catch(() => {});
 
 function vykreslitKategorieGrid(seznam) {
+  const aktivni = katalogStav ? katalogStav.kategorie : '';
   const dlazdice = seznam.map(k => `
-    <div class="kategorie-dlazdice" data-slug="${k.slug}" onclick="vybratKategoriiZGridu('${k.slug}')">
+    <div class="kategorie-dlazdice${k.slug === aktivni ? ' active' : ''}" data-slug="${escAttr(k.slug)}" onclick="vybratKategoriiZGridu(this.dataset.slug)">
       ${jeBezpecnaHttpUrl(k.obrazek_url)
         ? `<img class="ikona" src="${escAttr(k.obrazek_url)}" alt="" loading="lazy" decoding="async">`
-        : `<span class="ikona">${k.ikona || '&#128095;'}</span>`}
-      <div class="nazev">${k.nazev}</div>
+        : `<span class="ikona">${k.ikona ? escHtml(k.ikona) : '&#128095;'}</span>`}
+      <div class="nazev">${escHtml(k.nazev)}</div>
     </div>`).join('');
   // Dárkový poukaz není kategorie produktů, jen rychlá zkratka na konci rozcestníku.
   const poukazDlazdice = `
@@ -945,7 +1032,8 @@ async function nacistKategorieFiltru() {
 // Klik na dlaždici kategorie v rozcestníku - stejný filtr jako by šlo o pill
 // tlačítko, jen bez duplicitního seznamu kategorií ve filtrech níž.
 function vybratKategoriiZGridu(slug) {
-  filterBy(slug);
+  // Druhý klik na vybranou kategorii ji zruší (zpět na všechny boty)
+  nastavitStav({ kategorie: katalogStav.kategorie === slug ? '' : slug });
   scrollToProducts();
 }
 
@@ -959,15 +1047,20 @@ async function nacistProdukty() {
     // nijak dotčená - jde čistě o to, jak se data poskládají pro zobrazení.
     const map = {};
     data.forEach(s => {
-      const klic = (s.znacka || '').trim() + '||' + (s.nazev || '').trim();
+      // Od kroku 0 má každá bota model (lib/modely.js) - karta = model, adresa
+      // = jeho slug. Produkt bez modelu (těsně po založení) spadne na značku+název.
+      const klic = s.model_slug ? 'm:' + s.model_slug : (s.znacka || '').trim() + '||' + (s.nazev || '').trim();
       if (!map[klic]) {
         map[klic] = {
-          klic, nazev: (s.nazev || '').trim(), znacka: s.znacka,
+          klic, slug: s.model_slug || '', nazev: (s.nazev || '').trim(), znacka: s.znacka,
           popis: s.popis || '', typ_nohy: s.typ_nohy || '',
+          barefoot: s.barefoot ?? null, sirkaNohy: s.sirka_nohy || [], zapinani: s.zapinani || [], membrana: s.membrana ?? null,
+          maxId: 0, _vyprodane: new Set(),
           kategorieCitac: {}, emoji: '', primaryImageUrl: '', primaryImageAlt: '', images: [], _seenObrazky: new Set(), velikosti: []
         };
       }
       const p = map[klic];
+      p.maxId = Math.max(p.maxId, s.id || 0);
       if (!p.emoji && s.emoji) p.emoji = s.emoji;
       // Model bot má v DB většinou víc produkt_id (jeden na velikost, viz
       // komentář výše) - hlavní fotka nahraná admin.html u KTERÉHOKOLIV z
@@ -983,6 +1076,7 @@ async function nacistProdukty() {
       // "U dodavatele" velikosti se zobrazí i bez fyzické skladové zásoby -
       // pocet_kusu u nich neznamená, kolik je reálně k mání, jen se sledují jinak.
       const jeUDodavatele = s.dostupnost === 'dodavatel';
+      if (s.velikost != null && !(s.pocet_kusu > 0 || jeUDodavatele)) p._vyprodane.add(s.velikost);
       if (s.velikost == null || !(s.pocet_kusu > 0 || jeUDodavatele)) return;
 
       // Občas vznikne omylem duplicitní řádek pro stejnou velikost (dvě různé
@@ -1003,6 +1097,10 @@ async function nacistProdukty() {
       p.kategorie = Object.entries(p.kategorieCitac).sort((a, b) => b[1] - a[1])[0][0];
       delete p.kategorieCitac;
       delete p._seenObrazky;
+      // Vyprodané velikosti se na kartě ukážou šedě (ne jako nabídka)
+      p.vyprodane = [...p._vyprodane].filter(v => !p.velikosti.some(x => x.velikost === v)).sort((a, b) => a - b);
+      delete p._vyprodane;
+      p.velikosti.sort((a, b) => a.velikost - b.velikost);
       // Skutečný znak, ne HTML entita - fallback se escapuje (escHtml),
       // takže '&#128098;' by se na kartě vypsalo doslova jako text.
       p.emoji = p.emoji || '\u{1F462}';
@@ -1016,18 +1114,13 @@ async function nacistProdukty() {
       p.maDodavatele = p.velikosti.some(v => v.dostupnost === 'dodavatel');
       return p;
     });
-    naplnitFiltrVelikosti();
-    zobrazitProdukty(vsechnyProdukty);
+    produktyNacteny = true;
+    vykreslitKatalog();
+    otevritDetailZAdresy();
     aktualizovatKosikPodleSkladu();
   } catch(e) {
     document.getElementById('productsGrid').innerHTML = '<div class="empty">Nepodařilo se načíst produkty. Zkuste to prosím znovu.</div>';
   }
-}
-
-function naplnitFiltrVelikosti() {
-  const velikosti = [...new Set(vsechnyProdukty.flatMap(p => p.velikosti.map(v => v.velikost)))].sort((a, b) => a - b);
-  const sel = document.getElementById('filterVelikost');
-  sel.innerHTML = '<option value="">Velikost nožičky</option>' + velikosti.map(v => `<option value="${v}">${v}</option>`).join('');
 }
 
 // Escapovací helpery pro bezpečné vkládání dat (produktová jména, ALT texty,
@@ -1075,77 +1168,462 @@ function obrazekProduktuHtml(p, vyska) {
   return `<span>${escHtml(p.emoji)}</span>`;
 }
 
-function zobrazitProdukty(produkty) {
-  if (produkty.length === 0) {
-    document.getElementById('productsGrid').innerHTML = '<div class="empty">&#128530; Žádné produkty nenalezeny.</div>';
-    return;
+// ═══ KATALOG (krok 1) ═══
+// Čisté funkce (bez DOM) - stav ⇄ adresa, filtrování, řazení, počty u filtrů.
+// Testují se přímo ze zdroje (test/eshop-katalog.test.js).
+
+const KATALOG_RAZENI = ['doporucene', 'nejnovejsi', 'nejlevnejsi', 'nejdrazsi'];
+const KATALOG_SIRKA = { uzka: 'úzká', normalni: 'normální', siroka: 'široká' };
+const KATALOG_ZAPINANI = { suchy_zip: 'suchý zip', tkanicky: 'tkaničky', nazouvaci: 'nazouvací', zip: 'zip', prezka: 'přezka' };
+
+function prazdnyStavKatalogu() {
+  return { kategorie: '', velikost: null, znacka: [], vek: [], barefoot: false, sirka: [], zapinani: [], membrana: false,
+    skladem: false, cenaOd: null, cenaDo: null, hledat: '', razeni: 'doporucene', produkt: '' };
+}
+
+// Text bez diakritiky a velkých písmen - pro hledání a pro klíč věkové skupiny
+function bezDiakritiky(text) {
+  return String(text == null ? '' : text).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+function slugText(text) {
+  return bezDiakritiky(text).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+function stavZUrl(search) {
+  const q = new URLSearchParams(search || '');
+  const stav = prazdnyStavKatalogu();
+  const text = (k, max) => (q.get(k) || '').trim().slice(0, max);
+  const seznam = k => [...new Set(text(k, 500).split(',').map(x => x.trim()).filter(Boolean))].slice(0, 30);
+  const cislo = (k, min, max) => { const n = Number(q.get(k)); return q.get(k) !== null && q.get(k) !== '' && Number.isInteger(n) && n >= min && n <= max ? n : null; };
+  stav.kategorie = text('kategorie', 80);
+  stav.velikost = cislo('velikost', 1, 60);
+  stav.znacka = seznam('znacka');
+  stav.vek = seznam('vek');
+  stav.barefoot = q.get('barefoot') === 'ano';
+  stav.sirka = seznam('sirka').filter(x => Object.hasOwn(KATALOG_SIRKA, x));
+  stav.zapinani = seznam('zapinani').filter(x => Object.hasOwn(KATALOG_ZAPINANI, x));
+  stav.membrana = q.get('membrana') === 'ano';
+  stav.skladem = q.get('skladem') === 'ano';
+  stav.cenaOd = cislo('cena_od', 0, 1000000);
+  stav.cenaDo = cislo('cena_do', 0, 1000000);
+  stav.hledat = text('hledat', 100);
+  stav.razeni = KATALOG_RAZENI.includes(q.get('razeni')) ? q.get('razeni') : 'doporucene';
+  stav.produkt = text('produkt', 120);
+  return stav;
+}
+
+function urlZeStavu(stav) {
+  const q = new URLSearchParams();
+  if (stav.kategorie) q.set('kategorie', stav.kategorie);
+  if (stav.velikost) q.set('velikost', String(stav.velikost));
+  if (stav.znacka.length) q.set('znacka', stav.znacka.join(','));
+  if (stav.vek.length) q.set('vek', stav.vek.join(','));
+  if (stav.barefoot) q.set('barefoot', 'ano');
+  if (stav.sirka.length) q.set('sirka', stav.sirka.join(','));
+  if (stav.zapinani.length) q.set('zapinani', stav.zapinani.join(','));
+  if (stav.membrana) q.set('membrana', 'ano');
+  if (stav.skladem) q.set('skladem', 'ano');
+  if (stav.cenaOd !== null) q.set('cena_od', String(stav.cenaOd));
+  if (stav.cenaDo !== null) q.set('cena_do', String(stav.cenaDo));
+  if (stav.hledat) q.set('hledat', stav.hledat);
+  if (stav.razeni !== 'doporucene') q.set('razeni', stav.razeni);
+  if (stav.produkt) q.set('produkt', stav.produkt);
+  const s = q.toString();
+  return s ? '?' + s : '';
+}
+
+// "Froddo 25": každé slovo musí sedět - číslo jako velikost skladem, text
+// ve značce, názvu nebo kategorii (bez ohledu na diakritiku)
+function hledaniOdpovida(p, hledat, nazevKategorie) {
+  const slova = bezDiakritiky(hledat).split(/\s+/).filter(Boolean);
+  if (!slova.length) return true;
+  const text = bezDiakritiky(`${p.znacka || ''} ${p.nazev || ''} ${nazevKategorie || ''}`);
+  return slova.every(s => /^\d{1,2}$/.test(s) ? p.velikosti.some(v => v.velikost === Number(s)) || text.includes(s) : text.includes(s));
+}
+
+function jeSkladem(v) { return v.dostupnost !== 'dodavatel'; }
+
+// vynechat = skupina, která se při počítání čísel u filtrů nebere v úvahu
+// (u značky se ukazuje, kolik bot by bylo po jejím přidání)
+function produktOdpovida(p, stav, ctx, vynechat) {
+  const krome = k => vynechat !== k;
+  if (krome('kategorie') && stav.kategorie && p.kategorie !== stav.kategorie) return false;
+  if (krome('velikost') && stav.velikost && !p.velikosti.some(v => v.velikost === stav.velikost && (!stav.skladem || jeSkladem(v)))) return false;
+  if (krome('skladem') && stav.skladem && !p.velikosti.some(jeSkladem)) return false;
+  if (krome('znacka') && stav.znacka.length && !stav.znacka.includes((p.znacka || '').trim())) return false;
+  if (krome('vek') && stav.vek.length) {
+    const skupiny = (ctx.vekoveSkupiny || []).filter(s => stav.vek.includes(slugText(s.nazev)));
+    if (!skupiny.some(s => p.velikosti.some(v => v.velikost >= s.od && v.velikost <= s.do))) return false;
   }
-  document.getElementById('productsGrid').innerHTML = produkty.map(p => {
-    const minVel = Math.min(...p.velikosti.map(v => v.velikost));
-    const maxVel = Math.max(...p.velikosti.map(v => v.velikost));
-    const bg = ziskatPozadiKategorie(p.kategorie);
-    const klicJs = p.klic.replace(/'/g, "\\'");
-    const cenaText = (p.cenaOd ? 'od ' : '') + p.cena + ' Kč';
-    return `<div class="product-card" onclick="openDetail('${klicJs}')">
+  if (krome('barefoot') && stav.barefoot && p.barefoot !== true) return false;
+  if (krome('membrana') && stav.membrana && p.membrana !== true) return false;
+  if (krome('sirka') && stav.sirka.length && !stav.sirka.some(x => (p.sirkaNohy || []).includes(x))) return false;
+  if (krome('zapinani') && stav.zapinani.length && !stav.zapinani.some(x => (p.zapinani || []).includes(x))) return false;
+  if (krome('cena') && stav.cenaOd !== null && p.cena < stav.cenaOd) return false;
+  if (krome('cena') && stav.cenaDo !== null && p.cena > stav.cenaDo) return false;
+  if (krome('hledat') && stav.hledat && !hledaniOdpovida(p, stav.hledat, (ctx.nazvyKategorii || {})[p.kategorie])) return false;
+  return true;
+}
+
+function filtrovatProdukty(produkty, stav, ctx) {
+  return produkty.filter(p => produktOdpovida(p, stav, ctx));
+}
+
+// Doporučené = boty s fotkou napřed, jinak pořadí z e-shopu (abecedně)
+function seraditProdukty(produkty, razeni) {
+  const s = produkty.map((p, i) => ({ p, i }));
+  const maFoto = p => (jeBezpecnaHttpUrl(p.primaryImageUrl) || jeBezpecnaHttpUrl(p.emoji)) ? 0 : 1;
+  const porovnat = {
+    doporucene: (a, b) => maFoto(a.p) - maFoto(b.p) || a.i - b.i,
+    nejnovejsi: (a, b) => b.p.maxId - a.p.maxId || a.i - b.i,
+    nejlevnejsi: (a, b) => a.p.cena - b.p.cena || a.i - b.i,
+    nejdrazsi: (a, b) => b.p.cena - a.p.cena || a.i - b.i
+  }[razeni] || ((a, b) => a.i - b.i);
+  return s.sort(porovnat).map(x => x.p);
+}
+
+// Počty u voleb filtrů (kolik bot by zbylo po zaškrtnutí)
+function spocitatMoznosti(produkty, stav, ctx) {
+  const pocty = { kategorie: {}, velikost: {}, znacka: {}, vek: {}, sirka: {}, zapinani: {}, barefoot: 0, membrana: 0, skladem: 0 };
+  const pridat = (mapa, klic) => { mapa[klic] = (mapa[klic] || 0) + 1; };
+  for (const p of produkty) {
+    if (produktOdpovida(p, stav, ctx, 'kategorie')) pridat(pocty.kategorie, p.kategorie);
+    if (produktOdpovida(p, stav, ctx, 'velikost')) new Set(p.velikosti.filter(v => !stav.skladem || jeSkladem(v)).map(v => v.velikost)).forEach(v => pridat(pocty.velikost, v));
+    if (produktOdpovida(p, stav, ctx, 'znacka')) pridat(pocty.znacka, (p.znacka || '').trim());
+    if (produktOdpovida(p, stav, ctx, 'vek')) {
+      (ctx.vekoveSkupiny || []).forEach(s => { if (p.velikosti.some(v => v.velikost >= s.od && v.velikost <= s.do)) pridat(pocty.vek, slugText(s.nazev)); });
+    }
+    if (produktOdpovida(p, stav, ctx, 'sirka')) (p.sirkaNohy || []).forEach(x => pridat(pocty.sirka, x));
+    if (produktOdpovida(p, stav, ctx, 'zapinani')) (p.zapinani || []).forEach(x => pridat(pocty.zapinani, x));
+    if (p.barefoot === true && produktOdpovida(p, stav, ctx, 'barefoot')) pocty.barefoot++;
+    if (p.membrana === true && produktOdpovida(p, stav, ctx, 'membrana')) pocty.membrana++;
+    if (p.velikosti.some(jeSkladem) && produktOdpovida(p, stav, ctx, 'skladem')) pocty.skladem++;
+  }
+  return pocty;
+}
+
+function pocetProduktuText(n) {
+  if (n === 1) return '1 produkt';
+  if (n >= 2 && n <= 4) return `${n} produkty`;
+  return `${n} produktů`;
+}
+
+// ═══ Vykreslení katalogu (DOM) ═══
+
+function katalogKontext() {
+  const nazvyKategorii = {};
+  vsechnyKategorie.forEach(k => { nazvyKategorii[k.slug] = k.nazev; });
+  return { vekoveSkupiny: nastaveniKatalogu.vekoveSkupiny || [], nazvyKategorii };
+}
+
+function nazevKategorie(slug) {
+  const k = vsechnyKategorie.find(x => x.slug === slug);
+  return k ? k.nazev : slug;
+}
+
+// Změna stavu z ovládání stránky: nový záznam v historii (tlačítko Zpět funguje),
+// psaní do hledání a ceny jen přepisuje aktuální záznam, ať historie nebobtná.
+function nastavitStav(zmena, { nahradit = false } = {}) {
+  katalogStav = { ...katalogStav, ...zmena, produkt: '' };
+  katalogZobrazeno = KATALOG_STRANKA;
+  katalogHlaska = '';
+  const url = location.pathname + urlZeStavu(katalogStav);
+  if (nahradit) history.replaceState(null, '', url); else history.pushState(null, '', url);
+  // Před načtením produktů jen zapamatovat výběr - vykreslí se, až data dorazí
+  // (jinak by místo "Načítám" problikla hláška, že nic nebylo nalezeno)
+  if (produktyNacteny) vykreslitKatalog();
+}
+
+function zrusitFiltry() {
+  nastavitStav({ ...prazdnyStavKatalogu(), kategorie: katalogStav.kategorie, razeni: katalogStav.razeni });
+  document.getElementById('searchInput').value = '';
+}
+
+let hledaniCasovac = null;
+function hledatVKatalogu(text) {
+  clearTimeout(hledaniCasovac);
+  hledaniCasovac = setTimeout(() => nastavitStav({ hledat: text.trim().slice(0, 100) }, { nahradit: true }), 250);
+}
+
+function aktivniFiltryHtml(stav) {
+  const stitky = [];
+  const stitek = (popis, zmena) => stitky.push(`<button type="button" class="filtr-stitek" data-zmena="${escAttr(JSON.stringify(zmena))}" aria-label="Zrušit filtr ${escAttr(popis)}">${escHtml(popis)} &#10005;</button>`);
+  if (stav.velikost) stitek(`Velikost ${stav.velikost}`, { velikost: null });
+  stav.znacka.forEach(z => stitek(z, { znacka: stav.znacka.filter(x => x !== z) }));
+  stav.vek.forEach(v => {
+    const s = (nastaveniKatalogu.vekoveSkupiny || []).find(x => slugText(x.nazev) === v);
+    stitek(s ? s.nazev : v, { vek: stav.vek.filter(x => x !== v) });
+  });
+  if (stav.barefoot) stitek('Barefoot', { barefoot: false });
+  stav.sirka.forEach(x => stitek(`Šířka: ${KATALOG_SIRKA[x]}`, { sirka: stav.sirka.filter(y => y !== x) }));
+  stav.zapinani.forEach(x => stitek(KATALOG_ZAPINANI[x], { zapinani: stav.zapinani.filter(y => y !== x) }));
+  if (stav.membrana) stitek('S membránou', { membrana: false });
+  if (stav.skladem) stitek('Jen skladem', { skladem: false });
+  if (stav.cenaOd !== null || stav.cenaDo !== null) stitek(`Cena ${stav.cenaOd ?? 0}–${stav.cenaDo ?? '∞'} Kč`, { cenaOd: null, cenaDo: null });
+  if (stav.hledat) stitek(`„${stav.hledat}“`, { hledat: '' });
+  if (stitky.length > 1) stitky.push('<button type="button" class="filtr-stitek zrusit" data-zrusit-vse>Zrušit vše</button>');
+  return stitky.join('');
+}
+
+function filtryHtml(stav, pocty) {
+  const skupina = (nadpis, obsah) => `<div class="filtr-skupina"><h4>${nadpis}</h4>${obsah}</div>`;
+  const volba = (typ, pole, hodnota, popis, pocet, zaskrtnuto) => `<label class="filtr-volba${!pocet && !zaskrtnuto ? ' prazdna' : ''}">
+      <input type="${typ}" data-pole="${pole}" value="${escAttr(hodnota)}"${zaskrtnuto ? ' checked' : ''}${!pocet && !zaskrtnuto ? ' disabled' : ''}>
+      <span>${escHtml(popis)}</span><span class="pocet">${pocet || 0}</span></label>`;
+  const casti = [];
+
+  casti.push(skupina('Kategorie',
+    volba('radio', 'kategorie', '', 'Všechny boty', Object.values(pocty.kategorie).reduce((a, b) => a + b, 0), !stav.kategorie) +
+    vsechnyKategorie.filter(k => pocty.kategorie[k.slug] || k.slug === stav.kategorie)
+      .map(k => volba('radio', 'kategorie', k.slug, k.nazev, pocty.kategorie[k.slug], stav.kategorie === k.slug)).join('')));
+
+  const velikosti = [...new Set([...vsechnyProdukty.flatMap(p => p.velikosti.map(v => v.velikost)), ...(stav.velikost ? [stav.velikost] : [])])].sort((a, b) => a - b);
+  if (velikosti.length) {
+    casti.push(skupina('Velikost', `<div class="filtr-velikosti">${velikosti.map(v =>
+      `<button type="button" class="filtr-velikost" data-velikost="${v}" aria-pressed="${stav.velikost === v}"${!pocty.velikost[v] && stav.velikost !== v ? ' disabled' : ''} title="${pocty.velikost[v] || 0} bot">${v}</button>`).join('')}</div>`));
+  }
+
+  const skupiny = nastaveniKatalogu.vekoveSkupiny || [];
+  if (skupiny.length) {
+    casti.push(skupina('Věk', skupiny.map(s => {
+      const k = slugText(s.nazev);
+      return volba('checkbox', 'vek', k, `${s.nazev} (${s.od}–${s.do})`, pocty.vek[k], stav.vek.includes(k));
+    }).join('')));
+  }
+
+  const znacky = [...new Set([...vsechnyProdukty.map(p => (p.znacka || '').trim()).filter(Boolean), ...stav.znacka])].sort((a, b) => a.localeCompare(b, 'cs'));
+  const viditelneZnacky = znacky.filter(z => pocty.znacka[z] || stav.znacka.includes(z));
+  if (viditelneZnacky.length) {
+    casti.push(skupina('Značka', viditelneZnacky.map(z => volba('checkbox', 'znacka', z, z, pocty.znacka[z], stav.znacka.includes(z))).join('')));
+  }
+
+  // Vlastnosti z adminu (Modely bot) - skupina se ukáže, až je u některé boty vyplněná
+  const vlastnosti = [];
+  if (pocty.barefoot || stav.barefoot) vlastnosti.push(volba('checkbox', 'barefoot', 'ano', 'Barefoot', pocty.barefoot, stav.barefoot));
+  if (pocty.membrana || stav.membrana) vlastnosti.push(volba('checkbox', 'membrana', 'ano', 'S membránou', pocty.membrana, stav.membrana));
+  if (vlastnosti.length) casti.push(skupina('Vlastnosti', vlastnosti.join('')));
+  const sirky = Object.keys(KATALOG_SIRKA).filter(k => pocty.sirka[k] || stav.sirka.includes(k));
+  if (sirky.length) casti.push(skupina('Šířka nožičky', sirky.map(k => volba('checkbox', 'sirka', k, KATALOG_SIRKA[k], pocty.sirka[k], stav.sirka.includes(k))).join('')));
+  const zapinani = Object.keys(KATALOG_ZAPINANI).filter(k => pocty.zapinani[k] || stav.zapinani.includes(k));
+  if (zapinani.length) casti.push(skupina('Zapínání', zapinani.map(k => volba('checkbox', 'zapinani', k, KATALOG_ZAPINANI[k], pocty.zapinani[k], stav.zapinani.includes(k))).join('')));
+
+  casti.push(skupina('Cena', `<div class="filtr-cena">
+      <input type="number" inputmode="numeric" min="0" step="50" data-pole="cenaOd" placeholder="od" aria-label="Cena od" value="${stav.cenaOd ?? ''}">
+      <span>–</span>
+      <input type="number" inputmode="numeric" min="0" step="50" data-pole="cenaDo" placeholder="do" aria-label="Cena do" value="${stav.cenaDo ?? ''}">
+      <span>Kč</span></div>`));
+  casti.push(skupina('Dostupnost', volba('checkbox', 'skladem', 'ano', 'Jen skladem (bez čekání na dodavatele)', pocty.skladem, stav.skladem)));
+  return casti.join('');
+}
+
+function kartaProduktuHtml(p, stav) {
+  const bg = ziskatPozadiKategorie(p.kategorie);
+  const cenaText = (p.cenaOd ? 'od ' : '') + p.cena + ' Kč';
+  const velikosti = [
+    ...p.velikosti.map(v => ({ velikost: v.velikost, vyprodano: false })),
+    ...(p.vyprodane || []).map(v => ({ velikost: v, vyprodano: true }))
+  ].sort((a, b) => a.velikost - b.velikost);
+  const MAX = 10;
+  const chipy = velikosti.slice(0, MAX).map(v => {
+    const trida = v.vyprodano ? 'vyprodano' : (stav.velikost === v.velikost ? 'hledana' : '');
+    return `<span${trida ? ` class="${trida}"` : ''} title="${v.vyprodano ? 'Vyprodáno' : 'Skladem'}">${v.velikost}</span>`;
+  }).join('') + (velikosti.length > MAX ? `<span>+${velikosti.length - MAX}</span>` : '');
+  const skladem = p.velikosti.some(jeSkladem);
+  return `<div class="product-card" data-klic="${escAttr(p.klic)}" onclick="openDetail(this.dataset.klic)">
       <div class="product-img ${bg.trida}" style="${bg.styl}">
         ${obrazekProduktuHtml(p, "100%")}
         ${p.cena_puvodni ? '<span class="product-badge sale">SLEVA</span>' : ''}
-        ${p.maDodavatele ? '<span class="product-badge dodavatel">🚚 U dodavatele</span>' : ''}
+        ${p.barefoot === true ? '<span class="product-badge barefoot">Barefoot</span>' : ''}
       </div>
       <div class="product-info">
-        <div class="product-brand">${p.znacka}</div>
-        <div class="product-name">${p.nazev}</div>
-        <div class="product-sizes">Velikosti: ${minVel}&ndash;${maxVel}</div>
+        <div class="product-brand">${escHtml(p.znacka)}</div>
+        <div class="product-name">${escHtml(p.nazev)}</div>
+        <div class="karta-sklad${skladem ? '' : ' dodavatel'}">${skladem ? '&#9679; Skladem' : '&#128666; U dodavatele (7–14 dní)'}</div>
+        <div class="karta-velikosti" aria-label="Velikosti">${chipy}</div>
         <div class="product-footer">
           <div>
             <span class="product-price">${cenaText}</span>
             ${p.cena_puvodni ? `<span class="product-price-old">${p.cena_puvodni} Kč</span>` : ''}
           </div>
-          <button class="add-btn" title="Přidat do košíku" onclick="event.stopPropagation();openDetail('${klicJs}')">+</button>
+          <button class="add-btn" title="Vybrat velikost" aria-label="Vybrat velikost" onclick="event.stopPropagation();openDetail(this.closest('.product-card').dataset.klic)">+</button>
         </div>
       </div>
     </div>`;
+}
+
+function drobeckyHtml(polozky) {
+  return polozky.map((x, i) => {
+    const posledni = i === polozky.length - 1;
+    const obsah = posledni ? `<span aria-current="page">${escHtml(x.text)}</span>`
+      : `<a href="${escAttr(x.href)}"${x.stav ? ` data-stav="${escAttr(JSON.stringify(x.stav))}"` : ''}>${escHtml(x.text)}</a>`;
+    return (i ? '<span class="oddelovac" aria-hidden="true">›</span>' : '') + obsah;
   }).join('');
 }
 
-// Sdílená funkce - kombinuje filtr kategorie + velikosti + hledaný text.
-// Volá se z filterBy/filterByVelikost/searchProducts, ať se logika nekopíruje na třech místech.
-function aplikovatFiltry() {
-  let base = aktualniFiltr === 'vse' ? vsechnyProdukty : vsechnyProdukty.filter(p => p.kategorie === aktualniFiltr);
-  if (aktualniVelikost) {
-    const vel = parseInt(aktualniVelikost);
-    base = base.filter(p => p.velikosti.some(v => v.velikost === vel));
+function drobeckyKatalogu(stav, produkt) {
+  const polozky = [{ text: 'Úvod', href: 'index.html' }, { text: 'E-shop', href: 'eshop.html', stav: { ...prazdnyStavKatalogu() } }];
+  const kategorie = produkt ? produkt.kategorie : stav.kategorie;
+  if (kategorie) polozky.push({ text: nazevKategorie(kategorie), href: 'eshop.html?kategorie=' + encodeURIComponent(kategorie), stav: { ...prazdnyStavKatalogu(), kategorie } });
+  if (produkt) polozky.push({ text: `${produkt.znacka || ''} ${produkt.nazev}`.trim() });
+  return polozky;
+}
+
+function nadpisKatalogu(stav) {
+  let nadpis = stav.kategorie ? nazevKategorie(stav.kategorie) : (stav.barefoot ? 'Barefoot boty' : 'Všechny boty');
+  if (stav.velikost) nadpis += ` ve velikosti ${stav.velikost}`;
+  return nadpis;
+}
+
+function vykreslitKatalog() {
+  if (!katalogStav) katalogStav = stavZUrl(location.search);
+  const stav = katalogStav;
+  const ctx = katalogKontext();
+
+  // Neexistující kategorie z adresy (starý odkaz) - ukázat všechny boty s vysvětlením
+  if (stav.kategorie && vsechnyKategorie.length && !vsechnyKategorie.some(k => k.slug === stav.kategorie)) {
+    katalogStav = { ...stav, kategorie: '' };
+    history.replaceState(null, '', location.pathname + urlZeStavu(katalogStav));
+    katalogHlaska = 'kategorie';
+    return vykreslitKatalog();
   }
-  const hledani = document.getElementById('searchInput').value.toLowerCase();
-  if (hledani) base = base.filter(p => p.nazev.toLowerCase().includes(hledani) || p.znacka.toLowerCase().includes(hledani));
-  zobrazitProdukty(base);
-}
 
-function filterBy(kategorie) {
-  aktualniFiltr = kategorie;
+  const nalezene = seraditProdukty(filtrovatProdukty(vsechnyProdukty, stav, ctx), stav.razeni);
+  const pocty = spocitatMoznosti(vsechnyProdukty, stav, ctx);
 
-  document.querySelectorAll('.kategorie-dlazdice').forEach(d => d.classList.toggle('active', d.dataset.slug === kategorie));
-
-  const chip = document.getElementById('aktivniKategorieChip');
-  if (kategorie === 'vse') {
-    chip.style.display = 'none';
-  } else {
-    const k = vsechnyKategorie.find(k => k.slug === kategorie);
-    document.getElementById('aktivniKategorieNazev').textContent = k ? k.nazev : kategorie;
-    chip.style.display = 'inline-flex';
+  document.getElementById('drobecky').innerHTML = drobeckyHtml(drobeckyKatalogu(stav));
+  document.getElementById('katalogNadpis').textContent = nadpisKatalogu(stav);
+  if (!document.getElementById('modalDetail').classList.contains('open')) {
+    document.title = (stav.kategorie || stav.velikost ? nadpisKatalogu(stav) + ' – ' : '') + ZAKLADNI_TITULEK;
   }
+  const hledani = document.getElementById('searchInput');
+  if (document.activeElement !== hledani) hledani.value = stav.hledat;
+  document.getElementById('katalogRazeni').value = stav.razeni;
+  document.getElementById('katalogPocet').textContent = pocetProduktuText(nalezene.length);
+  document.getElementById('filtrySkupiny').innerHTML = filtryHtml(stav, pocty);
+  document.getElementById('aktivniFiltry').innerHTML = aktivniFiltryHtml(stav);
+  const pocetFiltru = document.querySelectorAll('#aktivniFiltry .filtr-stitek:not(.zrusit)').length;
+  document.getElementById('filtryMobilBtn').innerHTML = '&#9776; Filtry' + (pocetFiltru ? ` (${pocetFiltru})` : '');
+  document.getElementById('filtryPotvrdit').textContent = 'Zobrazit ' + pocetProduktuText(nalezene.length);
+  document.querySelectorAll('.kategorie-dlazdice[data-slug]').forEach(d => d.classList.toggle('active', d.dataset.slug === stav.kategorie));
 
-  aplikovatFiltry();
+  const hlaska = {
+    produkt: '<strong>Jejda, tady botička není &#128099;</strong><span>Tuhle botu jsme nenašli. Možná je už vyprodaná nebo se změnila adresa.</span><button type="button" onclick="zavritHlasku()">Prohlédnout boty</button>',
+    kategorie: '<strong>Tahle kategorie už neexistuje</strong><span>Ukazujeme všechny boty.</span>'
+  }[katalogHlaska] || '';
+  document.getElementById('katalogHlaska').innerHTML = hlaska;
+
+  const grid = document.getElementById('productsGrid');
+  if (!nalezene.length) {
+    grid.innerHTML = vsechnyProdukty.length
+      ? '<div class="empty">Žádné boty neodpovídají vybraným filtrům.<br><br><button type="button" class="filtr-stitek" onclick="zrusitFiltry()">Zrušit filtry</button></div>'
+      : '<div class="empty">&#128530; Žádné produkty nenalezeny.</div>';
+    document.getElementById('katalogDalsi').innerHTML = '';
+    return;
+  }
+  grid.innerHTML = nalezene.slice(0, katalogZobrazeno).map(p => kartaProduktuHtml(p, stav)).join('');
+  const zbyva = nalezene.length - katalogZobrazeno;
+  document.getElementById('katalogDalsi').innerHTML = zbyva > 0
+    ? `<button type="button" onclick="zobrazitDalsi()">Zobrazit další (zbývá ${zbyva})</button>` : '';
 }
 
-function filterByVelikost(vel) {
-  aktualniVelikost = vel;
-  aplikovatFiltry();
+function zobrazitDalsi() {
+  katalogZobrazeno += KATALOG_STRANKA;
+  vykreslitKatalog();
 }
 
-function searchProducts(query) {
-  aplikovatFiltry();
+function zavritHlasku() {
+  katalogHlaska = '';
+  vykreslitKatalog();
+  scrollToProducts();
 }
+
+// Zaškrtávátka, přepínače a cena ve filtrech (delegováno z #filtrySkupiny)
+function zmenaFiltru(e) {
+  const el = e.target;
+  const pole = el.dataset && el.dataset.pole;
+  if (!pole) return;
+  if (pole === 'kategorie') return nastavitStav({ kategorie: el.value });
+  if (pole === 'barefoot' || pole === 'membrana' || pole === 'skladem') return nastavitStav({ [pole]: el.checked });
+  if (pole === 'cenaOd' || pole === 'cenaDo') {
+    const n = el.value === '' ? null : Math.max(0, Math.round(Number(el.value)));
+    return nastavitStav({ [pole]: Number.isFinite(n) ? n : null }, { nahradit: true });
+  }
+  if (['znacka', 'vek', 'sirka', 'zapinani'].includes(pole)) {
+    const seznam = katalogStav[pole].filter(x => x !== el.value);
+    if (el.checked) seznam.push(el.value);
+    return nastavitStav({ [pole]: seznam });
+  }
+}
+
+// Tlačítka velikostí a štítky aktivních filtrů
+function kliknutiVeFiltrech(e) {
+  const vel = e.target.closest('[data-velikost]');
+  if (vel) {
+    const v = Number(vel.dataset.velikost);
+    return nastavitStav({ velikost: katalogStav.velikost === v ? null : v });
+  }
+  if (e.target.closest('[data-zrusit-vse]')) return zrusitFiltry();
+  const stitek = e.target.closest('[data-zmena]');
+  if (stitek) {
+    const zmena = JSON.parse(stitek.dataset.zmena);
+    if ('hledat' in zmena) document.getElementById('searchInput').value = '';
+    return nastavitStav(zmena);
+  }
+}
+
+// Drobečková navigace: odkazy v rámci e-shopu se obslouží bez načtení stránky
+function kliknutiNaDrobek(e) {
+  const a = e.target.closest('a[data-stav]');
+  if (!a || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  e.preventDefault();
+  const novy = JSON.parse(a.dataset.stav);
+  if (document.getElementById('modalDetail').classList.contains('open')) zavritDetailBezHistorie();
+  document.getElementById('searchInput').value = '';
+  nastavitStav(novy);
+  scrollToProducts();
+}
+
+function otevritFiltry() {
+  document.getElementById('katalogFiltry').classList.add('open');
+}
+function zavritFiltry() {
+  document.getElementById('katalogFiltry').classList.remove('open');
+}
+
+// Bota z adresy (?produkt=slug) - po načtení produktů nebo při Zpět/Vpřed
+function otevritDetailZAdresy() {
+  const slug = katalogStav && katalogStav.produkt;
+  const modal = document.getElementById('modalDetail');
+  if (!slug) {
+    if (modal.classList.contains('open')) zavritDetailBezHistorie();
+    return;
+  }
+  const p = vsechnyProdukty.find(x => x.slug === slug);
+  if (!p) {
+    katalogStav = { ...katalogStav, produkt: '' };
+    history.replaceState(null, '', location.pathname + urlZeStavu(katalogStav));
+    katalogHlaska = 'produkt';
+    vykreslitKatalog();
+    scrollToProducts();
+    return;
+  }
+  if (!modal.classList.contains('open') || !aktivniProdukt || aktivniProdukt.slug !== slug) openDetail(p.klic, { zHistorie: true });
+}
+
+window.addEventListener('popstate', () => {
+  const predtim = katalogStav ? urlZeStavu({ ...katalogStav, produkt: '' }) : null;
+  katalogStav = stavZUrl(location.search);
+  detailVlozenDoHistorie = false;
+  if (!produktyNacteny) return;
+  // Změnil se jen otevřený detail (zavření/otevření boty) - seznam se nepřekresluje,
+  // ať zůstanou načtené další stránky a pozice na stránce
+  if (predtim !== urlZeStavu({ ...katalogStav, produkt: '' })) {
+    katalogZobrazeno = KATALOG_STRANKA;
+    katalogHlaska = '';
+    vykreslitKatalog();
+  }
+  otevritDetailZAdresy();
+});
 
 function scrollToProducts() {
   document.getElementById('produkty').scrollIntoView({behavior:'smooth'});
@@ -1218,10 +1696,18 @@ async function odeslatPoradnu() {
   }
 }
 
-function openDetail(klic) {
+function openDetail(klic, { zHistorie = false } = {}) {
   aktivniProdukt = vsechnyProdukty.find(p => p.klic === klic);
   vybranaVelikost = null;
   if (!aktivniProdukt) return;
+  // Bota má vlastní adresu (?produkt=slug) - jde poslat odkazem a Zpět detail zavře
+  if (!zHistorie && aktivniProdukt.slug && katalogStav) {
+    katalogStav = { ...katalogStav, produkt: aktivniProdukt.slug };
+    history.pushState(null, '', location.pathname + urlZeStavu(katalogStav));
+    detailVlozenDoHistorie = true;
+  }
+  document.getElementById('detailDrobecky').innerHTML = katalogStav ? drobeckyHtml(drobeckyKatalogu(katalogStav, aktivniProdukt)) : '';
+  document.title = `${aktivniProdukt.znacka || ''} ${aktivniProdukt.nazev} – ${ZAKLADNI_TITULEK}`.trim();
   detailAktivniObrazekUrl = aktivniProdukt.primaryImageUrl;
   document.getElementById('detailIcon').innerHTML = obrazekProduktuHtml(aktivniProdukt, "var(--detail-foto-vyska)");
   vykreslitDetailThumbs();
@@ -1307,8 +1793,20 @@ function addToCartFromModal() {
 
 function closeModal(id) {
   if (id) { document.getElementById(id).classList.remove('open'); return; }
-  document.getElementById('modalDetail').classList.remove('open');
+  zavritDetailBezHistorie();
+  // Adresa bez ?produkt=: když jsme detail do historie přidali my, vrátit se
+  // o krok zpět (Zpět pak nevede znovu na detail), jinak jen přepsat adresu.
+  if (katalogStav && katalogStav.produkt) {
+    katalogStav = { ...katalogStav, produkt: '' };
+    if (detailVlozenDoHistorie) { detailVlozenDoHistorie = false; history.back(); }
+    else history.replaceState(null, '', location.pathname + urlZeStavu(katalogStav));
+  }
   if (detailZKosiku) { detailZKosiku = false; openCart(); }
+}
+
+function zavritDetailBezHistorie() {
+  document.getElementById('modalDetail').classList.remove('open');
+  if (katalogStav) document.title = (katalogStav.kategorie || katalogStav.velikost ? nadpisKatalogu(katalogStav) + ' – ' : '') + ZAKLADNI_TITULEK;
 }
 
 function addToCart(produkt, velikost) {
@@ -1688,8 +2186,16 @@ function showToast(msg) {
 }
 
 ulozitKosik();
-nacistKategorieFiltru();
+katalogStav = stavZUrl(location.search);
+nacistKategorieFiltru().then(() => { if (produktyNacteny) vykreslitKatalog(); });
 nacistProdukty();
+// Věkové skupiny nastavené v adminu (Modely bot -> Věk a pohlaví)
+fetch(API + '/modely/nastaveni-katalogu').then(r => r.ok ? r.json() : null).then(data => {
+  if (data && Array.isArray(data.vekoveSkupiny)) {
+    nastaveniKatalogu = data;
+    if (produktyNacteny) vykreslitKatalog();
+  }
+}).catch(() => {});
 
 // Odkaz z právních stránek (?vratky=1) rovnou otevře formulář pro vrácení/odstoupení od smlouvy
 if (new URLSearchParams(location.search).get('vratky') === '1') {
