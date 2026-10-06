@@ -128,6 +128,16 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const TELEFON_RE = /^(\+420\s?)?\d{3}\s?\d{3}\s?\d{3}$/;
 const PSC_RE = /^\d{3}\s?\d{2}$/;
 
+// Doprava a platba jen z nabídky e-shopu - dřív se uložil jakýkoli text
+// (do adminu i e-mailu) a neznámá doprava se účtovala jako Zásilkovna
+const POVOLENE_DOPRAVY = Object.keys(DOPRAVA_CENY);
+const POVOLENE_PLATBY = ['dobirka', 'prevod'];
+function validovatDopravuAPlatbu({ doprava, platba }) {
+  if (!POVOLENE_DOPRAVY.includes(doprava)) return 'Vyberte prosím způsob dopravy.';
+  if (!POVOLENE_PLATBY.includes(platba)) return 'Vyberte prosím způsob platby.';
+  return null;
+}
+
 function validovatObjednavku({ jmeno, email, telefon, ulice, mesto, psc }) {
   if (!jmeno || jmeno.trim().split(/\s+/).length < 2) return 'Zadejte prosím jméno a příjmení.';
   if (!email || !EMAIL_RE.test(email.trim())) return 'Zadejte prosím platnou e-mailovou adresu.';
@@ -201,7 +211,7 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ chyba: 'Neplatný počet kusů (musí být celé kladné číslo).' });
     }
   }
-  const chybaValidace = validovatObjednavku({ jmeno, email, telefon, ulice, mesto, psc });
+  const chybaValidace = validovatObjednavku({ jmeno, email, telefon, ulice, mesto, psc }) || validovatDopravuAPlatbu({ doprava, platba });
   if (chybaValidace) {
     return res.status(400).json({ chyba: chybaValidace });
   }
