@@ -227,7 +227,7 @@ test('produkt skrytý v adminu (na_eshopu = false) nejde objednat a sklad zůsta
   assert.equal(stav.sklad.find(r => r.produkt_id === 3).pocet_kusu, 10); // sklad nedotčen
 });
 
-test('krok 4a: doprava a platba jen z nabídky e-shopu - jiná hodnota je odmítnuta a nic se nezapíše', async () => {
+test('krok 4a: doprava a platba jen z nabídky e-shopu (platba jen převodem) - jiná hodnota je odmítnuta a nic se nezapíše', async () => {
   // Každé volání z jiné IP - limiter počtu objednávek z jednoho místa tu nehraje roli
   let ip = 0;
   const zavolat = async (handler, body) => { const res = vytvoritRes(); await handler({ body, ip: '10.40.0.' + (++ip) }, res); return res; };
@@ -235,6 +235,7 @@ test('krok 4a: doprava a platba jen z nabídky e-shopu - jiná hodnota je odmít
     [{ doprava: 'drak' }, /způsob dopravy/],
     [{ doprava: undefined }, /způsob dopravy/],
     [{ platba: 'karta' }, /způsob platby/],
+    [{ platba: 'dobirka' }, /způsob platby/],
     [{ platba: { x: 1 } }, /způsob platby/]
   ]) {
     const stav = zakladniStav();
@@ -245,7 +246,7 @@ test('krok 4a: doprava a platba jen z nabídky e-shopu - jiná hodnota je odmít
     assert.equal(stav.sklad.find(r => r.produkt_id === 1).pocet_kusu, 3);
   }
   for (const doprava of ['zasilkovna', 'ceska_posta', 'osobni_odber']) {
-    for (const platba of ['dobirka', 'prevod']) {
+    for (const platba of ['prevod']) {
       const res = await zavolat(pripravitHandler(zakladniStav()), objednavkovyPozadavek({ doprava, platba }));
       assert.equal(res.statusCode, 200, `${doprava}/${platba}`);
     }
