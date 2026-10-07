@@ -41,10 +41,11 @@ function vykreslit({ modely, filtr = {}, pohlavi = false, kategorie = [{ slug: '
     modelyData: { volby: VOLBY, kategorieBezVlastnosti: ['doplnky'], modely },
     modelyKategorie: kategorie,
     nastaveniKatalogu: { vekoveSkupiny: [], pohlavi },
-    modelyVybrane: new Set(vybrane)
+    modelyVybrane: new Set(vybrane),
+    modelyRozbaleneZnacky: new Set(filtr.rozbalene || [])
   };
   vm.createContext(sandbox);
-  const funkce = ['escH', 'escAttr', 'modelBezVlastnosti', 'vyberAnoNe', 'vyberJedna', 'vyberVice', 'vyberKategorie', 'vykreslitModely'];
+  const funkce = ['normalizovat', 'pocetSlovy', 'escH', 'escAttr', 'modelBezVlastnosti', 'vyberAnoNe', 'vyberJedna', 'vyberVice', 'vyberKategorie', 'vykreslitModely'];
   vm.runInContext(funkce.map(vytahnoutFunkci).join('\n') + '\nvykreslitModely();', sandbox);
   return prvky;
 }
@@ -90,9 +91,9 @@ test('admin: výběr pro hromadnou změnu se drží při překreslení, „vybra
   const jeden = vykreslit({ modely: [MODEL, druhy], vybrane: [2] }).modelyTable.innerHTML;
   assert.match(jeden, /data-vyber value="2" aria-label="Vybrat model" checked/);
   assert.match(jeden, /data-vyber value="1" aria-label="Vybrat model">/);
-  assert.match(jeden, /data-vyber-vse aria-label="Vybrat všechny zobrazené">/);
+  assert.match(jeden, /data-vyber-vse aria-label="Vybrat všechny modely odpovídající filtru">/);
   const vse = vykreslit({ modely: [MODEL, druhy], vybrane: [1, 2] }).modelyTable.innerHTML;
-  assert.match(vse, /data-vyber-vse aria-label="Vybrat všechny zobrazené" checked/);
+  assert.match(vse, /data-vyber-vse aria-label="Vybrat všechny modely odpovídající filtru" checked/);
 });
 
 test('admin: hromadná změna posílá vybraná id a správně převedenou hodnotu', async () => {
@@ -166,4 +167,28 @@ test('admin Texty webu: pruh e-shopu se načte (výchozí text, dokud není ulo�
   assert.match(prvky.textyMsg.innerHTML, /Texty uloženy/);
   assert.equal(prvky.textyUlozitBtn.disabled, false);
   assert.match(ADMIN_HTML, /id="txEshopPruh"[^>]*maxlength="300"/);
+});
+
+test('admin Modely: seskupení podle značky - sbalené skupiny, hledání bez diakritiky rozbalí, výběr celé značky', () => {
+  const modely = [
+    { ...MODEL, id: 1, znacka: 'Froddo', nazev: 'Autumn' },
+    { ...MODEL, id: 2, znacka: 'froddo ', nazev: 'Paix', vyplneno: false },
+    { ...MODEL, id: 3, znacka: 'Beda', nazev: 'Žabka' },
+    { ...MODEL, id: 4, znacka: '', nazev: 'Bez značky model' }
+  ];
+  let h = vykreslit({ modely }).modelyTable.innerHTML;
+  const skupiny = [...h.matchAll(/<tbody class="model-skupina" data-znacka="([^"]*)"/g)].map(m => m[1]);
+  assert.deepEqual(skupiny, ['beda', 'froddo', '~'], 'značky podle abecedy (bez ohledu na velikost písmen a mezery), bez značky na konci');
+  assert.match(h, /<strong>Froddo<\/strong>[\s\S]*?2 modely · <span style="color:var\(--orange\)">1 k vyplnění/);
+  assert.equal((h.match(/<tr data-model-id="\d+" hidden>/g) || []).length, 4, 've výchozím stavu sbalené');
+  assert.match(h, /aria-expanded="false"/);
+  h = vykreslit({ modely, filtr: { rozbalene: ['froddo'] } }).modelyTable.innerHTML;
+  assert.equal((h.match(/<tr data-model-id="\d+" hidden>/g) || []).length, 2, 'rozbalená značka zůstane rozbalená');
+  h = vykreslit({ modely, filtr: { hledat: 'zabka' } }).modelyTable.innerHTML;
+  assert.match(h, /Žabka/, 'hledání bez háčků');
+  assert.doesNotMatch(h, /Autumn/);
+  assert.doesNotMatch(h, / hidden>/, 'při hledání je výsledek rozbalený');
+  h = vykreslit({ modely, vybrane: [1, 2] }).modelyTable.innerHTML;
+  assert.match(h, /data-znacka="froddo">\s*<tr class="skupina-hlavicka">\s*<td><input type="checkbox" data-vyber-znacka[^>]* checked>/, 'značka se všemi vybranými modely je zaškrtnutá');
+  assert.match(vykreslit({ modely: [{ ...MODEL, znacka: '<img src=x>' }] }).modelyTable.innerHTML, /&lt;img src=x&gt;/);
 });

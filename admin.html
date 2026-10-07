@@ -146,6 +146,15 @@ body{background:var(--app-bg)}
 .form-input:focus{border-color:var(--sb-bg)}
 .presun-pozn{background:#fff;border:1px dashed var(--app-line);border-radius:12px;padding:12px 16px;font-size:0.85rem;color:var(--text-light);margin-top:20px}
 
+/* MODELY PODLE ZNAČKY */
+.skupina-hlavicka td{background:var(--app-bg);border-bottom:1px solid var(--app-line)}
+.skupina-prepinac{display:flex;align-items:center;gap:8px;width:100%;min-height:40px;border:0;background:none;padding:4px 0;font-family:'Nunito',sans-serif;font-size:0.95rem;color:var(--text);text-align:left;cursor:pointer}
+.skupina-prepinac:focus-visible{outline:2px solid var(--brown);outline-offset:2px}
+.skupina-sipka{display:inline-block;font-size:1.2rem;color:var(--brown);transition:transform 0.15s}
+.skupina-prepinac[aria-expanded="true"] .skupina-sipka{transform:rotate(90deg)}
+.skupina-info{font-size:0.8rem;color:var(--text-light);font-weight:600}
+#modelyTable tr[hidden]{display:none}
+
 /* OBSAH */
 .main{flex:1;min-width:0;margin-left:var(--sb-sirka);padding:calc(var(--topbar-v) + 24px) 28px 28px;min-height:100vh;transition:margin-left 0.2s}
 .main [id]{scroll-margin-top:calc(var(--topbar-v) + 16px)}
@@ -652,7 +661,12 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         </div>
       </div>
       <div class="table-wrap">
-        <div class="table-header"><h3 id="modelyPocet">Modely</h3></div>
+        <div class="table-header"><h3 id="modelyPocet">Modely</h3>
+          <div class="table-actions">
+            <button type="button" class="btn btn-outline btn-sm" onclick="rozbalitVsechnyZnacky(true)">Rozbalit vše</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="rozbalitVsechnyZnacky(false)">Sbalit vše</button>
+          </div>
+        </div>
         <p style="padding:0 18px 12px;color:var(--text-light);font-size:0.82rem">Jeden řádek = jedna bota se všemi velikostmi. Vlastnosti se použijí pro filtry a parametry na novém e-shopu. Po úpravě řádku klikněte na 💾. Kategorie, značka a název se propíšou do všech velikostí modelu.</p>
         <div id="modelyHromadne" style="display:none;margin:0 18px 12px;padding:10px 14px;background:#fff8e6;border-radius:10px;gap:8px;align-items:center;flex-wrap:wrap;font-size:0.85rem">
           <strong id="modelyVybranoPocet">Vybráno: 0</strong>
@@ -682,6 +696,16 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           <button class="btn btn-primary" onclick="otevritNovyProdukt()">+ Nový produkt</button>
           <button class="btn btn-red no-print" onclick="smazatVybraneProdukty()">🗑️ Smazat vybrané</button>
         </div>
+      </div>
+      <div class="sklad-filtry" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+        <input type="text" class="search-input" id="produktyHledat" placeholder="🔍 Hledat (název, značka, EAN, ID)" aria-label="Hledat v produktech" style="width:280px;max-width:100%" oninput="vykreslitProdukty()">
+        <select id="produktyKategorie" class="search-input" style="width:auto" aria-label="Kategorie" onchange="vykreslitProdukty()"><option value="">Všechny kategorie</option></select>
+        <div class="filter-pills" id="produktyEshopFiltr" style="margin:0">
+          <span class="pill active" data-filtr="vse" onclick="filtrovatProduktyEshop('vse')">Vše</span>
+          <span class="pill" data-filtr="zobrazene" onclick="filtrovatProduktyEshop('zobrazene')">👁️ Na e-shopu</span>
+          <span class="pill" data-filtr="skryte" onclick="filtrovatProduktyEshop('skryte')">🙈 Skryté</span>
+        </div>
+        <span id="produktyPocet" style="font-size:0.85rem;color:var(--text-light)"></span>
       </div>
       <div class="table-wrap">
         <div id="produktyTable"><div class="loading">Načítám...</div></div>
@@ -1887,22 +1911,35 @@ async function checkNoveObjednavky() {
 }
 
 // GLOBÁLNÍ VYHLEDÁVÁNÍ
-async function globalSearch(q) {
+// Hledá v objednávkách podle čísla objednávky, jména, e-mailu a telefonu (bez diakritiky).
+// Načtení počká, až se přestane psát, a starší odpověď nepřepíše novější.
+let globalSearchCasovac = null;
+function globalSearch(q) {
+  clearTimeout(globalSearchCasovac);
+  globalSearchCasovac = setTimeout(() => globalSearchNacist(q), 250);
+}
+async function globalSearchNacist(q) {
   const res = document.getElementById('searchResults');
-  if (!q || q.length < 2) { res.style.display = 'none'; return; }
+  const h = normalizovat(q.trim());
+  if (h.length < 2) { res.style.display = 'none'; return; }
+  const cisla = h.replace(/\s+/g, '');
   try {
     const data = await adminFetch(API+'/objednavky').then(r=>r.json());
+    if (normalizovat(document.getElementById('globalSearchInput').value.trim()) !== h) return;
     const filtered = Array.isArray(data) ? data.filter(o =>
-      (o.jmeno||'').toLowerCase().includes(q.toLowerCase()) ||
-      (o.email||'').toLowerCase().includes(q.toLowerCase()) ||
-      String(o.id).includes(q)
-    ).slice(0,6) : [];
-    if (filtered.length === 0) { res.style.display = 'none'; return; }
-    res.innerHTML = filtered.map(o =>
-      `<div class="search-result-item" onclick="detailObjednavky(${o.id});document.getElementById('searchResults').style.display='none'">
-        📦 #${o.id} — ${escH(o.jmeno)||'—'} <small style="color:var(--text-light)">${o.celkem} Kč ${stavBadge(o.stav)}</small>
-      </div>`
-    ).join('');
+      normalizovat(o.jmeno).includes(h) ||
+      normalizovat(o.email).includes(h) ||
+      String(o.cislo || '').includes(cisla) ||
+      String(o.id) === cisla ||
+      (cisla.length >= 3 && /^\d+$/.test(cisla) && String(o.telefon || '').replace(/\s+/g, '').includes(cisla))
+    ).slice(0, 8) : [];
+    res.innerHTML = filtered.length === 0
+      ? '<div class="search-result-item" style="cursor:default;color:var(--text-light)">Nic nenalezeno</div>'
+      : filtered.map(o =>
+        `<div class="search-result-item" onclick="detailObjednavky(${o.id});document.getElementById('searchResults').style.display='none'">
+          📦 #${escH(o.cislo || o.id)} — ${escH(o.jmeno)||'—'} <small style="color:var(--text-light)">${Number(o.celkem).toLocaleString('cs-CZ')} Kč ${stavBadge(o.stav)}</small>
+        </div>`
+      ).join('');
     res.style.display = 'block';
   } catch(e) {}
 }
@@ -2085,11 +2122,14 @@ async function smazatObjednavku(id) {
 }
 
 function hledatObjednavky(q) {
+  const h = normalizovat(q.trim());
+  const cisla = h.replace(/\s+/g, '');
   renderObjednavky(vsechnyObjednavky.filter(o =>
-    (o.jmeno||'').toLowerCase().includes(q.toLowerCase()) ||
-    (o.email||'').toLowerCase().includes(q.toLowerCase()) ||
-    String(o.id).includes(q) ||
-    (o.cislo||'').includes(q)
+    normalizovat(o.jmeno).includes(h) ||
+    normalizovat(o.email).includes(h) ||
+    String(o.id).includes(cisla) ||
+    String(o.cislo || '').includes(cisla) ||
+    (cisla.length >= 3 && /^\d+$/.test(cisla) && String(o.telefon || '').replace(/\s+/g, '').includes(cisla))
   ));
 }
 
@@ -2479,11 +2519,11 @@ async function smazatZakaznika(id) {
 
 let objednavkyZakazniku = new Map();
 function hledatZakazniky(q) {
-  const h = q.trim().toLowerCase();
+  const h = normalizovat(q.trim());
   const hCisla = h.replace(/\s+/g, '');
   renderZakaznici(vsechnyZakaznici.filter(z =>
-    (z.jmeno||'').toLowerCase().includes(h) ||
-    (z.email||'').toLowerCase().includes(h) ||
+    normalizovat(z.jmeno).includes(h) ||
+    normalizovat(z.email).includes(h) ||
     (hCisla && (z.telefon||'').replace(/\s+/g, '').includes(hCisla))
   ));
 }
@@ -2585,8 +2625,8 @@ function vykreslitSklad() {
   let data = typ==='nizky' ? veskerySklad.filter(s=>s.nizky_stav&&s.pocet_kusu>0)
     : typ==='nula' ? veskerySklad.filter(s=>s.pocet_kusu===0)
     : veskerySklad;
-  const q = (document.getElementById('skladHledat').value || '').trim().toLowerCase();
-  if (q) data = data.filter(s => [s.nazev, s.znacka, s.ean, s.velikost].some(v => String(v ?? '').toLowerCase().includes(q)));
+  const q = normalizovat((document.getElementById('skladHledat').value || '').trim());
+  if (q) data = data.filter(s => [s.nazev, s.znacka, s.ean, s.velikost].some(v => normalizovat(v).includes(q)));
   if (!data.length && veskerySklad.length) { document.getElementById('skladTable').innerHTML = '<div class="empty">Nic neodpovídá filtru</div>'; return; }
   renderSklad(data);
 }
@@ -2736,13 +2776,42 @@ async function loadProdukty() {
     const data = await adminFetch(API+'/sklad/admin').then(r=>r.json());
     const map = {};
     if (Array.isArray(data)) data.forEach(s=>{
-      if(!map[s.id])map[s.id]={...s,celkem:0,velikostiSeznam:[]};
+      if(!map[s.id])map[s.id]={...s,celkem:0,velikostiSeznam:[],eany:[]};
       map[s.id].celkem+=s.pocet_kusu||0;
       if (s.velikost!=null) map[s.id].velikostiSeznam.push(s.velikost);
+      if (s.ean) map[s.id].eany.push(String(s.ean));
     });
     const list = Object.values(map);
     posledniProdukty = list;
-    if (!list.length) { document.getElementById('produktyTable').innerHTML='<div class="empty">Žádné produkty</div>'; return; }
+    // kategorie do filtru (ponechá zvolenou)
+    const sel = document.getElementById('produktyKategorie');
+    const zvolena = sel.value;
+    const kategorie = [...new Set(list.map(p => p.kategorie).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), 'cs'));
+    sel.innerHTML = '<option value="">Všechny kategorie</option>' + kategorie.map(k => `<option value="${escAttr(k)}">${escH(k)}</option>`).join('');
+    sel.value = kategorie.includes(zvolena) ? zvolena : '';
+    vykreslitProdukty();
+  } catch(e) { document.getElementById('produktyTable').innerHTML='<div class="error-msg">Chyba</div>'; }
+}
+
+// Seznam produktů podle hledání a filtrů (data z posledního načtení, bez dalšího dotazu)
+let produktyEshopFiltr = 'vse';
+function filtrovatProduktyEshop(f) {
+  produktyEshopFiltr = f;
+  vykreslitProdukty();
+}
+function vykreslitProdukty() {
+  try {
+    const vse = posledniProdukty || [];
+    const q = normalizovat(document.getElementById('produktyHledat').value.trim());
+    const kat = document.getElementById('produktyKategorie').value;
+    document.querySelectorAll('#produktyEshopFiltr .pill').forEach(p => p.classList.toggle('active', p.dataset.filtr === produktyEshopFiltr));
+    const list = vse.filter(p =>
+      (!q || [p.nazev, p.znacka, String(p.id), ...p.eany].some(v => normalizovat(v).includes(q))) &&
+      (!kat || p.kategorie === kat) &&
+      (produktyEshopFiltr === 'vse' || (produktyEshopFiltr === 'zobrazene' ? p.na_eshopu : !p.na_eshopu)));
+    document.getElementById('produktyPocet').textContent = vse.length ? `Zobrazeno ${list.length} z ${vse.length}` : '';
+    if (!vse.length) { document.getElementById('produktyTable').innerHTML='<div class="empty">Žádné produkty</div>'; return; }
+    if (!list.length) { document.getElementById('produktyTable').innerHTML='<div class="empty">Nic neodpovídá hledání nebo filtru</div>'; return; }
     document.getElementById('produktyTable').innerHTML=`
       <table><thead><tr><th><input type="checkbox" onchange="vybratVseProdukty(this)"></th><th>ID</th><th>Název</th><th>Značka</th><th>Kategorie</th><th>Cena</th><th>Velikosti / ks</th><th>E-shop</th><th>Akce</th></tr></thead>
       <tbody>${list.map(p=>`<tr>
@@ -5688,6 +5757,10 @@ function formatDatum(d) {
   const [y,m,day] = d.split('-');
   return `${day}. ${m}. ${y}`;
 }
+// Hledání: "novakova" najde "Nováková" (bez ohledu na háčky, čárky a velikost písmen)
+function normalizovat(s) {
+  return String(s ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
 function escH(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function escHtml(s) { return escH(s); }
 
@@ -5774,16 +5847,38 @@ function vykreslitModely() {
     `Modely (${vsechny.length}) · vyplněno ${boty.filter(m => m.vyplneno).length} z ${boty.length} bot`;
 
   const list = vsechny.filter(m =>
-    (!hledat || `${m.znacka || ''} ${m.nazev}`.toLowerCase().includes(hledat)) &&
+    (!hledat || normalizovat(`${m.znacka || ''} ${m.nazev}`).includes(normalizovat(hledat))) &&
     (!kategorie || m.kategorie === kategorie) &&
     (!jenNevyplnene || !m.vyplneno || m.kategorie_ke_kontrole));
   if (!list.length) { el.innerHTML = '<div class="empty">Žádné modely neodpovídají filtru</div>'; return; }
 
   const pohlavi = !!nastaveniKatalogu.pohlavi;
   const vseVybrano = list.every(m => modelyVybrane.has(m.id));
+  // Skupiny podle značky (Froddo, Beda...), seřazené podle abecedy; při hledání rozbalené
+  const sloupcu = pohlavi ? 13 : 12;
+  const skupiny = new Map();
+  list.forEach(m => {
+    const klic = normalizovat((m.znacka || '').trim()) || '~';
+    if (!skupiny.has(klic)) skupiny.set(klic, { nazev: (m.znacka || '').trim() || 'Bez značky', modely: [] });
+    skupiny.get(klic).modely.push(m);
+  });
+  const serazene = [...skupiny.entries()].sort((a, b) => a[0] === '~' ? 1 : b[0] === '~' ? -1 : a[1].nazev.localeCompare(b[1].nazev, 'cs'));
+  const rozbalitVse = !!hledat;
   el.innerHTML = `<table onchange="oznacitZmenuModelu(event)"><thead><tr>
-      <th><input type="checkbox" data-vyber-vse aria-label="Vybrat všechny zobrazené"${vseVybrano ? ' checked' : ''}></th><th>Model</th><th>Kategorie</th><th>Barefoot</th><th>Šířka</th><th>Nárt</th><th>Palec</th><th>Zapínání</th><th>Membrána</th><th>Materiál</th>${pohlavi ? '<th>Pro koho</th>' : ''}<th>Stav</th><th></th>
-    </tr></thead><tbody>${list.map(m => {
+      <th><input type="checkbox" data-vyber-vse aria-label="Vybrat všechny modely odpovídající filtru"${vseVybrano ? ' checked' : ''}></th><th>Model</th><th>Kategorie</th><th>Barefoot</th><th>Šířka</th><th>Nárt</th><th>Palec</th><th>Zapínání</th><th>Membrána</th><th>Materiál</th>${pohlavi ? '<th>Pro koho</th>' : ''}<th>Stav</th><th></th>
+    </tr></thead>${serazene.map(([klic, sk]) => {
+      const rozbaleno = rozbalitVse || modelyRozbaleneZnacky.has(klic);
+      const chybi = sk.modely.filter(m => !modelBezVlastnosti(m) && (!m.vyplneno || m.kategorie_ke_kontrole)).length;
+      const vybranoVse = sk.modely.every(m => modelyVybrane.has(m.id));
+      return `<tbody class="model-skupina" data-znacka="${escAttr(klic)}">
+      <tr class="skupina-hlavicka">
+        <td><input type="checkbox" data-vyber-znacka aria-label="Vybrat všechny modely značky ${escAttr(sk.nazev)}"${vybranoVse ? ' checked' : ''}></td>
+        <td colspan="${sloupcu - 1}"><button type="button" class="skupina-prepinac" aria-expanded="${rozbaleno}" onclick="prepnoutZnackuModelu(this)">
+          <span class="skupina-sipka" aria-hidden="true">›</span> <strong>${escH(sk.nazev)}</strong>
+          <span class="skupina-info">${pocetSlovy(sk.modely.length, ['model', 'modely', 'modelů'])}${chybi ? ` · <span style="color:var(--orange)">${chybi} k vyplnění</span>` : ' · vše vyplněno'}</span>
+        </button></td>
+      </tr>
+      ${sk.modely.map(m => {
       const vel = m.velikosti.length ? (m.velikosti.length > 1 ? `${m.velikosti[0]}–${m.velikosti[m.velikosti.length - 1]}` : `${m.velikosti[0]}`) : '—';
       const bez = modelBezVlastnosti(m);
       const vlastnosti = bez
@@ -5791,7 +5886,7 @@ function vykreslitModely() {
         : `<td>${vyberAnoNe('barefoot', m.barefoot)}</td><td>${vyberVice('sirka', m.sirka)}</td><td>${vyberVice('nart', m.nart)}</td>
            <td>${vyberJedna('dominantni_palec', m.dominantni_palec)}</td><td>${vyberVice('zapinani', m.zapinani)}</td>
            <td>${vyberAnoNe('membrana', m.membrana)}</td><td>${vyberJedna('material', m.material)}</td>${pohlavi ? `<td>${vyberJedna('pohlavi', m.pohlavi)}</td>` : ''}`;
-      return `<tr data-model-id="${Number(m.id)}">
+      return `<tr data-model-id="${Number(m.id)}"${rozbaleno ? '' : ' hidden'}>
         <td><input type="checkbox" data-vyber value="${Number(m.id)}" aria-label="Vybrat model"${modelyVybrane.has(m.id) ? ' checked' : ''}></td>
         <td style="min-width:180px"><strong>${escH(m.znacka || '')}</strong> ${escH(m.nazev)}
           <div style="font-size:0.75rem;color:var(--text-light)">vel. ${escH(vel)} · ${Number(m.kusu)} ks · ${m.ma_fotku ? '📷 fotka' : '<span style="color:var(--red)">bez fotky</span>'}${m.na_eshopu ? '' : ' · 🙈 skryto'}</div>
@@ -5805,7 +5900,24 @@ function vykreslitModely() {
           <button class="btn btn-outline btn-sm" onclick="otevritUpravuModelu(${Number(m.id)})" title="Značka, název, proč jsme ji vybrali">✏️</button>
         </td>
       </tr>`;
-    }).join('')}</tbody></table>`;
+    }).join('')}</tbody>`;
+    }).join('')}</table>`;
+}
+
+// Rozbalené značky v Modelech (zůstanou rozbalené i po uložení a obnovení)
+const modelyRozbaleneZnacky = new Set();
+function prepnoutZnackuModelu(btn) {
+  const tbody = btn.closest('tbody');
+  const klic = tbody.dataset.znacka;
+  const rozbalit = btn.getAttribute('aria-expanded') !== 'true';
+  if (rozbalit) modelyRozbaleneZnacky.add(klic); else modelyRozbaleneZnacky.delete(klic);
+  btn.setAttribute('aria-expanded', String(rozbalit));
+  tbody.querySelectorAll('tr[data-model-id]').forEach(tr => { tr.hidden = !rozbalit; });
+}
+function rozbalitVsechnyZnacky(rozbalit) {
+  document.querySelectorAll('#modelyTable .skupina-prepinac').forEach(btn => {
+    if ((btn.getAttribute('aria-expanded') === 'true') !== rozbalit) prepnoutZnackuModelu(btn);
+  });
 }
 
 // Výběr modelů pro hromadnou změnu - drží se i při filtrování a překreslení
@@ -5866,7 +5978,16 @@ async function pouzitHromadnouZmenu() {
 
 function oznacitZmenuModelu(e) {
   if (e.target.matches('[data-vyber-vse]')) {
-    document.querySelectorAll('#modelyTable [data-vyber]').forEach(cb => {
+    document.querySelectorAll('#modelyTable [data-vyber], #modelyTable [data-vyber-znacka]').forEach(cb => {
+      cb.checked = e.target.checked;
+      if (cb.matches('[data-vyber]')) { if (cb.checked) modelyVybrane.add(Number(cb.value)); else modelyVybrane.delete(Number(cb.value)); }
+    });
+    aktualizovatHromadnyPanel();
+    return;
+  }
+  // Zaškrtnutí značky vybere (nebo zruší) všechny její modely, i sbalené
+  if (e.target.matches('[data-vyber-znacka]')) {
+    e.target.closest('tbody').querySelectorAll('[data-vyber]').forEach(cb => {
       cb.checked = e.target.checked;
       if (cb.checked) modelyVybrane.add(Number(cb.value)); else modelyVybrane.delete(Number(cb.value));
     });
@@ -5875,6 +5996,9 @@ function oznacitZmenuModelu(e) {
   }
   if (e.target.matches('[data-vyber]')) {
     if (e.target.checked) modelyVybrane.add(Number(e.target.value)); else modelyVybrane.delete(Number(e.target.value));
+    const tbody = e.target.closest('tbody');
+    const znacka = tbody && tbody.querySelector('[data-vyber-znacka]');
+    if (znacka) znacka.checked = [...tbody.querySelectorAll('[data-vyber]')].every(cb => cb.checked);
     aktualizovatHromadnyPanel();
     return;
   }
