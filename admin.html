@@ -134,6 +134,12 @@ body{background:var(--app-bg)}
 @media(max-width:1199px){.stats-grid.rez-karty{grid-template-columns:repeat(3,minmax(0,1fr))}.rez-mrizka{grid-template-columns:1fr}}
 @media(max-width:768px){.stats-grid.rez-karty{grid-template-columns:repeat(2,minmax(0,1fr))}.stats-grid.rez-karty > :last-child{grid-column:1/-1}.pohledy button{padding:9px 8px}.rez-den{min-height:46px;padding:4px}.rez-den-info{font-size:0.62rem}}
 
+/* WEB A NASTAVENÍ (etapa 4) */
+.page .card{background:#fff;border:1px solid var(--app-line);border-radius:16px;padding:20px}
+.form-input{width:100%;max-width:360px;padding:9px 12px;border:2px solid var(--tan-light);border-radius:10px;font-family:'Nunito',sans-serif;font-size:0.88rem;background:#fff;color:var(--text);outline:none}
+.form-input:focus{border-color:var(--sb-bg)}
+.presun-pozn{background:#fff;border:1px dashed var(--app-line);border-radius:12px;padding:12px 16px;font-size:0.85rem;color:var(--text-light);margin-top:20px}
+
 /* OBSAH */
 .main{flex:1;min-width:0;margin-left:var(--sb-sirka);padding:calc(var(--topbar-v) + 24px) 28px 28px;min-height:100vh;transition:margin-left 0.2s}
 .main [id]{scroll-margin-top:calc(var(--topbar-v) + 16px)}
@@ -406,7 +412,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <button type="button" class="nav-group-btn" onclick="prepnoutSkupinu(this)" aria-expanded="false" title="Web"><span class="icon">🌐</span><span class="nav-text">Web</span><span class="nav-group-dot" aria-hidden="true"></span><span class="nav-sipka" aria-hidden="true">›</span></button>
         <div class="nav-sub">
           <button type="button" class="nav-item" onclick="showPage('texty',this)"><span class="nav-text">Texty webu</span></button>
-          <button type="button" class="nav-item" onclick="showPage('kategorie',this,'webPoukazDlazdice')"><span class="nav-text">Dárkové poukazy</span></button>
+          <button type="button" class="nav-item" onclick="showPage('texty',this,'poukazy')"><span class="nav-text">Dárkové poukazy</span></button>
         </div>
       </div>
 
@@ -415,7 +421,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <div class="nav-sub">
           <button type="button" class="nav-item" onclick="showPage('nastaveni',this)"><span class="nav-text">Otevírací doba</span></button>
           <button type="button" class="nav-item" onclick="showPage('newsletter',this)"><span class="nav-text">Newsletter</span></button>
-          <button type="button" class="nav-item" onclick="showPage('nastaveni',this,'nastaveni-doprava')"><span class="nav-text">Systém</span></button>
+          <button type="button" class="nav-item" onclick="showPage('nastaveni',this,'system')"><span class="nav-text">Systém</span></button>
         </div>
       </div>
     </div>
@@ -712,21 +718,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <div class="table-header"><h3>Seznam kategorií</h3><button class="refresh-btn" onclick="loadKategorie()">↻ Obnovit</button></div>
         <div id="kategorieTable"><div class="loading">Načítám...</div></div>
       </div>
-      <div class="table-wrap" id="webPoukazDlazdice" style="margin-top:20px;padding:20px">
-        <h3 style="margin-bottom:6px">🎁 Dlaždice „Dárkové poukazy“</h3>
-        <p style="color:var(--text-light);font-size:0.85rem;margin-bottom:14px">Poslední dlaždice v e-shopu. Bez nahraného obrázku ukazuje náhled vašeho poukazu – nahráním ho můžeš nahradit vlastním obrázkem.</p>
-        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-          <div style="width:160px;height:70px;border:1px dashed var(--tan-light);border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fff">
-            <img id="poukazDlazdiceNahled" src="poukaz-dlazdice.png" alt="" style="max-width:100%;max-height:100%;object-fit:contain">
-          </div>
-          <div style="display:flex;flex-direction:column;gap:6px">
-            <input type="file" id="poukazDlazdiceSoubor" accept="image/*" style="display:none" onchange="nahratObrazekPoukazDlazdice()">
-            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('poukazDlazdiceSoubor').click()">📷 Nahrát vlastní obrázek</button>
-            <button type="button" class="btn btn-red btn-sm" id="poukazDlazdiceOdebrat" style="display:none" onclick="odebratObrazekPoukazDlazdice()">↩️ Vrátit výchozí náhled poukazu</button>
-          </div>
-        </div>
-        <div id="poukazDlazdiceMsg" style="margin-top:8px"></div>
-      </div>
+      <p class="presun-pozn">🎁 Obrázek dlaždice „Dárkové poukazy“ v e-shopu se nastavuje ve <button type="button" class="odkaz-tlacitko" onclick="showPage('texty',null,'poukazy')">Web → Dárkové poukazy</button>.</p>
     </div>
 
     <!-- REPORTY (etapa 3): Tržby a Poukazy. Prodeje = Prodejna → Uzávěrky a přehledy, Účetnictví = vlastní stránka -->
@@ -828,11 +820,34 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     </div>
 
     <!-- NASTAVENÍ -->
-    <div class="page" id="page-texty">
+    <div class="page" id="page-texty" data-vychozi-pohled="texty">
   <div class="page-header">
-    <div class="page-title">📝 Texty webu</div>
-    <button class="refresh-btn" onclick="loadTexty()">↻ Obnovit</button>
+    <div class="page-title">🌐 Web</div>
+    <button class="refresh-btn" data-pohled="texty" onclick="loadTexty()">↻ Obnovit</button>
   </div>
+  <div class="pohledy" role="tablist" aria-label="Web">
+    <button type="button" role="tab" data-cil="texty" onclick="prepnoutPohled('texty','texty')">Texty webu</button>
+    <button type="button" role="tab" data-cil="poukazy" onclick="prepnoutPohled('texty','poukazy')">Dárkové poukazy</button>
+  </div>
+  <div data-pohled="poukazy">
+      <div class="table-wrap" id="webPoukazDlazdice" style="padding:20px">
+        <h3 style="margin-bottom:6px">🎁 Dlaždice „Dárkové poukazy“</h3>
+        <p style="color:var(--text-light);font-size:0.85rem;margin-bottom:14px">Poslední dlaždice v e-shopu. Bez nahraného obrázku ukazuje náhled vašeho poukazu – nahráním ho můžeš nahradit vlastním obrázkem.</p>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div style="width:160px;height:70px;border:1px dashed var(--tan-light);border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fff">
+            <img id="poukazDlazdiceNahled" src="poukaz-dlazdice.png" alt="" style="max-width:100%;max-height:100%;object-fit:contain">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <input type="file" id="poukazDlazdiceSoubor" accept="image/*" style="display:none" onchange="nahratObrazekPoukazDlazdice()">
+            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('poukazDlazdiceSoubor').click()">📷 Nahrát vlastní obrázek</button>
+            <button type="button" class="btn btn-red btn-sm" id="poukazDlazdiceOdebrat" style="display:none" onclick="odebratObrazekPoukazDlazdice()">↩️ Vrátit výchozí náhled poukazu</button>
+          </div>
+        </div>
+        <div id="poukazDlazdiceMsg" style="margin-top:8px"></div>
+      </div>
+    <p class="presun-pozn">Vydávání a správa poukazů je v E-shop → Dárkové poukazy, přehled čísel v Reporty → Poukazy.</p>
+  </div>
+  <div data-pohled="texty">
   <div id="textyMsg"></div>
 
   <div class="card" style="margin-bottom:20px">
@@ -868,13 +883,19 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
   </div>
 
   <button class="btn btn-primary" onclick="ulozitTexty()">💾 Uložit texty</button>
+  </div>
 </div>
 
-    <div class="page" id="page-nastaveni">
+    <div class="page" id="page-nastaveni" data-vychozi-pohled="oteviraci">
       <div class="page-header">
         <div class="page-title">⚙️ Nastavení</div>
       </div>
-      <div class="table-wrap">
+      <div class="pohledy" role="tablist" aria-label="Nastavení">
+        <button type="button" role="tab" data-cil="oteviraci" onclick="prepnoutPohled('nastaveni','oteviraci')">Otevírací doba</button>
+        <button type="button" role="tab" onclick="showPage('newsletter')">Newsletter</button>
+        <button type="button" role="tab" data-cil="system" onclick="prepnoutPohled('nastaveni','system')">Systém</button>
+      </div>
+      <div class="table-wrap" data-pohled="oteviraci">
         <div class="table-header"><h3>🕐 Otevírací doba</h3></div>
         <div style="padding:20px">
           <table style="width:100%;border-collapse:collapse">
@@ -890,7 +911,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           <div id="nastaveni-msg" style="margin-top:12px;color:green;font-weight:600"></div>
         </div>
       </div>
-      <div class="table-wrap" style="margin-top:16px" id="nastaveni-doprava">
+      <div class="table-wrap" id="nastaveni-doprava" data-pohled="system">
         <div class="table-header"><h3>🚚 Doprava</h3></div>
         <div style="padding:20px">
           <p style="color:var(--text-light);font-size:0.85rem;margin:0 0 12px">Způsob dopravy se zákazníkům v e-shopu ukáže, jen když je zapnutý a má vyplněnou cenu. Cena se k objednávce uloží v okamžiku objednání – pozdější změna starší objednávky neovlivní.</p>
@@ -903,6 +924,19 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           <button class="btn btn-primary" style="margin-top:16px" onclick="ulozitDopravu()">💾 Uložit dopravu</button>
           <div id="doprava-msg" style="margin-top:12px;font-weight:600"></div>
         </div>
+      </div>
+      <div data-pohled="system">
+      <div class="table-wrap" style="margin-top:16px">
+        <div class="table-header"><h3>🧪 Zkušební e-mail (test odesílání ze serveru)</h3></div>
+        <div style="padding:16px">
+          <p style="color:var(--text-light);font-size:0.85rem;margin-bottom:12px">Ověř, jestli server umí odesílat e-maily. Zadej svou adresu a klikni – měl by ti přijít zkušební e-mail z <code>info@detskekrucky.cz</code>.</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <input type="email" id="testEmailInput" placeholder="tvuj@email.cz" style="flex:1;min-width:200px;padding:9px 12px;border:1px solid var(--tan-light);border-radius:8px;font-family:inherit">
+            <button class="btn btn-primary" onclick="poslatZkusebniEmail()">📤 Poslat zkušební e-mail</button>
+          </div>
+          <div id="testEmailMsg" style="margin-top:10px"></div>
+        </div>
+      </div>
       </div>
     </div>
 
@@ -926,18 +960,8 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <div class="table-header"><h3>📋 Seznam přihlášených</h3></div>
         <div id="newsletterTable"><div class="loading">Načítám...</div></div>
       </div>
+      <p class="presun-pozn">🧪 Zkušební e-mail (test odesílání ze serveru) je v <button type="button" class="odkaz-tlacitko" onclick="showPage('nastaveni',null,'system')">Nastavení → Systém</button>.</p>
 
-      <div class="table-wrap" style="margin-top:16px">
-        <div class="table-header"><h3>🧪 Zkušební e-mail (test odesílání ze serveru)</h3></div>
-        <div style="padding:16px">
-          <p style="color:var(--text-light);font-size:0.85rem;margin-bottom:12px">Ověř, jestli server umí odesílat e-maily. Zadej svou adresu a klikni – měl by ti přijít zkušební e-mail z <code>info@detskekrucky.cz</code>.</p>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-            <input type="email" id="testEmailInput" placeholder="tvuj@email.cz" style="flex:1;min-width:200px;padding:9px 12px;border:1px solid var(--tan-light);border-radius:8px;font-family:inherit">
-            <button class="btn btn-primary" onclick="poslatZkusebniEmail()">📤 Poslat zkušební e-mail</button>
-          </div>
-          <div id="testEmailMsg" style="margin-top:10px"></div>
-        </div>
-      </div>
     </div>
 
     <!-- REZERVACE -->
@@ -1791,7 +1815,7 @@ function showPage(name, el, kotva) {
   if (name==='kategorie') loadKategorie();
   if (name==='prodejna') { loadProdejna(); nacistSkladProProdejna(); }
   if (name==='nastaveni') loadNastaveni();
-  if (name==='texty') loadTexty();
+  if (name==='texty') { loadTexty(); nacistPoukazDlazdici(); }
   if (name==='rezervace') loadRezervace();
   if (name==='newsletter') loadNewsletter();
   if (name==='vratkyzadosti') loadVratkyZadosti();
