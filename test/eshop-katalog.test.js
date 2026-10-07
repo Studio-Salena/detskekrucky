@@ -31,7 +31,7 @@ vm.runInContext([
   ...['KATALOG_RAZENI', 'KATALOG_SIRKA', 'KATALOG_ZAPINANI'].map(vytahnoutKonstantu),
   ...['escHtml', 'escAttr', 'jeBezpecnaHttpUrl', 'obrazekProduktuHtml', 'prazdnyStavKatalogu', 'bezDiakritiky', 'slugText',
     'stavZUrl', 'urlZeStavu', 'hledaniOdpovida', 'jeSkladem', 'produktOdpovida', 'filtrovatProdukty', 'seraditProdukty',
-    'spocitatMoznosti', 'pocetProduktuText', 'kartaProduktuHtml', 'drobeckyHtml'].map(vytahnout),
+    'spocitatMoznosti', 'pocetProduktuText', 'stitkyKartyHtml', 'kartaProduktuHtml', 'drobeckyHtml'].map(vytahnout),
   // ziskatPozadiKategorie potřebuje globální kategorie - v testu stačí neutrální pozadí
   'function ziskatPozadiKategorie() { return { trida: "product-img-default", styl: "" }; }'
 ].join('\n'), sandbox);
@@ -134,7 +134,7 @@ test('karta: velikosti skladem, vyprodané šedě, hledaná zvýrazněná, stav 
   const h = run(`kartaProduktuHtml(${JSON.stringify(PRODUKTY[0])}, ${JSON.stringify(stav({ velikost: 24 }))})`);
   assert.match(h, /<span title="Skladem">22<\/span><span class="vyprodano" title="Není skladem">23<\/span><span class="hledana" title="Skladem">24<\/span>/);
   assert.match(h, /Skladem/);
-  assert.match(h, /product-badge barefoot/);
+  assert.match(h, /<div class="karta-stitky"><span class="stitek stitek-barefoot">Barefoot<\/span><\/div>/, 'štítek pod fotkou');
   assert.match(h, /data-klic="m:a"/);
   const dodavatel = run(`kartaProduktuHtml(${JSON.stringify({ ...PRODUKTY[1], velikosti: [vel(21, 'dodavatel')] })}, ${JSON.stringify(stav())})`);
   assert.match(dodavatel, /U dodavatele/);
@@ -337,4 +337,24 @@ test('dívky / chlapci: filtr v adresě, bota pro všechny patří do obou, nepl
   assert.deepEqual(pocty.pro, { divky: 2, chlapci: 1 });
   const bez = run(`spocitatMoznosti(${JSON.stringify(PRODUKTY)}, ${JSON.stringify(stav())}, ${JSON.stringify(CTX)})`);
   assert.deepEqual(bez.pro, {}, 'nevyplněné pohlaví nikam nepatří');
+});
+
+test('facelift: štítky pod fotkou, jednotný vzhled, nejvýš dva; fotka bez barevného pozadí kategorie', () => {
+  const oba = run(`kartaProduktuHtml(${JSON.stringify({ ...PRODUKTY[0], cena_puvodni: 1990 })}, ${JSON.stringify(stav())})`);
+  const foto = oba.slice(oba.indexOf('<div class="product-img"'), oba.indexOf('karta-stitky'));
+  assert.doesNotMatch(foto, /stitek|product-badge/, 'přes fotku žádný štítek');
+  assert.match(oba, /<div class="karta-stitky"><span class="stitek stitek-sleva">Sleva<\/span><span class="stitek stitek-barefoot">Barefoot<\/span><\/div>/);
+  assert.match(oba, /<div class="product-img">/, 'bez tříd a stylu barevného pozadí kategorie');
+  const zadny = run(`kartaProduktuHtml(${JSON.stringify(PRODUKTY[2])}, ${JSON.stringify(stav())})`);
+  assert.doesNotMatch(zadny, /karta-stitky/);
+});
+
+test('facelift: Cormorant se nepoužívá, nadpis katalogu Nunito a podnadpis Dancing Script, řádek důvěry nad tlačítkem objednávky', () => {
+  // Cormorant se zatím načítá (majitelka ho nechce mazat), ale nikde se nepoužívá
+  assert.doesNotMatch(ESHOP_HTML, /font-family:\s*'Cormorant'/);
+  // Hlavní nadpis katalogu čitelným písmem, „Nejčastěji vybíráte“ jako akcent v písmu značky
+  assert.match(ESHOP_HTML, /\.katalog-nadpis\{font-family:var\(--font-text\)/);
+  assert.match(ESHOP_HTML, /\.katalog-uvod h3\{font-family:var\(--font-brand\)/);
+  const duvera = ESHOP_HTML.indexOf('<p class="duvera">Platba převodem nebo na prodejně · Vrácení do 14 dnů · Poradíme na 773 517 733</p>');
+  assert.ok(duvera > 0 && duvera < ESHOP_HTML.indexOf('id="submitBtn"') && duvera > ESHOP_HTML.indexOf('id="chSouhlas"'));
 });
