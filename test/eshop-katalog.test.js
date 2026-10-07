@@ -132,7 +132,7 @@ test('počet produktů česky', () => {
 
 test('karta: velikosti skladem, vyprodané šedě, hledaná zvýrazněná, stav skladu, barefoot', () => {
   const h = run(`kartaProduktuHtml(${JSON.stringify(PRODUKTY[0])}, ${JSON.stringify(stav({ velikost: 24 }))})`);
-  assert.match(h, /<span title="Skladem">22<\/span><span class="vyprodano" title="Vyprodáno">23<\/span><span class="hledana" title="Skladem">24<\/span>/);
+  assert.match(h, /<span title="Skladem">22<\/span><span class="vyprodano" title="Není skladem">23<\/span><span class="hledana" title="Skladem">24<\/span>/);
   assert.match(h, /Skladem/);
   assert.match(h, /product-badge barefoot/);
   assert.match(h, /data-klic="m:a"/);
@@ -181,7 +181,7 @@ test('detail: tabulka velikostí s vyprodanou (nejde vybrat), u dodavatele a vni
   const radky = h.split('</button>').filter(x => x.trim());
   assert.equal(radky.length, 3);
   assert.match(radky[0], /data-velikost="23" disabled/);
-  assert.match(radky[0], /Vyprodáno/);
+  assert.match(radky[0], /Není skladem/);
   assert.doesNotMatch(radky[0], /onclick/);
   assert.match(radky[1], /onclick="vybrVelikost\(24,this\)" aria-pressed="false"/);
   assert.match(radky[1], /Skladem<\/span><span class="mm">vnitřní 16,5 × 6,5 cm/);

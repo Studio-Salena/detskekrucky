@@ -1882,7 +1882,7 @@ function kartaProduktuHtml(p, stav) {
   const MAX = 10;
   const chipy = velikosti.slice(0, MAX).map(v => {
     const trida = v.vyprodano ? 'vyprodano' : (stav.velikost === v.velikost ? 'hledana' : '');
-    return `<span${trida ? ` class="${trida}"` : ''} title="${v.vyprodano ? 'Vyprodáno' : 'Skladem'}">${v.velikost}</span>`;
+    return `<span${trida ? ` class="${trida}"` : ''} title="${v.vyprodano ? 'Není skladem' : 'Skladem'}">${v.velikost}</span>`;
   }).join('') + (velikosti.length > MAX ? `<span>+${velikosti.length - MAX}</span>` : '');
   const skladem = p.velikosti.some(jeSkladem);
   return `<div class="product-card" data-klic="${escAttr(p.klic)}" onclick="openDetail(this.dataset.klic)">
@@ -2217,7 +2217,7 @@ function velikostiDetailuHtml(p) {
     ...(p.vyprodane || []).map(v => ({ velikost: v, vyprodano: true }))
   ].sort((a, b) => a.velikost - b.velikost);
   return radky.map(v => {
-    const stav = v.vyprodano ? ['vyprodano', 'Vyprodáno'] : v.dostupnost === 'dodavatel' ? ['dodavatel', 'U dodavatele (7–14 dní)'] : ['', 'Skladem'];
+    const stav = v.vyprodano ? ['vyprodano', 'Není skladem'] : v.dostupnost === 'dodavatel' ? ['dodavatel', 'U dodavatele (7–14 dní)'] : ['', 'Skladem'];
     const mm = v.delka_mm && v.sirka_mm ? `vnitřní ${cm(v.delka_mm)} × ${cm(v.sirka_mm)} cm`
       : v.delka_mm ? `vnitřní délka ${cm(v.delka_mm)} cm` : '';
     const vel = Number(v.velikost);
