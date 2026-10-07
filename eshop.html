@@ -113,17 +113,19 @@ nav{display:flex;align-items:center;gap:8px}
 .products-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px;max-width:1400px;margin:0 auto}
 @media(max-width:1100px){.products-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 
-/* NAVIGACE (krok 3): horní lišta, hlavička s hledáním, mega-menu, mobilní menu, patička */
+/* NAVIGACE (krok 3): horní lišta, hlavička s hledáním, mobilní menu, patička */
 .horni-lista{background:var(--brown-dark);color:#fff;display:flex;justify-content:center;flex-wrap:wrap;gap:4px 22px;padding:7px 16px;font-size:0.8rem;font-weight:700}
 .horni-lista a,.horni-lista button{color:#fff;text-decoration:none;background:none;border:none;font:inherit;cursor:pointer;padding:0}
 .horni-lista a:hover,.horni-lista button:hover{text-decoration:underline}
 body > header{height:auto;min-height:75px;gap:16px}
 .menu-btn{display:none;background:none;border:none;font-size:1.5rem;cursor:pointer;padding:6px 8px;color:var(--brown)}
-.hledani-hlavicka{position:relative;flex:1;max-width:520px}
-.hledani-hlavicka input{width:100%;padding:11px 16px 11px 40px;border:2px solid var(--tan-light);border-radius:24px;font-family:'Nunito',sans-serif;font-size:16px;outline:none;background:#fff}
+/* Hledání vpravo vedle účtu a košíku; na mobilu jen lupa, pole se rozbalí pod hlavičkou */
+.hledani-hlavicka{position:relative;flex:0 1 240px;margin-left:auto}
+.hledani-btn{display:none}
+.hledani-hlavicka input{width:100%;padding:8px 14px 8px 36px;border:2px solid var(--tan-light);border-radius:24px;font-family:'Nunito',sans-serif;font-size:16px;outline:none;background:#fff}
 .hledani-hlavicka input:focus{border-color:var(--brown)}
-.hledani-hlavicka .search-icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text-light);pointer-events:none}
-.hledani-navrhy{position:absolute;top:calc(100% + 6px);left:0;right:0;background:#fff;border:2px solid var(--tan-light);border-radius:16px;box-shadow:0 16px 40px rgba(61,43,31,0.18);padding:8px;z-index:150;max-height:70vh;overflow:auto}
+.hledani-hlavicka .search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-light);pointer-events:none}
+.hledani-navrhy{position:absolute;top:calc(100% + 6px);right:0;width:min(420px,calc(100vw - 32px));background:#fff;border:2px solid var(--tan-light);border-radius:16px;box-shadow:0 16px 40px rgba(61,43,31,0.18);padding:8px;z-index:150;max-height:70vh;overflow:auto}
 .hledani-navrhy[hidden]{display:none}
 .navrhy-nadpis{font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-light);padding:8px 8px 4px;font-weight:700}
 .navrh{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:10px;text-decoration:none;color:var(--text);font-size:0.9rem}
@@ -135,19 +137,11 @@ body > header{height:auto;min-height:75px;gap:16px}
 .navrh-vse{display:block;width:100%;margin-top:6px;padding:10px;border:none;border-radius:10px;background:var(--brown);color:#fff;font-weight:700;font-family:'Nunito',sans-serif;cursor:pointer}
 .navrhy-prazdne{padding:12px 8px;color:var(--text-light);font-size:0.9rem}
 .hlavicka-akce{display:flex;align-items:center;gap:4px}
-.hlavni-menu{background:#fff;border-bottom:1px solid var(--tan-light);display:flex;justify-content:center;flex-wrap:wrap;gap:4px;padding:0 16px;position:relative;z-index:90}
-.hlavni-menu > a,.hlavni-menu > .menu-polozka > button,.hlavni-menu > button{display:inline-flex;align-items:center;gap:6px;padding:12px 14px;font-weight:700;font-size:0.86rem;letter-spacing:0.04em;text-transform:uppercase;color:var(--text);text-decoration:none;background:none;border:none;font-family:'Nunito',sans-serif;cursor:pointer;border-bottom:3px solid transparent}
-.hlavni-menu > a:hover,.hlavni-menu > .menu-polozka > button:hover,.hlavni-menu > button:hover,.hlavni-menu .aktivni{color:var(--brown);border-bottom-color:var(--brown)}
-.menu-polozka{position:static}
-.mega{display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border-bottom:2px solid var(--tan-light);box-shadow:0 18px 36px rgba(61,43,31,0.14);padding:22px max(24px,calc((100% - 1100px)/2));grid-template-columns:repeat(4,minmax(0,1fr));gap:24px}
-.menu-polozka.otevreno .mega{display:grid}
-@media (hover:hover){.menu-polozka:hover .mega{display:grid}}
-.mega h4,.mobil-menu summary{font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-light);margin:0 0 8px}
-.mega ul,.mobil-menu ul{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:2px}
-.mega a,.mobil-menu li a{display:flex;justify-content:space-between;gap:8px;padding:5px 0;color:var(--text);text-decoration:none;font-size:0.92rem}
-.mega a:hover,.mobil-menu li a:hover{color:var(--brown)}
-.mega a .pocet,.mobil-menu a .pocet{color:var(--text-light);font-size:0.78rem;font-variant-numeric:tabular-nums}
-.mega .znacky-sloupec ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:16px}
+.mobil-menu summary{font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-light);margin:0 0 8px}
+.mobil-menu ul{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:2px}
+.mobil-menu li a{display:flex;justify-content:space-between;gap:8px;padding:5px 0;color:var(--text);text-decoration:none;font-size:0.92rem}
+.mobil-menu li a:hover{color:var(--brown)}
+.mobil-menu a .pocet{color:var(--text-light);font-size:0.78rem;font-variant-numeric:tabular-nums}
 .mobil-menu{position:fixed;inset:0;z-index:1600;display:flex}
 .mobil-menu[hidden]{display:none}
 .mobil-menu-zavoj{position:absolute;inset:0;background:rgba(0,0,0,0.4)}
@@ -167,10 +161,14 @@ footer.paticka{text-align:left;padding:40px max(24px,calc((100% - 1100px)/2)) 24
 .paticka-sloupce a:hover,.paticka-sloupce button:hover{color:#fff;text-decoration:underline}
 .paticka-sloupce address{font-style:normal;color:var(--tan-light);font-size:0.88rem;line-height:1.7}
 footer.paticka .footer-copy{text-align:center;border-top:1px solid rgba(255,255,255,0.15);padding-top:16px}
-@media(max-width:900px){.paticka-sloupce{grid-template-columns:repeat(2,minmax(0,1fr))}.hlavni-menu{display:none}.menu-btn{display:block}}
+@media(max-width:900px){.paticka-sloupce{grid-template-columns:repeat(2,minmax(0,1fr))}.menu-btn{display:block}}
 @media(max-width:768px){
   body > header{height:auto;flex-wrap:wrap;padding-top:6px;padding-bottom:8px;gap:6px 8px}
-  .hledani-hlavicka{order:3;flex-basis:100%;max-width:none}
+  .hledani-hlavicka{display:none;order:3;flex-basis:100%;margin-left:0}
+  body > header.hledani-otevrene .hledani-hlavicka{display:block}
+  .hledani-navrhy{left:0;width:auto}
+  .hledani-btn{display:block}
+  .hlavicka-akce{margin-left:auto}
   .horni-lista{font-size:0.72rem;gap:2px 14px}
 }
 @media(max-width:480px){.paticka-sloupce{grid-template-columns:1fr}}
@@ -217,9 +215,12 @@ footer.paticka .footer-copy{text-align:center;border-top:1px solid rgba(255,255,
 .katalog-uvod{max-width:1400px;margin:0 auto 28px;display:flex;flex-direction:column;gap:24px}
 .katalog-uvod[hidden]{display:none}
 .katalog-uvod h3{font-family:'Cormorant',serif;font-size:1.5rem;font-weight:600;color:var(--text);margin:0 0 12px}
-.velikosti-rychle{display:flex;flex-wrap:wrap;gap:8px}
-.velikosti-rychle a{min-width:48px;text-align:center;padding:10px 8px;border:2px solid var(--tan-light);border-radius:12px;background:#fff;color:var(--text);font-weight:700;text-decoration:none;font-variant-numeric:tabular-nums}
-.velikosti-rychle a:hover,.velikosti-rychle a:focus-visible{border-color:var(--brown);color:var(--brown)}
+.pro-koho{display:grid;grid-template-columns:repeat(2,minmax(0,220px));gap:12px}
+.pro-koho a{display:flex;flex-direction:column;align-items:center;gap:4px;padding:18px 12px;border:2px solid var(--tan-light);border-radius:18px;background:#fff;color:var(--text);font-weight:700;font-size:1.05rem;text-decoration:none}
+.pro-koho a span{font-size:2rem}
+.pro-koho a small{font-weight:400;color:var(--text-light);font-size:0.78rem}
+.pro-koho a:hover,.pro-koho a:focus-visible{border-color:var(--brown);color:var(--brown)}
+#proKohoBlok[hidden],#oblibeneBlok[hidden]{display:none}
 @media(max-width:768px){#oblibene{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:12px;padding-bottom:6px}#oblibene .product-card{flex:0 0 62%;scroll-snap-align:start}}
 
 /* KATALOG (krok 1): filtry vlevo, produkty vpravo; na mobilu filtry v panelu přes obrazovku */
@@ -731,7 +732,6 @@ body:has(.cart-sidebar.open) #back-to-top {
 
 <!-- HORNÍ LIŠTA (krok 3) -->
 <div class="horni-lista">
-  <button type="button" onclick="otevritPoradnu()">&#128099; Poradíme s výběrem velikosti</button>
   <span>&#128666; Doprava zdarma od 2 000 Kč</span>
   <a href="index.html#kontakt">&#127978; Prodejna Hulín</a>
   <a href="odstoupeni-od-smlouvy.html">&#8617;&#65039; Vrácení do 14 dnů</a>
@@ -752,12 +752,13 @@ body:has(.cart-sidebar.open) #back-to-top {
   </a>
   <div class="hledani-hlavicka" role="search">
     <span class="search-icon" aria-hidden="true">&#128269;</span>
-    <input type="search" id="searchInput" placeholder="Co hledáte? (např. Froddo 25)" autocomplete="off" aria-label="Hledat v e-shopu"
+    <input type="search" id="searchInput" placeholder="Hledat..." autocomplete="off" aria-label="Hledat v e-shopu"
       role="combobox" aria-autocomplete="list" aria-controls="hledaniNavrhy" aria-expanded="false"
       oninput="zobrazitNavrhy(this.value)" onfocus="zobrazitNavrhy(this.value)" onkeydown="klavesyHledani(event)">
     <div class="hledani-navrhy" id="hledaniNavrhy" hidden onclick="kliknutiVNavrzich(event)" onkeydown="klavesyNavrhu(event)"></div>
   </div>
   <div class="hlavicka-akce">
+    <button type="button" class="cart-btn hledani-btn" id="hledaniBtn" onclick="prepnoutHledani()" aria-label="Hledat" aria-expanded="false" aria-controls="searchInput">&#128269;</button>
     <button class="cart-btn" onclick="openUcet()" id="navUcet" title="Můj účet" aria-label="Můj účet">&#128100;</button>
     <button class="cart-btn" onclick="openCart()" aria-label="Košík">
       &#128722;
@@ -765,7 +766,6 @@ body:has(.cart-sidebar.open) #back-to-top {
     </button>
   </div>
 </header>
-<nav class="hlavni-menu" id="hlavniMenu" aria-label="Hlavní menu" onclick="kliknutiNaDrobek(event)"></nav>
 
 <!-- MOBILNÍ MENU -->
 <div class="mobil-menu" id="mobilMenu" hidden>
@@ -829,13 +829,6 @@ body:has(.cart-sidebar.open) #back-to-top {
   </div>
 </div>
 
-<!-- BENEFITS -->
-<div class="benefits">
-  <div class="benefit"><div class="benefit-icon">🌿</div><div class="benefit-text">Barefoot filozofie</div></div>
-
-  <div class="benefit"><div class="benefit-icon">🔄</div><div class="benefit-text">Vrácení do 14 dnů</div></div>
-  <div class="benefit"><div class="benefit-icon">💚</div><div class="benefit-text">Poradíme s výběrem</div></div>
-</div>
 
 <!-- KATALOG (krok 1) - stav filtrů je v adrese stránky (eshop.html?kategorie=...&velikost=...) -->
 <section class="products-section" id="produkty">
@@ -846,9 +839,9 @@ body:has(.cart-sidebar.open) #back-to-top {
   <div class="katalog-hlaska" id="katalogHlaska"></div>
   <!-- Rychlý výběr nad katalogem - jen bez filtrů (krok 6) -->
   <div class="katalog-uvod" id="katalogUvod" hidden onclick="kliknutiNaDrobek(event)">
-    <div>
-      <h3>Jakou velikost hledáte?</h3>
-      <div class="velikosti-rychle" id="rychleVelikosti"></div>
+    <div id="proKohoBlok" hidden>
+      <h3>Pro koho vybíráte?</h3>
+      <div class="pro-koho" id="proKoho"></div>
     </div>
     <div id="oblibeneBlok" hidden>
       <h3>Nejčastěji vybíráte</h3>
@@ -1006,10 +999,9 @@ body:has(.cart-sidebar.open) #back-to-top {
       </div>
       <div class="section-divider">Jak chcete zaplatit?</div>
       <div class="volby" id="chPlatba" role="radiogroup" aria-label="Způsob platby" onchange="aktualizovatPlatbuInfo()">
-        <label class="volba"><input type="radio" name="chPlatba" value="dobirka" checked><span class="volba-nazev">Dobírka</span></label>
-        <label class="volba"><input type="radio" name="chPlatba" value="prevod"><span class="volba-nazev">Bankovní převod</span></label>
+        <label class="volba"><input type="radio" name="chPlatba" value="prevod" checked><span class="volba-nazev">Bankovní převod (QR kód)</span></label>
       </div>
-      <p class="volba-pozn" id="chPrevodInfo" hidden>Číslo účtu, variabilní symbol a QR kód pro platbu uvidíte hned po odeslání objednávky a pošleme je i e-mailem.</p>
+      <p class="volba-pozn" id="chPrevodInfo">Číslo účtu, variabilní symbol a QR kód pro platbu uvidíte hned po odeslání objednávky a pošleme je i e-mailem.</p>
       <div class="kroky-tlacitka">
         <button type="button" class="cancel-btn" onclick="closeCheckout()">Zpět do košíku</button>
         <button type="button" class="submit-btn" onclick="prejitNaKrok(2)">Pokračovat</button>
@@ -1330,7 +1322,7 @@ async function nacistProdukty() {
           klic, slug: s.model_slug || '', nazev: (s.nazev || '').trim(), znacka: s.znacka,
           popis: s.popis || '', typ_nohy: s.typ_nohy || '',
           barefoot: s.barefoot ?? null, sirkaNohy: s.sirka_nohy || [], zapinani: s.zapinani || [], membrana: s.membrana ?? null,
-          nart: s.nart || [], dominantniPalec: s.dominantni_palec || null, material: s.material || null, procJsmeVybrali: s.proc_jsme_vybrali || [],
+          pohlavi: s.pohlavi || null, nart: s.nart || [], dominantniPalec: s.dominantni_palec || null, material: s.material || null, procJsmeVybrali: s.proc_jsme_vybrali || [],
           maxId: 0, _vyprodane: new Set(),
           kategorieCitac: {}, emoji: '', primaryImageUrl: '', primaryImageAlt: '', images: [], _seenObrazky: new Set(), velikosti: []
         };
@@ -1450,11 +1442,13 @@ function obrazekProduktuHtml(p, vyska) {
 
 const KATALOG_RAZENI = ['doporucene', 'nejnovejsi', 'nejlevnejsi', 'nejdrazsi'];
 const KATALOG_SIRKA = { uzka: 'úzká', normalni: 'normální', siroka: 'široká' };
+// Dívky / chlapci - bota pro všechny (pohlavi 'vse') patří do obou
+const KATALOG_PRO = { divky: { nazev: 'Dívky', pohlavi: ['holcicka', 'vse'] }, chlapci: { nazev: 'Chlapci', pohlavi: ['chlapecek', 'vse'] } };
 const KATALOG_ZAPINANI = { suchy_zip: 'suchý zip', tkanicky: 'tkaničky', nazouvaci: 'nazouvací', zip: 'zip', prezka: 'přezka' };
 
 function prazdnyStavKatalogu() {
   return { kategorie: '', velikost: null, znacka: [], vek: [], barefoot: false, sirka: [], zapinani: [], membrana: false,
-    skladem: false, sleva: false, cenaOd: null, cenaDo: null, hledat: '', razeni: 'doporucene', produkt: '' };
+    skladem: false, sleva: false, pro: '', cenaOd: null, cenaDo: null, hledat: '', razeni: 'doporucene', produkt: '' };
 }
 
 // Text bez diakritiky a velkých písmen - pro hledání a pro klíč věkové skupiny
@@ -1481,6 +1475,7 @@ function stavZUrl(search) {
   stav.membrana = q.get('membrana') === 'ano';
   stav.skladem = q.get('skladem') === 'ano';
   stav.sleva = q.get('sleva') === 'ano';
+  stav.pro = Object.hasOwn(KATALOG_PRO, q.get('pro') || '') ? q.get('pro') : '';
   stav.cenaOd = cislo('cena_od', 0, 1000000);
   stav.cenaDo = cislo('cena_do', 0, 1000000);
   stav.hledat = text('hledat', 100);
@@ -1501,6 +1496,7 @@ function urlZeStavu(stav) {
   if (stav.membrana) q.set('membrana', 'ano');
   if (stav.skladem) q.set('skladem', 'ano');
   if (stav.sleva) q.set('sleva', 'ano');
+  if (stav.pro) q.set('pro', stav.pro);
   if (stav.cenaOd !== null) q.set('cena_od', String(stav.cenaOd));
   if (stav.cenaDo !== null) q.set('cena_do', String(stav.cenaDo));
   if (stav.hledat) q.set('hledat', stav.hledat);
@@ -1529,6 +1525,7 @@ function produktOdpovida(p, stav, ctx, vynechat) {
   if (krome('velikost') && stav.velikost && !p.velikosti.some(v => v.velikost === stav.velikost && (!stav.skladem || jeSkladem(v)))) return false;
   if (krome('skladem') && stav.skladem && !p.velikosti.some(jeSkladem)) return false;
   if (krome('sleva') && stav.sleva && !p.cena_puvodni) return false;
+  if (krome('pro') && stav.pro && !KATALOG_PRO[stav.pro].pohlavi.includes(p.pohlavi)) return false;
   if (krome('znacka') && stav.znacka.length && !stav.znacka.includes((p.znacka || '').trim())) return false;
   if (krome('vek') && stav.vek.length) {
     const skupiny = (ctx.vekoveSkupiny || []).filter(s => stav.vek.includes(slugText(s.nazev)));
@@ -1563,7 +1560,7 @@ function seraditProdukty(produkty, razeni) {
 
 // Počty u voleb filtrů (kolik bot by zbylo po zaškrtnutí)
 function spocitatMoznosti(produkty, stav, ctx) {
-  const pocty = { kategorie: {}, velikost: {}, znacka: {}, vek: {}, sirka: {}, zapinani: {}, barefoot: 0, membrana: 0, skladem: 0, sleva: 0 };
+  const pocty = { kategorie: {}, velikost: {}, znacka: {}, vek: {}, sirka: {}, zapinani: {}, barefoot: 0, membrana: 0, skladem: 0, sleva: 0, pro: {} };
   const pridat = (mapa, klic) => { mapa[klic] = (mapa[klic] || 0) + 1; };
   for (const p of produkty) {
     if (produktOdpovida(p, stav, ctx, 'kategorie')) pridat(pocty.kategorie, p.kategorie);
@@ -1578,6 +1575,7 @@ function spocitatMoznosti(produkty, stav, ctx) {
     if (p.membrana === true && produktOdpovida(p, stav, ctx, 'membrana')) pocty.membrana++;
     if (p.velikosti.some(jeSkladem) && produktOdpovida(p, stav, ctx, 'skladem')) pocty.skladem++;
     if (p.cena_puvodni && produktOdpovida(p, stav, ctx, 'sleva')) pocty.sleva++;
+    if (produktOdpovida(p, stav, ctx, 'pro')) Object.keys(KATALOG_PRO).forEach(k => { if (KATALOG_PRO[k].pohlavi.includes(p.pohlavi)) pridat(pocty.pro, k); });
   }
   return pocty;
 }
@@ -1634,6 +1632,7 @@ function sekceMenu(produkty, kategorie, ctx) {
       odkaz('Barefoot', { barefoot: true }), odkaz('Na širokou nožičku', { sirka: ['siroka'] }),
       odkaz('Na úzkou nožičku', { sirka: ['uzka'] }), odkaz('S membránou', { membrana: true }), odkaz('Ve slevě', { sleva: true })
     ]) },
+    { nadpis: 'Pro koho', odkazy: sNecim(Object.keys(KATALOG_PRO).map(k => odkaz(KATALOG_PRO[k].nazev, { pro: k }))) },
     { nadpis: 'Podle věku', odkazy: sNecim((ctx.vekoveSkupiny || []).map(s => odkaz(`${s.nazev} (${s.od}–${s.do})`, { vek: [slugText(s.nazev)] }))) },
     { nadpis: 'Značky', odkazy: sNecim(znacky.map(z => odkaz(z, { znacka: [z] }))), znacky: true }
   ].filter(s => s.odkazy.length);
@@ -1643,46 +1642,30 @@ function odkazKataloguHtml(o, sPoctem = true) {
   return `<a href="eshop.html${escAttr(urlZeStavu(o.stav))}" data-stav="${escAttr(JSON.stringify(o.stav))}">${escHtml(o.text)}${sPoctem ? `<span class="pocet">${o.pocet}</span>` : ''}</a>`;
 }
 
+// Lišta menu na počítači byla na přání majitelky odstraněna - menu zůstává
+// v mobilním panelu ☰ a v patičce
 function vykreslitMenu() {
   const ctx = katalogKontext();
   const sekce = sekceMenu(vsechnyProdukty, vsechnyKategorie, ctx);
   const najit = nadpis => (sekce.find(s => s.nadpis === nadpis) || { odkazy: [] }).odkazy;
   const barefoot = najit('Podle vlastností').find(o => o.stav.barefoot);
   const sleva = najit('Podle vlastností').find(o => o.stav.sleva);
-  const otevreno = document.querySelector('#hlavniMenu .menu-polozka.otevreno') ? ' otevreno' : '';
   const rychle = [
-    barefoot ? `<a href="eshop.html${escAttr(urlZeStavu(barefoot.stav))}" data-stav="${escAttr(JSON.stringify(barefoot.stav))}"${katalogStav && katalogStav.barefoot && !katalogStav.kategorie ? ' class="aktivni"' : ''}>Barefoot</a>` : '',
-    sleva ? `<a href="eshop.html${escAttr(urlZeStavu(sleva.stav))}" data-stav="${escAttr(JSON.stringify(sleva.stav))}"${katalogStav && katalogStav.sleva ? ' class="aktivni"' : ''}>Výprodej</a>` : '',
+    barefoot ? `<a href="eshop.html${escAttr(urlZeStavu(barefoot.stav))}" data-stav="${escAttr(JSON.stringify(barefoot.stav))}">Barefoot</a>` : '',
+    sleva ? `<a href="eshop.html${escAttr(urlZeStavu(sleva.stav))}" data-stav="${escAttr(JSON.stringify(sleva.stav))}">Výprodej</a>` : '',
     '<button type="button" onclick="otevritPoradnu()">Poradna</button>',
     `<button type="button" onclick="openModal('modalPoukazy')">Dárkové poukazy</button>`
   ].join('');
-  document.getElementById('hlavniMenu').innerHTML = `
-    <div class="menu-polozka${otevreno}">
-      <button type="button" aria-expanded="${otevreno ? 'true' : 'false'}" aria-controls="megaMenu" onclick="prepnoutMegaMenu(event)">Dětské boty &#9662;</button>
-      <div class="mega" id="megaMenu">${sekce.map(s => `<div${s.znacky ? ' class="znacky-sloupec"' : ''}><h4>${escHtml(s.nadpis)}</h4><ul>${s.odkazy.map(o => `<li>${odkazKataloguHtml(o)}</li>`).join('')}</ul></div>`).join('')}</div>
-    </div>${rychle}`;
   document.getElementById('mobilMenuObsah').innerHTML =
     `<div class="rychle"><a href="eshop.html" data-stav="${escAttr(JSON.stringify(prazdnyStavKatalogu()))}">Všechny boty</a>${rychle}</div>`
     + sekce.map(s => `<details><summary>${escHtml(s.nadpis)}</summary><ul>${s.odkazy.map(o => `<li>${odkazKataloguHtml(o)}</li>`).join('')}</ul></details>`).join('');
   document.getElementById('patickaKategorie').innerHTML = `<li><a href="eshop.html" data-stav="${escAttr(JSON.stringify(prazdnyStavKatalogu()))}">Všechny boty</a></li>`
     + najit('Podle typu').map(o => `<li>${odkazKataloguHtml(o, false)}</li>`).join('')
+    + najit('Pro koho').map(o => `<li>${odkazKataloguHtml(o, false)}</li>`).join('')
     + (barefoot ? `<li>${odkazKataloguHtml(barefoot, false)}</li>` : '')
     + (sleva ? `<li>${odkazKataloguHtml({ ...sleva, text: 'Výprodej' }, false)}</li>` : '');
 }
 
-function prepnoutMegaMenu(e) {
-  e.stopPropagation();
-  const polozka = e.currentTarget.closest('.menu-polozka');
-  const otevrit = !polozka.classList.contains('otevreno');
-  polozka.classList.toggle('otevreno', otevrit);
-  e.currentTarget.setAttribute('aria-expanded', String(otevrit));
-}
-function zavritMegaMenu() {
-  document.querySelectorAll('#hlavniMenu .menu-polozka.otevreno').forEach(p => {
-    p.classList.remove('otevreno');
-    p.querySelector('button').setAttribute('aria-expanded', 'false');
-  });
-}
 
 function otevritMobilMenu() {
   document.getElementById('mobilMenu').hidden = false;
@@ -1748,6 +1731,15 @@ function navrhyHtml(navrhy, text) {
   return casti.join('');
 }
 
+// Mobil: lupa v hlavičce rozbalí pole hledání pod hlavičkou
+function prepnoutHledani() {
+  const hlavicka = document.querySelector('body > header');
+  const otevrit = !hlavicka.classList.contains('hledani-otevrene');
+  hlavicka.classList.toggle('hledani-otevrene', otevrit);
+  document.getElementById('hledaniBtn').setAttribute('aria-expanded', String(otevrit));
+  if (otevrit) document.getElementById('searchInput').focus(); else zavritNavrhy();
+}
+
 function zobrazitNavrhy(text) {
   const el = document.getElementById('hledaniNavrhy');
   const input = document.getElementById('searchInput');
@@ -1794,10 +1786,9 @@ function kliknutiVNavrzich(e) {
   if (e.target.closest('a[data-stav]')) kliknutiNaDrobek(e);
 }
 
-// Klik mimo našeptávač nebo mega-menu je zavře
+// Klik mimo našeptávač ho zavře
 document.addEventListener('click', e => {
   if (!e.target.closest('.hledani-hlavicka')) zavritNavrhy();
-  if (!e.target.closest('#hlavniMenu .menu-polozka')) zavritMegaMenu();
 });
 
 
@@ -1816,6 +1807,7 @@ function aktivniFiltryHtml(stav) {
   if (stav.membrana) stitek('S membránou', { membrana: false });
   if (stav.skladem) stitek('Jen skladem', { skladem: false });
   if (stav.sleva) stitek('Ve slevě', { sleva: false });
+  if (stav.pro) stitek(KATALOG_PRO[stav.pro].nazev, { pro: '' });
   if (stav.cenaOd !== null || stav.cenaDo !== null) stitek(`Cena ${stav.cenaOd ?? 0}–${stav.cenaDo ?? '∞'} Kč`, { cenaOd: null, cenaDo: null });
   if (stav.hledat) stitek(`„${stav.hledat}“`, { hledat: '' });
   if (stitky.length > 1) stitky.push('<button type="button" class="filtr-stitek zrusit" data-zrusit-vse>Zrušit vše</button>');
@@ -1833,6 +1825,12 @@ function filtryHtml(stav, pocty) {
     volba('radio', 'kategorie', '', 'Všechny boty', Object.values(pocty.kategorie).reduce((a, b) => a + b, 0), !stav.kategorie) +
     vsechnyKategorie.filter(k => pocty.kategorie[k.slug] || k.slug === stav.kategorie)
       .map(k => volba('radio', 'kategorie', k.slug, k.nazev, pocty.kategorie[k.slug], stav.kategorie === k.slug)).join('')));
+
+  const proKoho = Object.keys(KATALOG_PRO).filter(k => pocty.pro[k] || stav.pro === k);
+  if (proKoho.length) {
+    casti.push(skupina('Pro koho', volba('radio', 'pro', '', 'Všichni', Object.values(pocty.kategorie).reduce((a, b) => a + b, 0), !stav.pro)
+      + proKoho.map(k => volba('radio', 'pro', k, KATALOG_PRO[k].nazev, pocty.pro[k], stav.pro === k)).join('')));
+  }
 
   const velikosti = [...new Set([...vsechnyProdukty.flatMap(p => p.velikosti.map(v => v.velikost)), ...(stav.velikost ? [stav.velikost] : [])])].sort((a, b) => a - b);
   if (velikosti.length) {
@@ -1927,7 +1925,8 @@ function drobeckyKatalogu(stav, produkt) {
 }
 
 function nadpisKatalogu(stav) {
-  let nadpis = stav.kategorie ? nazevKategorie(stav.kategorie) : stav.sleva ? 'Výprodej' : (stav.barefoot ? 'Barefoot boty' : 'Všechny boty');
+  let nadpis = stav.kategorie ? nazevKategorie(stav.kategorie) : stav.sleva ? 'Výprodej' : (stav.barefoot ? 'Barefoot boty' : stav.pro ? 'Boty' : 'Všechny boty');
+  if (stav.pro) nadpis += stav.pro === 'divky' ? ' pro dívky' : ' pro chlapce';
   if (stav.velikost) nadpis += ` ve velikosti ${stav.velikost}`;
   return nadpis;
 }
@@ -1994,10 +1993,8 @@ function jeVychoziStav(stav) {
   return urlZeStavu({ ...stav, razeni: 'doporucene', produkt: '' }) === '';
 }
 
-// Kategorie, které nejsou boty (stejný seznam jako KATEGORIE_BEZ_VLASTNOSTI v lib/modely.js),
-// a nejmenší velikost bot - menší čísla jsou ponožky nebo měsíce u capáčků
+// Kategorie, které nejsou boty (stejný seznam jako KATEGORIE_BEZ_VLASTNOSTI v lib/modely.js)
 const KATALOG_BEZ_BOT = ['doplnky', 'pece-o-obuv'];
-const MIN_VELIKOST_BOT = 16;
 function jeBota(p) { return !KATALOG_BEZ_BOT.includes(p.kategorie); }
 
 // Nejprodávanější boty, které jsou právě v nabídce (skladem nebo u dodavatele)
@@ -2006,23 +2003,18 @@ function oblibeneProdukty(slugy, produkty, pocet = 4) {
   return (slugy || []).map(s => podleSlugu.get(s)).filter(Boolean).slice(0, pocet);
 }
 
-// Velikosti bot pro rychlý výběr: { velikost: počet bot }
-function velikostiBot(produkty) {
-  const pocty = {};
-  produkty.filter(jeBota).forEach(p => new Set(p.velikosti.map(v => v.velikost)).forEach(v => {
-    if (v >= MIN_VELIKOST_BOT) pocty[v] = (pocty[v] || 0) + 1;
-  }));
-  return pocty;
-}
 
 function vykreslitUvodKatalogu(stav) {
   const uvod = document.getElementById('katalogUvod');
   uvod.hidden = !jeVychoziStav(stav) || !vsechnyProdukty.length;
   if (uvod.hidden) return;
-  const velikosti = velikostiBot(vsechnyProdukty);
-  document.getElementById('rychleVelikosti').innerHTML = Object.keys(velikosti).map(Number).sort((a, b) => a - b).map(v => {
-    const s = { ...prazdnyStavKatalogu(), velikost: v };
-    return `<a href="eshop.html${escAttr(urlZeStavu(s))}" data-stav="${escAttr(JSON.stringify(s))}" aria-label="Velikost ${v}: ${pocetProduktuText(velikosti[v])}" title="${pocetProduktuText(velikosti[v])}">${v}</a>`;
+  // Dívky / chlapci - dlaždice jen když je aspoň jedna bota označená (Modely bot -> Pro koho)
+  const pocty = {};
+  vsechnyProdukty.filter(jeBota).forEach(p => Object.keys(KATALOG_PRO).forEach(k => { if (KATALOG_PRO[k].pohlavi.includes(p.pohlavi)) pocty[k] = (pocty[k] || 0) + 1; }));
+  document.getElementById('proKohoBlok').hidden = !Object.keys(pocty).length;
+  document.getElementById('proKoho').innerHTML = Object.keys(KATALOG_PRO).filter(k => pocty[k]).map(k => {
+    const s = { ...prazdnyStavKatalogu(), pro: k };
+    return `<a href="eshop.html${escAttr(urlZeStavu(s))}" data-stav="${escAttr(JSON.stringify(s))}"><span aria-hidden="true">${k === 'divky' ? '&#128103;' : '&#128102;'}</span>${KATALOG_PRO[k].nazev}<small>${pocetProduktuText(pocty[k])}</small></a>`;
   }).join('');
   const oblibene = oblibeneProdukty(oblibeneSlugy, vsechnyProdukty);
   // Méně než 3 boty nemá smysl ukazovat jako "nejčastěji vybírané"
@@ -2047,6 +2039,7 @@ function zmenaFiltru(e) {
   const pole = el.dataset && el.dataset.pole;
   if (!pole) return;
   if (pole === 'kategorie') return nastavitStav({ kategorie: el.value });
+  if (pole === 'pro') return nastavitStav({ pro: el.value });
   if (pole === 'barefoot' || pole === 'membrana' || pole === 'skladem' || pole === 'sleva') return nastavitStav({ [pole]: el.checked });
   if (pole === 'cenaOd' || pole === 'cenaDo') {
     const n = el.value === '' ? null : Math.max(0, Math.round(Number(el.value)));
@@ -2082,7 +2075,6 @@ function kliknutiNaDrobek(e) {
   e.preventDefault();
   // Stejné odkazy jsou v menu, mobilním menu, našeptávači i patičce
   zavritMobilMenu();
-  zavritMegaMenu();
   zavritNavrhy();
   const novy = JSON.parse(a.dataset.stav);
   if (document.getElementById('modalDetail').classList.contains('open')) zavritDetailBezHistorie();
@@ -2483,7 +2475,6 @@ function pohybZoomGalerie(e, vynutit) {
     if (document.getElementById('modalPridano').classList.contains('open')) { closeModal('modalPridano'); return; }
     const menu = document.getElementById('mobilMenu');
     if (!menu.hidden) { zavritMobilMenu(); document.getElementById('menuBtn').focus(); return; }
-    if (document.querySelector('#hlavniMenu .menu-polozka.otevreno')) { zavritMegaMenu(); return; }
     if (!document.getElementById('hledaniNavrhy').hidden) { zavritNavrhy(); return; }
     if (document.getElementById('modalDetail').classList.contains('open')) closeModal();
   });
@@ -2797,7 +2788,7 @@ function zvolenaDoprava() {
 }
 function zvolenaPlatba() {
   const el = document.querySelector('#chPlatba input:checked');
-  return el ? el.value : 'dobirka';
+  return el ? el.value : 'prevod';
 }
 
 // Součty objednávky - stejné pravidlo jako server (doprava zdarma od 2 000 Kč po slevě)
