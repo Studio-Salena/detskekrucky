@@ -291,6 +291,30 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
 }
 .modal-overlay .modal{max-height:95vh}
 
+/* OKNA (etapa 5): ✕ vpravo nahoře, zápatí s tlačítky přilepené dole (u dlouhých
+   formulářů je "Uložit" pořád vidět), větší pole pro dotyk; na mobilu zespodu */
+.modal-overlay{background:rgba(20,40,43,0.55)}
+.modal-overlay .modal{position:relative;box-shadow:0 20px 60px rgba(15,35,38,0.25)}
+.modal-overlay .modal > h3:first-of-type{padding-right:48px;font-family:'Nunito',sans-serif;font-weight:800;font-size:1.15rem;color:var(--sb-bg)}
+.modal-zavrit{position:absolute;top:14px;right:14px;width:40px;height:40px;border:0;border-radius:50%;background:var(--app-bg);color:var(--text);font-size:1.05rem;line-height:1;cursor:pointer;z-index:3}
+.modal-zavrit:hover{background:#e9e3d6}
+.modal-zavrit:focus-visible{outline:2px solid var(--sb-bg);outline-offset:2px}
+.modal-overlay .modal .modal-footer{position:sticky;bottom:-28px;margin:18px -28px -28px;padding:14px 28px 18px;background:#fff;z-index:2;border-radius:0 0 20px 20px;flex-wrap:wrap}
+.modal-overlay .modal .modal-footer .btn{min-height:42px}
+.modal-overlay .modal .form-group input:not([type=checkbox]):not([type=radio]):not([type=file]),.modal-overlay .modal .form-group select{min-height:42px}
+#modalProdejnaProdat .form-group input:not([type=checkbox]),#modalProdejnaProdat .form-group select{min-height:46px;font-size:1rem}
+#modalProdejnaProdat .modal-footer .btn-primary{font-size:1rem;padding:12px 22px}
+@media(max-width:768px){
+  .modal-overlay{padding:0;align-items:flex-end}
+  .modal-overlay .modal{max-width:none!important;width:100%!important;max-height:94vh!important;border-radius:20px 20px 0 0;padding:22px 16px}
+  .modal-overlay .modal .modal-footer{bottom:-22px;margin:18px -16px -22px;padding:12px 16px calc(14px + env(safe-area-inset-bottom,0px));border-radius:0}
+  .modal-overlay .modal .modal-footer .btn{flex:1;justify-content:center;min-height:46px}
+}
+@media(prefers-reduced-motion:no-preference){
+  .modal-overlay.open .modal{animation:okno-in 0.16s ease-out}
+  @keyframes okno-in{from{transform:translateY(12px);opacity:0.6}to{transform:none;opacity:1}}
+}
+
 /* PRINT */
 @media print{
   .sidebar,.topbar,.sidebar-zaves,.no-print{display:none!important}
@@ -5980,8 +6004,66 @@ async function ulozitNastaveniKatalogu() {
   }
 }
 
-function openModal(id) { document.getElementById(id).classList.add('open'); }
-function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+// OKNA (etapa 5). openModal/closeModal mají stejné rozhraní jako dřív; navíc:
+// ✕ a Esc zavírají stejně jako tlačítko Zrušit/Zavřít daného okna (vypne kameru,
+// mobilní sken...), Esc se u rozpracovaného formuláře zeptá, fokus jde do okna a zpět.
+var otevrenaOkna = []; // var: openModal může být zavolána dřív, než skript dojde sem
+var DOTYK = window.matchMedia('(pointer:coarse)');
+function openModal(id) {
+  const ov = document.getElementById(id);
+  if (!ov.classList.contains('open')) { ov._fokusPred = document.activeElement; ov._zmeneno = false; }
+  ov.classList.add('open');
+  const i = otevrenaOkna.indexOf(id);
+  if (i >= 0) otevrenaOkna.splice(i, 1);
+  otevrenaOkna.push(id);
+  const okno = ov.querySelector('.modal');
+  if (okno) okno.scrollTop = 0;
+  setTimeout(() => {
+    if (!ov.classList.contains('open') || ov.contains(document.activeElement)) return;
+    // na dotykovém zařízení bez vyskočení klávesnice - fokus na ✕
+    const cil = DOTYK.matches ? ov.querySelector('.modal-zavrit')
+      : (ov.querySelector('.modal input:not([type=hidden]):not([type=file]):not([disabled]), .modal select:not([disabled]), .modal textarea') || ov.querySelector('.modal-zavrit'));
+    if (cil) cil.focus({ preventScroll: true });
+  }, 60);
+}
+function closeModal(id) {
+  const ov = document.getElementById(id);
+  const bylo = ov.classList.contains('open');
+  ov.classList.remove('open');
+  const i = otevrenaOkna.indexOf(id);
+  if (i >= 0) otevrenaOkna.splice(i, 1);
+  if (bylo && ov._fokusPred && document.contains(ov._fokusPred) && typeof ov._fokusPred.focus === 'function') ov._fokusPred.focus({ preventScroll: true });
+}
+// Zavřít jako tlačítko Zrušit/Zavřít okna (to umí i vypnout kameru apod.)
+function zavritOkno(id) {
+  const ov = document.getElementById(id);
+  const zrusit = [...ov.querySelectorAll('.modal button:not(.modal-zavrit)')].find(b => /^(Zrušit|Zavřít)$/.test(b.textContent.trim()));
+  if (zrusit) zrusit.click(); else closeModal(id);
+}
+document.querySelectorAll('.modal-overlay > .modal').forEach(okno => {
+  const id = okno.parentElement.id;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'modal-zavrit no-print';
+  btn.setAttribute('aria-label', 'Zavřít okno');
+  btn.textContent = '✕';
+  btn.addEventListener('click', () => zavritOkno(id));
+  okno.insertBefore(btn, okno.firstChild);
+  okno.parentElement.setAttribute('role', 'dialog');
+  okno.parentElement.setAttribute('aria-modal', 'true');
+});
+['input', 'change'].forEach(typ => document.addEventListener(typ, e => {
+  const ov = e.target.closest && e.target.closest('.modal-overlay');
+  if (ov) ov._zmeneno = true;
+}, true));
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || !otevrenaOkna.length) return;
+  const id = otevrenaOkna[otevrenaOkna.length - 1];
+  const ov = document.getElementById(id);
+  e.stopImmediatePropagation();
+  if (ov._zmeneno && !confirm('Zavřít okno? Neuložené změny se ztratí.')) return;
+  zavritOkno(id);
+}, true);
 
 // TEXTY WEBU
 let textyWebuData = {};

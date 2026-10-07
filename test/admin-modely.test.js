@@ -149,7 +149,8 @@ test('admin Texty webu: pruh e-shopu se načte (výchozí text, dokud není ulo�
       if (opts && opts.method === 'POST') { odeslano.push(JSON.parse(opts.body)); return { ok: true }; }
       return { json: async () => ({ procBarefoot: [], mereniKroky: [], typyChodidel: [], vyberteSi: [{ nadpis: 'X' }] }) };
     },
-    setTimeout: () => {}
+    setTimeout: () => {},
+    clearTimeout: () => {}
   };
   vm.createContext(sandbox);
   const konst = ADMIN_HTML.match(/const VYCHOZI_ESHOP_PRUH = [^;]+;/)[0];
@@ -160,5 +161,9 @@ test('admin Texty webu: pruh e-shopu se načte (výchozí text, dokud není ulo�
   await vm.runInContext('ulozitTexty()', sandbox);
   assert.equal(odeslano[0].eshopPruh, 'Akce týdne');
   assert.deepEqual(odeslano[0].vyberteSi, [{ nadpis: 'X' }], 'ostatní texty zůstanou');
+  // potvrzení i u tlačítka (je na konci dlouhé stránky), tlačítko zase aktivní
+  assert.match(prvky.textyMsgDole.innerHTML, /Texty uloženy/);
+  assert.match(prvky.textyMsg.innerHTML, /Texty uloženy/);
+  assert.equal(prvky.textyUlozitBtn.disabled, false);
   assert.match(ADMIN_HTML, /id="txEshopPruh"[^>]*maxlength="300"/);
 });
