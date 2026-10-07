@@ -89,6 +89,9 @@
   }
 
   /* ── HEADER ── */
+  /* Odkaz „Prodejna Hulín“ z e-shopu (index.html#prodejna) - adresa nesmí zajet pod přilepenou hlavičku */
+  #prodejna { scroll-margin-top: 110px; }
+
   header {
     background: var(--warm-white);
     border-bottom: 2px solid var(--tan-light);
@@ -2064,7 +2067,7 @@ async function newsletterOdeslat(e) {
         </div>
       </div>
 
-      <div class="footer-col footer-contact">
+      <div class="footer-col footer-contact" id="prodejna">
         <h4>Kontakt</h4>
         <p>
           Monika Škarpichová<br><br>
@@ -2725,6 +2728,22 @@ rezNacistSloty();
     const bar = document.getElementById('dk-notice');
     if (bar) bar.style.display = 'none';
   }
+</script>
+<script>
+// Odkaz s kotvou (např. z e-shopu index.html#prodejna): obsah stránky se dočítá až po
+// skoku na kotvu a cíl pak odjede. Po načtení se na něj posunout znovu - jen dokud
+// návštěvník sám nezačne stránkou posouvat.
+(function () {
+  const cil = location.hash.slice(1);
+  if (!/^[a-z0-9-]+$/i.test(cil)) return;
+  let posunulSam = false;
+  ['wheel', 'touchstart', 'keydown'].forEach(t => addEventListener(t, () => { posunulSam = true; }, { once: true, passive: true }));
+  const posunout = () => {
+    const el = document.getElementById(cil);
+    if (el && !posunulSam) el.scrollIntoView({ block: 'start' });
+  };
+  addEventListener('load', () => { posunout(); [400, 1200, 2500].forEach(ms => setTimeout(posunout, ms)); });
+})();
 </script>
 </body>
 </html>
