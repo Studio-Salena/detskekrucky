@@ -77,12 +77,15 @@ test('atributové kontexty (onclick s vloženým API řetězcem) používají es
 });
 
 test('upravitProdukt() nevkládá data produktu do onclick atributu (jen ID) - vyhne se celé té atributové/JS-řetězcové escapovací třídě problémů (víceřádkový popis dřív rozbíjel onclick, viz oprava)', () => {
-  assert.match(ADMIN_HTML, /onclick="upravitProdukt\(\$\{p\.id\}\)"/);
+  // Detail produktu: tlačítka nesou jen pořadí velikosti, údaje se berou z načteného detailu
+  assert.match(ADMIN_HTML, /onclick="akceVelikosti\('produkt', \$\{i\}\)"/);
+  assert.match(ADMIN_HTML, /else if \(typ === 'produkt'\) upravitProdukt\(v\.produkt_id\);/);
   // Data se dohledávají podle ID z posledniProdukty a nastavují přes .value/textContent,
   // ne přes vkládání do HTML - takže žádný název/popis/značka tu nemůže obsahovat XSS.
   assert.match(ADMIN_HTML, /function upravitProdukt\(id\) \{\s*const p = posledniProdukty\.find/);
 });
 
 test('obrázek produktu (src atribut) je escAttr-ovaný', () => {
-  assert.match(ADMIN_HTML, /<img src="\$\{escAttr\(p\.emoji\)\}"/);
+  // fotky v detailu produktu (nahrané i starší odkazy z pole emoji)
+  assert.match(ADMIN_HTML, /<img src="\$\{escAttr\(f\.url\)\}" alt="\$\{escAttr\(f\.alt \|\| nazev\)\}"/);
 });

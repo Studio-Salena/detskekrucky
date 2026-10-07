@@ -42,7 +42,8 @@ function vykreslit({ modely, filtr = {}, pohlavi = false, kategorie = [{ slug: '
     modelyKategorie: kategorie,
     nastaveniKatalogu: { vekoveSkupiny: [], pohlavi },
     modelyVybrane: new Set(vybrane),
-    modelyRozbaleneZnacky: new Set(filtr.rozbalene || [])
+    modelyRozbaleneZnacky: new Set(filtr.rozbalene || []),
+    vykreslitSeznamProduktu: () => {}
   };
   vm.createContext(sandbox);
   const funkce = ['normalizovat', 'pocetSlovy', 'escH', 'escAttr', 'modelBezVlastnosti', 'vyberAnoNe', 'vyberJedna', 'vyberVice', 'vyberKategorie', 'vykreslitModely'];
@@ -56,10 +57,21 @@ const MODEL = {
   vyplneno: true, kategorie_ke_kontrole: false
 };
 
-test('admin: v menu je „Modely bot“ a showPage načítá modely', () => {
-  assert.match(ADMIN_HTML, /showPage\('modely',this\)/);
-  assert.match(ADMIN_HTML, /id="page-modely"/);
-  assert.match(ADMIN_HTML, /if \(name==='modely'\) loadModely\(\);/);
+test('admin Sortiment: v menu jen Produkty a Kategorie; Modely jsou záložka Hromadná úprava v Produktech', () => {
+  assert.doesNotMatch(ADMIN_HTML, /Modely bot<\/span>/, 'položka Modely bot v menu není');
+  assert.match(ADMIN_HTML, /showPage\('produkty',this\)"><span class="nav-text">Produkty<\/span>/);
+  assert.match(ADMIN_HTML, /showPage\('kategorie',this\)"><span class="nav-text">Kategorie<\/span>/);
+  assert.doesNotMatch(ADMIN_HTML, /id="page-modely"/);
+  const produkty = ADMIN_HTML.slice(ADMIN_HTML.indexOf('id="page-produkty"'), ADMIN_HTML.indexOf('<!-- PRODEJNA -->'));
+  assert.match(produkty, /data-cil="seznam"[^>]*>Seznam<\/button>/);
+  assert.match(produkty, /data-cil="hromadna"[^>]*>Hromadná úprava<\/button>/);
+  const hromadna = produkty.slice(produkty.indexOf('data-pohled="hromadna"'));
+  for (const id of ['modelyHledat', 'modelyFiltrKategorie', 'modelyJenNevyplnene', 'modelyHromadne', 'modelyTable']) {
+    assert.match(hromadna, new RegExp(`id="${id}"`), id + ' je v Hromadné úpravě');
+  }
+  // staré odkazy showPage('modely') vedou do Hromadné úpravy, Produkty načtou modely
+  assert.match(ADMIN_HTML, /if \(name === 'modely'\) \{ name = 'produkty'; kotva = kotva \|\| 'hromadna'; \}/);
+  assert.match(ADMIN_HTML, /async function loadProdukty\(\) \{\s*await loadModely\(\);/);
 });
 
 test('admin: řádek modelu ukazuje vybrané vlastnosti, velikosti a stav', () => {

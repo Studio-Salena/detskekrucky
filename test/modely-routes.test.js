@@ -49,6 +49,10 @@ function vytvoritMockDb(stav) {
         return { rows: zasazene.map(m => ({ id: m.id })) };
       }
       if (s.startsWith('UPDATE produkty SET')) return { rows: [] };
+      // detail modelu (GET /:id)
+      if (s === 'SELECT * FROM modely WHERE id = $1') return { rows: stav.modely.filter(m => m.id === params[0]).map(m => ({ ...m })) };
+      if (s.startsWith('SELECT p.id AS produkt_id')) return { rows: (stav.varianty || []).filter(v => v.model_id === params[0]).map(({ model_id, ...v }) => v) };
+      if (s.startsWith('SELECT pi.id, pi.produkt_id')) return { rows: (stav.fotky || []).filter(f => f.model_id === params[0]).map(({ model_id, ...f }) => f) };
       if (s.startsWith('SELECT m.*')) {
         return { rows: stav.modely.map(m => ({ ...m, pocet_produktu: 2, kusu: 3, velikosti: [25, 22], kategorie_produktu: m.id === 2 ? ['papuce', 'pantofle'] : [m.kategorie], na_eshopu: true, ma_fotku: false })) };
       }
@@ -328,4 +332,28 @@ test('oblíbené modely: veřejné, jen slugy (bez počtů), bez zrušených obj
   assert.match(sql, /WHERE p\.na_eshopu/);
   assert.match(sql, /LIMIT 12/);
   assert.doesNotMatch(sql, /SELECT m\.slug, SUM/, 'počty se ven neposílají');
+});
+
+test('detail modelu: jen pro admina, model bez interního klíče, velikosti se skladem a fotky; 404 a 400', async () => {
+  const stav = vytvoritStav();
+  stav.varianty = [
+    { model_id: 1, produkt_id: 10, nazev: 'Autumn', znacka: 'Froddo', cena: 1290, na_eshopu: true, velikost: 22, ean: '859000', pocet_kusu: 2, min_pocet: 1, nizky_stav: false },
+    { model_id: 1, produkt_id: 11, nazev: 'Autumn', znacka: 'Froddo', cena: 1290, na_eshopu: false, velikost: 23, ean: '859001', pocet_kusu: 0, min_pocet: 1, nizky_stav: true },
+    { model_id: 2, produkt_id: 20, nazev: 'Zuzi', znacka: 'Beda', cena: 690, na_eshopu: true, velikost: 22, ean: '859002', pocet_kusu: 1, min_pocet: 1, nizky_stav: true }
+  ];
+  stav.fotky = [{ model_id: 1, id: 5, produkt_id: 10, url: 'https://img.example/a.jpg', alt: 'a', is_primary: true }];
+  await spustit(stav, async (volat) => {
+    assert.equal((await volat('/1', { admin: false })).status, 403, 'bez hesla 403');
+    const { status, body } = await volat('/1');
+    assert.equal(status, 200);
+    assert.equal(body.model.nazev, 'Autumn');
+    assert.equal('klic' in body.model, false);
+    assert.equal(body.model.vyplneno, false);
+    assert.deepEqual(body.varianty.map(v => v.produkt_id), [10, 11]);
+    assert.equal(body.varianty[1].ean, '859001');
+    assert.deepEqual(body.fotky.map(f => f.url), ['https://img.example/a.jpg']);
+    assert.ok(body.volby.sirka && Array.isArray(body.kategorieBezVlastnosti));
+    assert.equal((await volat('/999')).status, 404);
+    assert.equal((await volat('/abc')).status, 400);
+  });
 });

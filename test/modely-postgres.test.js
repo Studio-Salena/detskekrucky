@@ -24,7 +24,8 @@ async function pripravitSchema() {
     CREATE TABLE produkty (id SERIAL PRIMARY KEY, nazev VARCHAR(255) NOT NULL, znacka VARCHAR(255), emoji VARCHAR(10),
       popis TEXT, kategorie VARCHAR(50), cena INTEGER NOT NULL, cena_puvodni INTEGER, na_eshopu BOOLEAN NOT NULL DEFAULT true, typ_nohy TEXT);
     CREATE TABLE sklad (id SERIAL PRIMARY KEY, produkt_id INTEGER REFERENCES produkty(id), velikost INTEGER NOT NULL,
-      pocet_kusu INTEGER NOT NULL DEFAULT 0, delka_mm INTEGER, sirka_mm INTEGER, dostupnost TEXT NOT NULL DEFAULT 'skladem', UNIQUE(produkt_id, velikost));
+      pocet_kusu INTEGER NOT NULL DEFAULT 0, delka_mm INTEGER, sirka_mm INTEGER, dostupnost TEXT NOT NULL DEFAULT 'skladem',
+      ean TEXT, min_pocet INTEGER NOT NULL DEFAULT 1, UNIQUE(produkt_id, velikost));
     CREATE TABLE product_images (id SERIAL PRIMARY KEY, produkt_id INTEGER REFERENCES produkty(id), url TEXT, alt TEXT,
       is_primary BOOLEAN NOT NULL DEFAULT false, position INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE kategorie (id SERIAL PRIMARY KEY, nazev TEXT, slug TEXT);
@@ -198,6 +199,54 @@ test('oblíbené modely proti PostgreSQL: e-shop bez zrušených + prodejna (JSO
     assert.equal(r.statusCode, 200, JSON.stringify(r.body));
     // Zuzi 3 + 1 (pocet 'abc' = 1) = 4 > Autumn 2; Demar a skrytá bota vůbec
     assert.deepEqual(r.body, ['beda-zuzi', 'froddo-autumn']);
+  } finally {
+    delete require.cache[poolPath];
+    delete require.cache[routePath];
+    await uklid();
+  }
+});
+
+test('Produkty v adminu proti PostgreSQL: seznam s cenou od-do a skrytými, detail modelu s velikostmi, skladem a fotkami', { skip: preskocit }, async () => {
+  const { pool, uklid } = await pripravitSchema();
+  const routePath = require.resolve('../routes/modely.js');
+  const poolPath = require.resolve('../db/pool');
+  try {
+    const p24 = await vlozitProdukt(pool, 'Froddo', 'Autumn', 'celorocky', 24, 1);
+    const p25 = await vlozitProdukt(pool, 'Froddo', 'Autumn', 'celorocky', 25, 3);
+    await vlozitProdukt(pool, 'Beda', 'Zuzi', 'papuce', 22, 2);
+    await pool.query("UPDATE produkty SET cena = 1390, na_eshopu = false WHERE id = $1", [p25]);
+    await pool.query("UPDATE sklad SET ean = '8590000000024' WHERE produkt_id = $1", [p24]);
+    await pool.query("INSERT INTO product_images (produkt_id, url, alt, is_primary, position) VALUES ($1, 'https://img.example/b.jpg', 'bok', false, 1), ($1, 'https://img.example/a.jpg', 'předek', true, 0)", [p24]);
+    await migrovatModely(pool);
+
+    delete require.cache[routePath];
+    require.cache[poolPath] = { id: poolPath, filename: poolPath, loaded: true, exports: pool };
+    const router = require(routePath);
+    const najit = (method, cesta) => {
+      const l = router.stack.find(x => x.route && x.route.path === cesta && x.route.methods[method]);
+      return l.route.stack[l.route.stack.length - 1].handle;
+    };
+    const res = () => { const r = { statusCode: 200 }; r.status = k => { r.statusCode = k; return r; }; r.json = b => { r.body = b; return r; }; return r; };
+
+    const r1 = res();
+    await najit('get', '/')({}, r1);
+    const froddo = r1.body.modely.find(m => m.znacka === 'Froddo');
+    assert.equal(Number(froddo.cena_od), 1000);
+    assert.equal(Number(froddo.cena_do), 1390);
+    assert.equal(froddo.skryto, 1);
+    assert.equal(r1.body.modely.find(m => m.znacka === 'Beda').skryto, 0);
+    assert.deepEqual(froddo.eany, ['8590000000024'], 'EAN kódy modelu pro hledání');
+
+    const r2 = res();
+    await najit('get', '/:id')({ params: { id: String(froddo.id) } }, r2);
+    assert.equal(r2.statusCode, 200, JSON.stringify(r2.body));
+    assert.equal('klic' in r2.body.model, false);
+    assert.deepEqual(r2.body.varianty.map(v => [v.velikost, v.pocet_kusu, v.nizky_stav, v.na_eshopu]), [[24, 1, true, true], [25, 3, false, false]]);
+    assert.equal(r2.body.varianty[0].ean, '8590000000024');
+    assert.deepEqual(r2.body.fotky.map(f => f.url), ['https://img.example/a.jpg', 'https://img.example/b.jpg'], 'fotky podle pořadí');
+    const r3 = res();
+    await najit('get', '/:id')({ params: { id: '999999' } }, r3);
+    assert.equal(r3.statusCode, 404);
   } finally {
     delete require.cache[poolPath];
     delete require.cache[routePath];

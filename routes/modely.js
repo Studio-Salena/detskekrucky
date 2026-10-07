@@ -98,6 +98,11 @@ router.get('/', async (req, res) => {
              COALESCE(ARRAY_AGG(DISTINCT s.velikost) FILTER (WHERE s.velikost IS NOT NULL), '{}') AS velikosti,
              COALESCE(ARRAY_AGG(DISTINCT p.kategorie) FILTER (WHERE p.kategorie IS NOT NULL), '{}') AS kategorie_produktu,
              BOOL_OR(p.na_eshopu) AS na_eshopu,
+             -- pro seznam Produktů v adminu: cena od-do a počet skrytých velikostí
+             MIN(p.cena) AS cena_od,
+             MAX(p.cena) AS cena_do,
+             COUNT(DISTINCT p.id) FILTER (WHERE p.na_eshopu IS FALSE)::int AS skryto,
+             COALESCE(ARRAY_AGG(DISTINCT s.ean) FILTER (WHERE s.ean IS NOT NULL AND s.ean <> ''), '{}') AS eany,
              -- emoji může být NULL -> BOOL_OR vrátí NULL; COALESCE, ať je výsledek vždy true/false
              (COALESCE(BOOL_OR(p.emoji LIKE 'http%'), false) OR EXISTS (
                SELECT 1 FROM product_images pi JOIN produkty p2 ON p2.id = pi.produkt_id WHERE p2.model_id = m.id
@@ -125,6 +130,44 @@ router.get('/', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ chyba: err.message });
+  }
+});
+
+// Detail modelu pro admin (Produkty -> detail): model, jeho velikosti se skladem,
+// cenou a EAN a fotky všech jeho produktů. Jen čtení.
+router.get('/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ chyba: 'Neplatné id modelu.' });
+  try {
+    const model = await pool.query('SELECT * FROM modely WHERE id = $1', [id]);
+    if (!model.rows.length) return res.status(404).json({ chyba: 'Model nebyl nalezen.' });
+    const varianty = await pool.query(`
+      SELECT p.id AS produkt_id, p.nazev, p.znacka, p.kategorie, p.cena, p.cena_puvodni, p.na_eshopu, p.emoji, p.popis, p.typ_nohy,
+             s.velikost, s.ean, s.pocet_kusu, s.min_pocet, s.dostupnost, s.delka_mm, s.sirka_mm,
+             CASE WHEN s.pocet_kusu <= s.min_pocet THEN true ELSE false END AS nizky_stav
+      FROM produkty p
+      LEFT JOIN sklad s ON s.produkt_id = p.id
+      WHERE p.model_id = $1
+      ORDER BY s.velikost NULLS LAST, p.id
+    `, [id]);
+    const fotky = await pool.query(`
+      SELECT pi.id, pi.produkt_id, pi.url, pi.alt, pi.is_primary
+      FROM product_images pi
+      JOIN produkty p ON p.id = pi.produkt_id
+      WHERE p.model_id = $1
+      ORDER BY pi.produkt_id, pi.position, pi.id
+    `, [id]);
+    const { klic, ...verejne } = model.rows[0];
+    res.json({
+      volby: VOLBY,
+      kategorieBezVlastnosti: KATEGORIE_BEZ_VLASTNOSTI,
+      model: { ...verejne, vyplneno: jeVyplneno(model.rows[0]) },
+      varianty: varianty.rows,
+      fotky: fotky.rows
+    });
+  } catch (err) {
+    console.error('Detail modelu selhal:', err.message);
+    res.status(500).json({ chyba: 'Detail modelu se nepodařilo načíst.' });
   }
 });
 
