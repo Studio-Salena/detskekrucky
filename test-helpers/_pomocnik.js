@@ -197,8 +197,8 @@ function vytvoritMockClient(stav) {
         const maSnimek = o.obj_email != null;
         return Object.fromEntries(pole.map(p => [p, (maSnimek ? o['obj_' + p] : z[p]) ?? null]));
       };
-      if (s.startsWith('SELECT o.id, o.cislo, o.stav, o.doprava, o.platba, o.celkem, o.vytvoreno, o.vydejni_misto_nazev, CASE WHEN o.obj_email IS NOT NULL THEN o.obj_jmeno ELSE z.jmeno END AS jmeno')) {
-        return { rows: stav.objednavky.map(o => ({ id: o.id, cislo: o.cislo, stav: o.stav, doprava: o.doprava, platba: o.platba, celkem: o.celkem, vytvoreno: o.vytvoreno, vydejni_misto_nazev: o.vydejni_misto_nazev ?? null, ...udajeObjednavky(o) })) };
+      if (s.startsWith('SELECT o.id, o.cislo, o.stav, o.doprava, o.platba, o.celkem, o.vytvoreno, o.vydejni_misto_nazev, o.zakaznik_id, CASE WHEN o.obj_email IS NOT NULL THEN o.obj_jmeno ELSE z.jmeno END AS jmeno')) {
+        return { rows: stav.objednavky.map(o => ({ id: o.id, cislo: o.cislo, stav: o.stav, doprava: o.doprava, platba: o.platba, celkem: o.celkem, vytvoreno: o.vytvoreno, vydejni_misto_nazev: o.vydejni_misto_nazev ?? null, zakaznik_id: o.zakaznik_id, ...udajeObjednavky(o) })) };
       }
       if (s.startsWith('SELECT o.*, CASE WHEN o.obj_email IS NOT NULL THEN o.obj_jmeno ELSE z.jmeno END AS jmeno')) {
         const o = stav.objednavky.find(o => o.id === Number(params[0]));

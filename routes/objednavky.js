@@ -471,7 +471,7 @@ odeslat_upozorneni_objednavky({
 router.get('/', vyzadovatAdmina, async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT o.id, o.cislo, o.stav, o.doprava, o.platba, o.celkem, o.vytvoreno, o.vydejni_misto_nazev,
+      SELECT o.id, o.cislo, o.stav, o.doprava, o.platba, o.celkem, o.vytvoreno, o.vydejni_misto_nazev, o.zakaznik_id,
              ${SQL_UDAJE_OBJEDNAVKY}
       FROM objednavky o
       JOIN zakaznici z ON o.zakaznik_id = z.id

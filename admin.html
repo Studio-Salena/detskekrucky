@@ -25,40 +25,132 @@ body{font-family:'Nunito',sans-serif;background:var(--cream);color:var(--text);m
 .login-btn{width:100%;padding:14px;background:linear-gradient(135deg,var(--brown),var(--brown-dark));color:#fff;border:none;border-radius:12px;font-size:1rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif}
 .login-error{color:var(--red);font-size:0.85rem;margin-top:12px;display:none}
 
-/* LAYOUT */
+/* LAYOUT - nová administrace (etapa 1): hlavička přes celou šířku, petrolejový sidebar
+   vlevo se skupinami; na tabletu jde sbalit na ikony, na mobilu se vysouvá přes ☰ */
+:root{
+  --sb-bg:#1f4a50;--sb-bg-2:#173b40;--sb-text:#e8f0ed;--sb-muted:#b3cbc6;--sb-akcent:#9fd4a9;
+  --sb-hover:rgba(255,255,255,0.07);--sb-aktivni:rgba(159,212,169,0.17);--sb-odznak:#e07a5f;
+  --app-bg:#f7f4ee;--app-line:#e6e0d3;
+  --sb-sirka:248px;--sb-sbaleny:68px;--topbar-v:60px;
+}
+body{background:var(--app-bg)}
 .admin-wrap{display:none;min-height:100vh}
-.sidebar{width:230px;background:#fff;border-right:2px solid var(--tan-light);position:fixed;top:0;left:0;bottom:0;padding:0;display:flex;flex-direction:column;box-shadow:2px 0 12px rgba(139,69,19,0.06);z-index:50;transition:transform 0.3s;overflow-y:auto}
-.sidebar-logo{font-family:'Dancing Script',cursive;font-size:1.4rem;color:var(--brown);padding:20px;border-bottom:1px solid var(--tan-light);display:flex;align-items:center;justify-content:space-between}
-.sidebar-logo span{display:block;font-family:'Nunito',sans-serif;font-size:0.65rem;color:var(--text-light);font-weight:400;letter-spacing:1px;text-transform:uppercase}
-.nav-section{padding:8px 0}
-.nav-label{font-size:0.65rem;color:var(--text-light);text-transform:uppercase;letter-spacing:1.5px;padding:8px 20px 4px;font-weight:700}
-.nav-item{display:flex;align-items:center;gap:10px;padding:11px 20px;cursor:pointer;color:var(--text-light);font-weight:600;font-size:0.87rem;transition:all 0.2s;border-left:3px solid transparent;position:relative}
-.nav-item:hover{background:var(--cream);color:var(--brown)}
-.nav-item.active{background:linear-gradient(90deg,var(--tan-light),transparent);color:var(--brown);border-left-color:var(--brown)}
-.nav-item .icon{font-size:1rem;width:20px;text-align:center}
-.nav-badge{background:var(--red);color:#fff;border-radius:10px;padding:2px 7px;font-size:0.65rem;font-weight:700;margin-left:auto}
-.sidebar-footer{margin-top:auto;padding:16px;border-top:1px solid var(--tan-light)}
-.logout-btn{width:100%;padding:10px;background:none;border:2px solid var(--tan);border-radius:8px;color:var(--text-light);cursor:pointer;font-family:'Nunito',sans-serif;font-weight:600;font-size:0.85rem;transition:all 0.2s}
-.logout-btn:hover{border-color:var(--red);color:var(--red)}
 
-/* TOP BAR */
-.topbar{position:fixed;top:0;left:230px;right:0;height:56px;background:#fff;border-bottom:1px solid var(--tan-light);display:flex;align-items:center;justify-content:space-between;padding:0 24px;z-index:40;box-shadow:0 2px 8px rgba(139,69,19,0.06)}
-.topbar-left{display:flex;align-items:center;gap:12px}
-.menu-toggle{display:none;background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--brown)}
-.global-search{display:flex;align-items:center;gap:8px;background:var(--cream);border:2px solid var(--tan-light);border-radius:20px;padding:6px 14px;width:280px;transition:all 0.2s}
-.global-search:focus-within{border-color:var(--brown);background:#fff}
+/* HLAVIČKA */
+.topbar{position:fixed;top:0;left:0;right:0;height:var(--topbar-v);background:#fff;border-bottom:1px solid var(--app-line);display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 20px 0 12px;z-index:60}
+.topbar-left{display:flex;align-items:center;gap:12px;min-width:0;flex:1}
+.topbar-logo{font-family:'Dancing Script',cursive;font-size:1.5rem;font-weight:700;color:var(--sb-bg);white-space:nowrap;width:calc(var(--sb-sirka) - 24px);flex:none;overflow:hidden}
+.menu-toggle{display:none;width:44px;height:44px;flex:none;align-items:center;justify-content:center;border:0;border-radius:10px;background:none;font-size:1.4rem;cursor:pointer;color:var(--sb-bg)}
+.menu-toggle:focus-visible,.notif-btn:focus-visible{outline:2px solid var(--sb-bg);outline-offset:2px}
+.global-search{display:flex;align-items:center;gap:8px;background:var(--app-bg);border:1px solid var(--app-line);border-radius:20px;padding:7px 14px;width:300px;min-width:0;transition:all 0.2s}
+.global-search:focus-within{border-color:var(--sb-bg);background:#fff}
 .global-search input{border:none;background:none;outline:none;font-family:'Nunito',sans-serif;font-size:0.85rem;width:100%;color:var(--text)}
-.search-results{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--tan-light);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.1);max-height:300px;overflow-y:auto;display:none;z-index:100;margin-top:4px}
-.search-result-item{padding:10px 16px;cursor:pointer;font-size:0.85rem;border-bottom:1px solid var(--tan-light);transition:background 0.1s}
-.search-result-item:hover{background:var(--cream)}
+.search-results{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--app-line);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.1);max-height:300px;overflow-y:auto;display:none;z-index:100;margin-top:4px}
+.search-result-item{padding:10px 16px;cursor:pointer;font-size:0.85rem;border-bottom:1px solid var(--app-line);transition:background 0.1s}
+.search-result-item:hover{background:var(--app-bg)}
 .search-result-item:last-child{border-bottom:none}
-.topbar-right{display:flex;align-items:center;gap:12px}
-.notif-btn{position:relative;background:none;border:none;font-size:1.3rem;cursor:pointer;padding:4px}
-.notif-dot{position:absolute;top:0;right:0;width:10px;height:10px;background:var(--red);border-radius:50%;border:2px solid #fff;display:none}
+.topbar-right{display:flex;align-items:center;gap:12px;flex:none}
+.notif-btn{position:relative;background:none;border:none;font-size:1.3rem;cursor:pointer;width:44px;height:44px;border-radius:10px}
+.notif-dot{position:absolute;top:8px;right:8px;width:10px;height:10px;background:var(--sb-odznak);border-radius:50%;border:2px solid #fff;display:none}
 .notif-dot.show{display:block}
-.topbar-user{font-size:0.82rem;color:var(--text-light);font-weight:600}
+.topbar-user{font-size:0.78rem;color:var(--sb-bg);font-weight:800;letter-spacing:1px;text-transform:uppercase;background:#e7f1ec;border-radius:20px;padding:5px 12px}
 
-.main{margin-left:230px;padding:80px 28px 28px;min-height:100vh}
+/* SIDEBAR */
+.sidebar{position:fixed;top:var(--topbar-v);left:0;bottom:0;width:var(--sb-sirka);background:linear-gradient(180deg,var(--sb-bg),var(--sb-bg-2));color:var(--sb-text);display:flex;flex-direction:column;z-index:55;transition:width 0.2s,transform 0.25s}
+.nav-scroll{flex:1;overflow-y:auto;padding:14px 10px;display:flex;flex-direction:column;gap:2px}
+.nav-item,.nav-group-btn,.nav-sbalit,.logout-btn{display:flex;align-items:center;gap:10px;width:100%;min-height:42px;padding:9px 12px;border:0;border-radius:10px;background:none;color:var(--sb-text);font-family:'Nunito',sans-serif;font-size:0.92rem;font-weight:600;text-align:left;cursor:pointer;position:relative;transition:background 0.15s,color 0.15s}
+.nav-item:hover,.nav-group-btn:hover,.nav-sbalit:hover,.logout-btn:hover{background:var(--sb-hover);color:#fff}
+.nav-item:focus-visible,.nav-group-btn:focus-visible,.nav-sbalit:focus-visible,.logout-btn:focus-visible{outline:2px solid var(--sb-akcent);outline-offset:-2px}
+.nav-item.active{background:var(--sb-aktivni);color:#fff;font-weight:700}
+.nav-item.active::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:3px;border-radius:3px;background:var(--sb-akcent)}
+.sidebar .icon{width:22px;flex:none;text-align:center;font-size:1.05rem}
+.nav-text{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nav-sipka{color:var(--sb-muted);font-size:1.15rem;line-height:1;transition:transform 0.2s}
+.nav-group-btn[aria-expanded="true"] .nav-sipka{transform:rotate(90deg)}
+.nav-group.ma-aktivni > .nav-group-btn{color:#fff;font-weight:700}
+.nav-sub{display:none;flex-direction:column;gap:1px;padding:2px 0 6px 32px}
+.nav-group.otevrena > .nav-sub{display:flex}
+.nav-sub .nav-item{min-height:38px;padding:8px 12px;font-size:0.87rem;color:var(--sb-muted)}
+.nav-sub .nav-item.active,.nav-sub .nav-item:hover{color:#fff}
+.nav-akce .nav-text{color:var(--sb-akcent);font-weight:800}
+.nav-badge{background:var(--sb-odznak);color:#fff;border-radius:10px;padding:2px 7px;font-size:0.68rem;font-weight:800;margin-left:auto;flex:none}
+.nav-group-dot{display:none;width:8px;height:8px;border-radius:50%;background:var(--sb-odznak);flex:none}
+.nav-group:not(.otevrena):has(.nav-badge:not([style*="none"])) .nav-group-dot{display:inline-block}
+.sidebar-footer{padding:10px;border-top:1px solid rgba(255,255,255,0.12);display:flex;flex-direction:column;gap:2px}
+.logout-btn:hover{color:#ffd5c8}
+.sidebar-zaves{display:none}
+
+/* PŘEHLED A ZÁLOŽKY (etapa 2) */
+.page [data-pohled][hidden]{display:none!important}
+.pohledy{display:flex;gap:4px;flex-wrap:wrap;background:#fff;border:1px solid var(--app-line);border-radius:14px;padding:4px;margin-bottom:18px;width:fit-content;max-width:100%}
+.pohledy button{border:0;background:none;border-radius:10px;padding:9px 16px;min-height:42px;font-family:'Nunito',sans-serif;font-weight:700;font-size:0.88rem;color:var(--text-light);cursor:pointer}
+.pohledy button:hover{background:var(--app-bg);color:var(--sb-bg)}
+.pohledy button.active{background:var(--sb-bg);color:#fff}
+.pohledy button:focus-visible{outline:2px solid var(--sb-bg);outline-offset:2px}
+.btn-velky{padding:12px 22px;font-size:0.98rem;border-radius:12px;min-height:46px}
+.stat-card.stat-odkaz{font:inherit;color:inherit;text-align:left;cursor:pointer;display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;border-top:4px solid var(--karta-barva,var(--tan-light))}
+.stat-odkaz:focus-visible{outline:2px solid var(--sb-bg);outline-offset:2px}
+.karta-trzba{--karta-barva:#9fd4a9}
+.karta-objednavky{--karta-barva:#f2c48d}
+.karta-rezervace{--karta-barva:#a9c9ec}
+.karta-sklad{--karta-barva:#eba9a0}
+.karta-vratky{--karta-barva:#c9b6e4}
+.karta-poukazy{--karta-barva:#f0b6cf}
+.pozornost-seznam{display:flex;flex-direction:column}
+.pozornost-radek{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:10px 18px;border:0;border-bottom:1px solid #f3ece2;border-left:4px solid var(--karta-barva);background:#fff;font-family:'Nunito',sans-serif;font-size:0.95rem;font-weight:700;color:var(--text);text-align:left;cursor:pointer}
+.pozornost-radek:last-child{border-bottom:0}
+.pozornost-radek:hover{background:var(--app-bg)}
+.pozornost-radek:focus-visible{outline:2px solid var(--sb-bg);outline-offset:-2px}
+.pozornost-ikona{font-size:1.15rem;width:24px;text-align:center}
+.pozornost-text{flex:1}
+.pozornost-sipka{color:var(--text-light);font-size:1.3rem}
+.prehled-mrizka{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr) minmax(0,1fr);gap:20px}
+.prehled-mrizka .badge,.prehled-mrizka .btn,.prehled-mrizka td:nth-child(3){white-space:nowrap}
+.radek-odkaz{cursor:pointer}
+.prehled-celkove{margin-top:4px}
+.prehled-celkove summary{cursor:pointer;font-weight:700;color:var(--text-light);padding:10px 0;font-size:0.9rem}
+.objednavka-info{display:block;font-size:0.75rem;color:var(--text-light);margin-top:2px}
+@media(max-width:1199px){.prehled-mrizka{grid-template-columns:1fr 1fr}.prehled-mrizka > :last-child{grid-column:1/-1}}
+@media(max-width:768px){.prehled-mrizka{grid-template-columns:1fr}.pohledy{width:100%}.pohledy button{flex:1}}
+
+/* OBSAH */
+.main{flex:1;min-width:0;margin-left:var(--sb-sirka);padding:calc(var(--topbar-v) + 24px) 28px 28px;min-height:100vh;transition:margin-left 0.2s}
+.main [id]{scroll-margin-top:calc(var(--topbar-v) + 16px)}
+
+/* SBALENÉ MENU (tablet / na přání) - jen ikony; klik na skupinu menu zase rozbalí */
+@media(min-width:769px){
+  body.menu-sbalene .sidebar{width:var(--sb-sbaleny)}
+  body.menu-sbalene .main{margin-left:var(--sb-sbaleny)}
+  body.menu-sbalene .sidebar .nav-text,body.menu-sbalene .nav-sipka,body.menu-sbalene .nav-sub{display:none!important}
+  body.menu-sbalene .nav-item,body.menu-sbalene .nav-group-btn,body.menu-sbalene .nav-sbalit,body.menu-sbalene .logout-btn{justify-content:center;padding:9px 0}
+  body.menu-sbalene .nav-group.ma-aktivni > .nav-group-btn{background:var(--sb-aktivni)}
+  body.menu-sbalene .nav-group:has(.nav-badge:not([style*="none"])) .nav-group-dot{display:block}
+  body.menu-sbalene .nav-group-dot{position:absolute;top:8px;right:14px}
+  body.menu-sbalene .nav-hlavni .nav-badge{position:absolute;top:3px;right:6px;padding:1px 5px;font-size:0.6rem}
+  body.menu-sbalene .nav-sbalit .icon{transform:rotate(180deg)}
+}
+
+/* MOBIL - menu se vysouvá zleva přes ☰, pod ním ztmavení */
+@media(max-width:768px){
+  .menu-toggle{display:inline-flex}
+  .topbar{padding:0 10px 0 6px;gap:8px}
+  .topbar-logo{width:auto;font-size:1.3rem}
+  .topbar-user{display:none}
+  .global-search{width:auto;flex:1;padding:7px 12px}
+  .sidebar{width:min(300px,86vw);transform:translateX(-100%);box-shadow:0 0 30px rgba(0,0,0,0.25)}
+  .sidebar.open{transform:none}
+  .sidebar-zaves.open{display:block;position:fixed;inset:var(--topbar-v) 0 0 0;background:rgba(15,35,38,0.45);z-index:54}
+  .nav-sbalit{display:none}
+  .main{margin-left:0;padding:calc(var(--topbar-v) + 14px) 14px 14px}
+}
+@media(max-width:480px){
+  .topbar-logo{font-size:0;width:auto}
+  .topbar-logo span{font-size:1.4rem}
+}
+@media(prefers-reduced-motion:reduce){
+  .sidebar,.main,.nav-sipka{transition:none}
+}
+
 .page{display:none}
 .page.active{display:block}
 .page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px}
@@ -174,7 +266,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
 
 /* PRINT */
 @media print{
-  .sidebar,.topbar,.no-print{display:none!important}
+  .sidebar,.topbar,.sidebar-zaves,.no-print{display:none!important}
   .main{margin-left:0;padding:0}
   .print-area{display:block!important}
 }
@@ -182,13 +274,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
 
 /* MOBILE */
 @media(max-width:768px){
-  .sidebar{transform:translateX(-100%)}
-  .sidebar.open{transform:translateX(0)}
-  .topbar{left:0}
-  .main{margin-left:0;padding:70px 14px 14px}
-  .menu-toggle{display:block}
   .stats-grid{grid-template-columns:repeat(2,1fr)}
-  .global-search{width:180px}
   .form-grid-2,.form-grid-3{grid-template-columns:1fr}
   .table-header{flex-direction:column;align-items:flex-start}
   .page-header{flex-direction:column;align-items:flex-start}
@@ -223,63 +309,101 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
 <!-- ADMIN -->
 <div class="admin-wrap" id="adminWrap">
 
-  <!-- SIDEBAR -->
-  <div class="sidebar" id="sidebar">
-    <div class="sidebar-logo">
-      <div>Dětské krůčky <span>Admin panel</span></div>
-    </div>
-    <div class="nav-section">
-      <div class="nav-label">Hlavní</div>
-      <div class="nav-item active" onclick="showPage('prehled',this)"><span class="icon">📊</span> Přehled</div>
-    </div>
-    <div class="nav-section">
-      <div class="nav-label">🛒 E-shop</div>
-      <div class="nav-item" onclick="showPage('objednavky',this)" id="navObjednavky"><span class="icon">📦</span> Objednávky <span class="nav-badge" id="navBadge" style="display:none">0</span></div>
-      <div class="nav-item" onclick="showPage('vratkyzadosti',this)" id="navVratkyZadosti"><span class="icon">↩️</span> Žádosti o vrácení <span class="nav-badge" id="navBadgeVratky" style="display:none">0</span></div>
-      <div class="nav-item" onclick="showPage('texty',this)"><span class="icon">📝</span> Texty webu</div>
-      <div class="nav-item" onclick="showPage('newsletter',this)"><span class="icon">✉️</span> Newsletter</div>
-    </div>
-    <div class="nav-section">
-      <div class="nav-label">🏪 Prodejna</div>
-      <div class="nav-item" onclick="showPage('prodejna',this)"><span class="icon">🏬</span> Prodeje</div>
-      <div class="nav-item" onclick="showPage('rezervace',this)" id="navRezervace"><span class="icon">📅</span> Rezervace <span class="nav-badge" id="navBadgeRez" style="display:none">0</span></div>
-    </div>
-    <div class="nav-section">
-      <div class="nav-label">🔄 Společné</div>
-      <div class="nav-item" onclick="showPage('sklad',this)"><span class="icon">🏪</span> Sklad</div>
-      <div class="nav-item" onclick="showPage('produkty',this)"><span class="icon">👟</span> Produkty</div>
-      <div class="nav-item" onclick="showPage('modely',this)"><span class="icon">👣</span> Modely bot</div>
-      <div class="nav-item" onclick="showPage('kategorie',this)"><span class="icon">🏷️</span> Kategorie</div>
-      <div class="nav-item" onclick="showPage('zakaznici',this)"><span class="icon">👥</span> Zákazníci</div>
-      <div class="nav-item" onclick="showPage('poukazy',this)" id="navPoukazy"><span class="icon">🎁</span> Poukazy <span class="nav-badge" id="navBadgePoukazy" style="display:none">0</span></div>
-      <div class="nav-item" onclick="showPage('ucetnictvi',this)"><span class="icon">💰</span> Účetnictví</div>
-    </div>
-    <div class="nav-section">
-      <div class="nav-label">Nastavení</div>
-      <div class="nav-item" onclick="showPage('nastaveni',this)"><span class="icon">⚙️</span> Nastavení</div>
-    </div>
-    <div class="sidebar-footer">
-      <button class="logout-btn" onclick="logout()">🚪 Odhlásit se</button>
-    </div>
-  </div>
-
-  <!-- TOP BAR -->
-  <div class="topbar">
+  <!-- HLAVIČKA (nová administrace, etapa 1) -->
+  <header class="topbar">
     <div class="topbar-left">
-      <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+      <button type="button" class="menu-toggle" id="menuToggle" onclick="toggleSidebar()" aria-label="Otevřít menu" aria-controls="sidebar" aria-expanded="false">☰</button>
+      <div class="topbar-logo"><span aria-hidden="true">👣</span> Dětské krůčky</div>
       <div class="global-search" style="position:relative">
-        <span>🔍</span>
-        <input type="text" placeholder="Hledat objednávky, zákazníky..." oninput="globalSearch(this.value)" id="globalSearchInput">
+        <span aria-hidden="true">🔍</span>
+        <input type="text" placeholder="Hledat objednávky, zákazníky..." oninput="globalSearch(this.value)" id="globalSearchInput" aria-label="Hledat objednávky a zákazníky">
         <div class="search-results" id="searchResults"></div>
       </div>
     </div>
     <div class="topbar-right">
-      <button class="notif-btn" onclick="showPage('objednavky',document.getElementById('navObjednavky'))">
+      <button type="button" class="notif-btn" onclick="showPage('objednavky',document.getElementById('navObjednavky'))" aria-label="Nové objednávky">
         🔔 <span class="notif-dot" id="notifDot"></span>
       </button>
-      <div class="topbar-user">Dětské krůčky Admin</div>
+      <div class="topbar-user">Admin</div>
     </div>
-  </div>
+  </header>
+
+  <!-- SIDEBAR - položky volají stejné showPage() jako dřív, ID odznaků zůstávají -->
+  <nav class="sidebar" id="sidebar" aria-label="Hlavní menu">
+    <div class="nav-scroll">
+      <button type="button" class="nav-item nav-hlavni active" onclick="showPage('prehled',this)" title="Přehled"><span class="icon">📊</span><span class="nav-text">Přehled</span></button>
+
+      <div class="nav-group">
+        <button type="button" class="nav-group-btn" onclick="prepnoutSkupinu(this)" aria-expanded="false" title="E-shop"><span class="icon">🛒</span><span class="nav-text">E-shop</span><span class="nav-group-dot" aria-hidden="true"></span><span class="nav-sipka" aria-hidden="true">›</span></button>
+        <div class="nav-sub">
+          <button type="button" class="nav-item" onclick="showPage('objednavky',this)" id="navObjednavky"><span class="nav-text">Objednávky</span><span class="nav-badge" id="navBadge" style="display:none">0</span></button>
+          <button type="button" class="nav-item" onclick="showPage('zakaznici',this)"><span class="nav-text">Zákazníci</span></button>
+          <button type="button" class="nav-item" onclick="showPage('vratkyzadosti',this)" id="navVratkyZadosti"><span class="nav-text">Vrácení</span><span class="nav-badge" id="navBadgeVratky" style="display:none">0</span></button>
+          <button type="button" class="nav-item" onclick="showPage('poukazy',this)" id="navPoukazy"><span class="nav-text">Dárkové poukazy</span><span class="nav-badge" id="navBadgePoukazy" style="display:none">0</span></button>
+        </div>
+      </div>
+
+      <div class="nav-group">
+        <button type="button" class="nav-group-btn" onclick="prepnoutSkupinu(this)" aria-expanded="false" title="Prodejna"><span class="icon">🏪</span><span class="nav-text">Prodejna</span><span class="nav-group-dot" aria-hidden="true"></span><span class="nav-sipka" aria-hidden="true">›</span></button>
+        <div class="nav-sub">
+          <button type="button" class="nav-item nav-akce" onclick="showPage('prodejna',this);otevritNovyProdejProdejna()"><span class="nav-text">+ Nový prodej</span></button>
+          <button type="button" class="nav-item" onclick="showPage('prodejna',this,'historie')"><span class="nav-text">Historie prodejů</span></button>
+          <button type="button" class="nav-item" onclick="showPage('prodejna',this,'vratky')"><span class="nav-text">Vratky</span></button>
+        </div>
+      </div>
+
+      <div class="nav-group">
+        <button type="button" class="nav-group-btn" onclick="prepnoutSkupinu(this)" aria-expanded="false" title="Sklad"><span class="icon">📦</span><span class="nav-text">Sklad</span><span class="nav-group-dot" aria-hidden="true"></span><span class="nav-sipka" aria-hidden="true">›</span></button>
+        <div class="nav-sub">
+          <button type="button" class="nav-item" onclick="showPage('sklad',this)"><span class="nav-text">Stav skladu</span></button>
+          <button type="button" class="nav-item" onclick="showPage('sklad',this,'pohyby')"><span class="nav-text">Pohyby skladu</span></button>
+        </div>
+      </div>
+
+      <div class="nav-group">
+        <button type="button" class="nav-group-btn" onclick="prepnoutSkupinu(this)" aria-expanded="false" title="Sortiment"><span class="icon">👟</span><span class="nav-text">Sortiment</span><span class="nav-group-dot" aria-hidden="true"></span><span class="nav-sipka" aria-hidden="true">›</span></button>
+        <div class="nav-sub">
+          <button type="button" class="nav-item" onclick="showPage('produkty',this)"><span class="nav-text">Produkty</span></button>
+          <button type="button" class="nav-item" onclick="showPage('modely',this)"><span class="nav-text">Modely bot</span></button>
+          <button type="button" class="nav-item" onclick="showPage('kategorie',this)"><span class="nav-text">Kategorie</span></button>
+        </div>
+      </div>
+
+      <button type="button" class="nav-item nav-hlavni" onclick="showPage('rezervace',this)" id="navRezervace" title="Rezervace"><span class="icon">📅</span><span class="nav-text">Rezervace</span><span class="nav-badge" id="navBadgeRez" style="display:none">0</span></button>
+
+      <div class="nav-group">
+        <button type="button" class="nav-group-btn" onclick="prepnoutSkupinu(this)" aria-expanded="false" title="Reporty"><span class="icon">📈</span><span class="nav-text">Reporty</span><span class="nav-group-dot" aria-hidden="true"></span><span class="nav-sipka" aria-hidden="true">›</span></button>
+        <div class="nav-sub">
+          <button type="button" class="nav-item" onclick="showPage('ucetnictvi',this,'reportTrzby')"><span class="nav-text">Tržby</span></button>
+          <button type="button" class="nav-item" onclick="showPage('prodejna',this,'prehledy')"><span class="nav-text">Prodeje</span></button>
+          <button type="button" class="nav-item" onclick="showPage('poukazy',this)"><span class="nav-text">Poukazy</span></button>
+          <button type="button" class="nav-item" onclick="showPage('ucetnictvi',this)"><span class="nav-text">Účetnictví</span></button>
+        </div>
+      </div>
+
+      <div class="nav-group">
+        <button type="button" class="nav-group-btn" onclick="prepnoutSkupinu(this)" aria-expanded="false" title="Web"><span class="icon">🌐</span><span class="nav-text">Web</span><span class="nav-group-dot" aria-hidden="true"></span><span class="nav-sipka" aria-hidden="true">›</span></button>
+        <div class="nav-sub">
+          <button type="button" class="nav-item" onclick="showPage('texty',this)"><span class="nav-text">Texty webu</span></button>
+          <button type="button" class="nav-item" onclick="showPage('kategorie',this,'webPoukazDlazdice')"><span class="nav-text">Dárkové poukazy</span></button>
+        </div>
+      </div>
+
+      <div class="nav-group">
+        <button type="button" class="nav-group-btn" onclick="prepnoutSkupinu(this)" aria-expanded="false" title="Nastavení"><span class="icon">⚙️</span><span class="nav-text">Nastavení</span><span class="nav-group-dot" aria-hidden="true"></span><span class="nav-sipka" aria-hidden="true">›</span></button>
+        <div class="nav-sub">
+          <button type="button" class="nav-item" onclick="showPage('nastaveni',this)"><span class="nav-text">Otevírací doba</span></button>
+          <button type="button" class="nav-item" onclick="showPage('newsletter',this)"><span class="nav-text">Newsletter</span></button>
+          <button type="button" class="nav-item" onclick="showPage('nastaveni',this,'nastaveni-doprava')"><span class="nav-text">Systém</span></button>
+        </div>
+      </div>
+    </div>
+    <div class="sidebar-footer">
+      <button type="button" class="nav-sbalit" onclick="prepnoutSbaleniMenu()" aria-label="Sbalit menu" title="Sbalit / rozbalit menu"><span class="icon" aria-hidden="true">«</span><span class="nav-text">Sbalit menu</span></button>
+      <button type="button" class="logout-btn" onclick="logout()" title="Odhlásit"><span class="icon" aria-hidden="true">🚪</span><span class="nav-text">Odhlásit</span></button>
+    </div>
+  </nav>
+  <div class="sidebar-zaves" id="sidebarZaves" onclick="toggleSidebar(false)"></div>
 
   <div class="main">
 
@@ -287,31 +411,61 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     <div class="page active" id="page-prehled">
       <div class="page-header">
         <div class="page-title">📊 Přehled</div>
-        <button class="refresh-btn" onclick="loadPrehled()">↻ Obnovit</button>
-      </div>
-      <div class="stats-grid">
-        <div class="stat-card"><div class="stat-label">Tržby celkem</div><div class="stat-value" id="statTrzby">...</div><div class="stat-sub">bez zrušených</div></div>
-        <div class="stat-card"><div class="stat-label">Objednávky</div><div class="stat-value" id="statObjednavky">...</div><div class="stat-sub stat-red" id="statNove"></div></div>
-        <div class="stat-card"><div class="stat-label">Zákazníci</div><div class="stat-value" id="statZakaznici">—</div></div>
-        <div class="stat-card"><div class="stat-label">Nízký stav skladu</div><div class="stat-value stat-red" id="statNizkyStav">...</div><div class="stat-sub stat-red">položek</div></div>
-        <div class="stat-card"><div class="stat-label">Hodnota skladu</div><div class="stat-value" id="statHodnotaSkladu">...</div><div class="stat-sub">v prodejních cenách</div></div>
+        <div class="table-actions">
+          <button class="btn btn-primary" onclick="showPage('prodejna');otevritNovyProdejProdejna()">+ Nový prodej</button>
+          <button class="refresh-btn" onclick="loadPrehled()">↻ Obnovit</button>
+        </div>
       </div>
 
-      <div class="chart-wrap no-print">
-        <div class="chart-title">📈 Tržby po měsících</div>
-        <div class="bar-chart" id="barChart"><div class="loading">Načítám...</div></div>
+      <!-- Čtyři hlavní karty - jen ze stávajících dat (objednávky, prodejna, rezervace, sklad) -->
+      <div class="stats-grid prehled-karty">
+        <button type="button" class="stat-card stat-odkaz karta-trzba" onclick="showPage('ucetnictvi',null,'reportTrzby')">
+          <span class="stat-label">Dnešní tržba</span><span class="stat-value" id="prehledDnesTrzba">...</span><span class="stat-sub" id="prehledDnesTrzbaRozpad"></span>
+        </button>
+        <button type="button" class="stat-card stat-odkaz karta-objednavky" onclick="otevritObjednavkyFiltr('nova')">
+          <span class="stat-label">Nové objednávky</span><span class="stat-value" id="prehledNoveObj">...</span><span class="stat-sub" id="prehledNoveObjSub"></span>
+        </button>
+        <button type="button" class="stat-card stat-odkaz karta-rezervace" onclick="showPage('rezervace')">
+          <span class="stat-label">Dnešní rezervace</span><span class="stat-value" id="prehledDnesRez">...</span><span class="stat-sub" id="prehledDnesRezSub"></span>
+        </button>
+        <button type="button" class="stat-card stat-odkaz karta-sklad" onclick="otevritSkladFiltr('nizky')">
+          <span class="stat-label">Nízký sklad</span><span class="stat-value" id="statNizkyStav">...</span><span class="stat-sub" id="statNizkyStavSub">položek</span>
+        </button>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div class="table-wrap">
+        <div class="table-header"><h3>🔔 Co vyžaduje pozornost</h3></div>
+        <div id="prehledPozornost"><div class="loading">Načítám...</div></div>
+      </div>
+
+      <div class="prehled-mrizka">
         <div class="table-wrap">
-          <div class="table-header"><h3>📦 Nové objednávky</h3><button class="refresh-btn" onclick="loadPrehled()">↻</button></div>
+          <div class="table-header"><h3>📦 Poslední objednávky</h3><button class="btn btn-outline btn-sm" onclick="showPage('objednavky')">Všechny</button></div>
           <div id="prehledNovaTable"><div class="loading">Načítám...</div></div>
         </div>
         <div class="table-wrap">
-          <div class="table-header"><h3>⚠️ Nízký stav skladu</h3></div>
+          <div class="table-header"><h3>📅 Dnešní rezervace</h3><button class="btn btn-outline btn-sm" onclick="showPage('rezervace')">Všechny</button></div>
+          <div id="prehledRezervaceTable"><div class="loading">Načítám...</div></div>
+        </div>
+        <div class="table-wrap">
+          <div class="table-header"><h3>⚠️ Nízký sklad</h3><button class="btn btn-outline btn-sm" onclick="otevritSkladFiltr('vse')">Sklad</button></div>
           <div id="prehledSkladTable"><div class="loading">Načítám...</div></div>
         </div>
       </div>
+
+      <!-- Dosavadní celkové údaje Přehledu; v etapě 3 se přesunou do Reportů -->
+      <details class="prehled-celkove">
+        <summary>Celkové údaje (tržby celkem, hodnota skladu, tržby po měsících)</summary>
+        <div class="stats-grid" style="margin-top:16px">
+          <div class="stat-card"><div class="stat-label">Tržby celkem</div><div class="stat-value" id="statTrzby">...</div><div class="stat-sub">bez zrušených</div></div>
+          <div class="stat-card"><div class="stat-label">Objednávky</div><div class="stat-value" id="statObjednavky">...</div><div class="stat-sub stat-red" id="statNove"></div></div>
+          <div class="stat-card"><div class="stat-label">Hodnota skladu</div><div class="stat-value" id="statHodnotaSkladu">...</div><div class="stat-sub">v prodejních cenách</div></div>
+        </div>
+        <div class="chart-wrap no-print">
+          <div class="chart-title">📈 Tržby po měsících</div>
+          <div class="bar-chart" id="barChart"><div class="loading">Načítám...</div></div>
+        </div>
+      </details>
     </div>
 
     <!-- OBJEDNÁVKY -->
@@ -325,14 +479,14 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           <button class="refresh-btn no-print" onclick="loadObjednavky()">↻</button>
         </div>
       </div>
-      <div class="filter-pills">
-        <span class="pill active" onclick="filtrovatObjednavky('vse',this)">Vše</span>
-        <span class="pill" onclick="filtrovatObjednavky('nova',this)">🟢 Nové</span>
-        <span class="pill" onclick="filtrovatObjednavky('vyrizuje',this)">🟡 Vyřizuje se</span>
-        <span class="pill" onclick="filtrovatObjednavky('zaplacena',this)">🟣 Zaplaceno</span>
-        <span class="pill" onclick="filtrovatObjednavky('odeslana',this)">🔵 Odesláno</span>
-        <span class="pill" onclick="filtrovatObjednavky('dorucena',this)">✅ Doručeno</span>
-        <span class="pill" onclick="filtrovatObjednavky('zrusena',this)">❌ Zrušeno</span>
+      <div class="filter-pills" id="objednavkyFiltry">
+        <span class="pill active" onclick="filtrovatObjednavky('vse',this)" data-filtr="vse">Vše</span>
+        <span class="pill" onclick="filtrovatObjednavky('nova',this)" data-filtr="nova">🟢 Nové</span>
+        <span class="pill" onclick="filtrovatObjednavky('vyrizuje',this)" data-filtr="vyrizuje">🟡 Vyřizuje se</span>
+        <span class="pill" onclick="filtrovatObjednavky('zaplacena',this)" data-filtr="zaplacena">🟣 Zaplaceno</span>
+        <span class="pill" onclick="filtrovatObjednavky('odeslana',this)" data-filtr="odeslana">🔵 Odesláno</span>
+        <span class="pill" onclick="filtrovatObjednavky('dorucena',this)" data-filtr="dorucena">✅ Doručeno</span>
+        <span class="pill" onclick="filtrovatObjednavky('zrusena',this)" data-filtr="zrusena">❌ Zrušeno</span>
       </div>
       <div class="table-wrap">
         <div id="objednavkyTable"><div class="loading">Načítám...</div></div>
@@ -342,11 +496,12 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     <!-- ŽÁDOSTI O VRÁCENÍ -->
     <div class="page" id="page-vratkyzadosti">
       <div class="page-header">
-        <div class="page-title">↩️ Žádosti o vrácení</div>
+        <div class="page-title">↩️ Vrácení</div>
         <div class="table-actions">
           <button class="refresh-btn no-print" onclick="loadVratkyZadosti()">↻</button>
         </div>
       </div>
+      <p style="color:var(--text-light);font-size:0.85rem;margin:-8px 0 14px">Žádosti zákazníků z e-shopu o vrácení zboží. Vrácení zboží přímo v prodejně je v Prodejna → Vratky.</p>
       <div class="table-wrap">
         <div id="vratkyZadostiTable"><div class="loading">Načítám...</div></div>
       </div>
@@ -357,7 +512,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <div class="page-header">
         <div class="page-title">👥 Zákazníci</div>
         <div class="table-actions">
-          <input type="text" class="search-input" placeholder="🔍 Hledat..." oninput="hledatZakazniky(this.value)">
+          <input type="text" class="search-input" id="zakazniciHledat" placeholder="🔍 Hledat zákazníka" aria-label="Hledat zákazníka podle jména, e-mailu nebo telefonu" oninput="hledatZakazniky(this.value)">
           <button class="btn btn-primary" onclick="openModal('modalNovyZakaznik')">+ Přidat zákazníka</button>
           <button class="btn btn-csv no-print" onclick="exportCSV('zakaznici')">⬇ CSV</button>
           <button class="refresh-btn no-print" onclick="loadZakaznici()">↻</button>
@@ -394,10 +549,10 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     </div>
 
     <!-- SKLAD -->
-    <div class="page" id="page-sklad">
+    <div class="page" id="page-sklad" data-vychozi-pohled="stav">
       <div class="page-header">
-        <div class="page-title">🏪 Sklad</div>
-        <div class="table-actions">
+        <div class="page-title">📦 Sklad</div>
+        <div class="table-actions" data-pohled="stav">
           <button class="btn btn-green" onclick="openModal('modalNaskladnit')">+ Naskladnit</button>
           <button class="btn btn-red no-print" onclick="smazatVybraneSklad()">🗑️ Smazat vybrané</button>
           <button class="btn btn-csv no-print" onclick="exportCSV('sklad')">⬇ CSV</button>
@@ -405,15 +560,22 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           <button class="refresh-btn no-print" onclick="loadSklad()">↻</button>
         </div>
       </div>
-      <div class="filter-pills">
-        <span class="pill active" onclick="filtrovatSklad('vse',this)">Vše</span>
-        <span class="pill" onclick="filtrovatSklad('nizky',this)">⚠️ Nízký stav</span>
-        <span class="pill" onclick="filtrovatSklad('nula',this)">❌ Vyprodáno</span>
+      <div class="pohledy" role="tablist" aria-label="Sklad">
+        <button type="button" role="tab" data-cil="stav" onclick="prepnoutPohled('sklad','stav')">Stav skladu</button>
+        <button type="button" role="tab" data-cil="pohyby" onclick="prepnoutPohled('sklad','pohyby')">Pohyby skladu</button>
       </div>
-      <div class="table-wrap">
+      <div class="sklad-filtry" data-pohled="stav" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+        <input type="text" class="search-input" id="skladHledat" placeholder="🔍 Hledat (název, značka, EAN, velikost)" aria-label="Hledat ve skladu" style="width:280px;max-width:100%" oninput="vykreslitSklad()">
+        <div class="filter-pills" id="skladFiltry" style="margin:0">
+          <span class="pill active" data-filtr="vse" onclick="filtrovatSklad('vse',this)">Vše</span>
+          <span class="pill" data-filtr="nizky" onclick="filtrovatSklad('nizky',this)">⚠️ Nízký stav</span>
+          <span class="pill" data-filtr="nula" onclick="filtrovatSklad('nula',this)">❌ Vyprodáno</span>
+        </div>
+      </div>
+      <div class="table-wrap" data-pohled="stav">
         <div id="skladTable"><div class="loading">Načítám...</div></div>
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap" id="skladPohyby" data-pohled="pohyby">
         <div class="table-header"><h3>📋 Pohyby skladu</h3>
           <div style="display:flex;gap:8px">
             <button class="btn btn-red btn-sm no-print" onclick="smazatVybranePohyby()">🗑️ Smazat vybrané</button>
@@ -476,39 +638,44 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     
     
     <!-- PRODEJNA -->
-    <div class="page" id="page-prodejna">
+    <div class="page" id="page-prodejna" data-vychozi-pohled="historie">
       <div class="page-header">
         <div class="page-title">🏪 Prodejna</div>
         <div class="table-actions">
-          <button class="btn btn-primary" onclick="otevritNovyProdejProdejna()">+ Nový prodej</button>
+          <button class="btn btn-primary btn-velky" onclick="otevritNovyProdejProdejna()">+ Nový prodej</button>
           <button class="btn btn-outline no-print" onclick="zkusebniTisk()">🖨️ Zkušební tisk</button>
           <button class="btn btn-csv no-print" onclick="exportCSV('prodejna')">⬇ CSV</button>
           <button class="refresh-btn" onclick="loadProdejna()">↻ Obnovit</button>
         </div>
       </div>
-      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="pohledy" role="tablist" aria-label="Prodejna">
+        <button type="button" role="tab" data-cil="historie" onclick="prepnoutPohled('prodejna','historie')">Historie prodejů</button>
+        <button type="button" role="tab" data-cil="vratky" onclick="prepnoutPohled('prodejna','vratky')">Vratky</button>
+        <button type="button" role="tab" data-cil="prehledy" onclick="prepnoutPohled('prodejna','prehledy')">Uzávěrky a přehledy</button>
+      </div>
+      <div class="stats-grid" data-pohled="historie prehledy" style="grid-template-columns:repeat(4,1fr)">
         <div class="stat-card"><div class="stat-label">Tržby prodejna celkem</div><div class="stat-value" id="prodejnaTrzby">...</div></div>
         <div class="stat-card"><div class="stat-label">Počet prodejů</div><div class="stat-value" id="prodejnaPocet">...</div></div>
         <div class="stat-card"><div class="stat-label">Dnes</div><div class="stat-value" id="prodejnaDnes">...</div></div>
         <div class="stat-card"><div class="stat-label">Vratky celkem</div><div class="stat-value" id="vratkyTrzby" style="color:var(--brown)">...</div></div>
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap" id="prodejnaPrehledy" data-pohled="prehledy">
         <div class="table-header"><h3>📅 Denní přehled</h3>
           <button class="btn btn-print btn-sm no-print" onclick="tisknoutUzaverku(denniKlic(new Date()))">🖨️ Uzávěrka dnes</button>
         </div>
         <div id="denniPrehledTable"><div class="loading">Načítám...</div></div>
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap" data-pohled="prehledy">
         <div class="table-header"><h3>📆 Měsíční přehled</h3>
           <button class="btn btn-print btn-sm no-print" onclick="tisknoutMesicniUzaverku(mesicniKlic(new Date()))">🖨️ Uzávěrka tento měsíc</button>
         </div>
         <div id="mesicniPrehledTable"><div class="loading">Načítám...</div></div>
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap" id="prodejnaHistorie" data-pohled="historie">
         <div class="table-header"><h3>📋 Historie prodejů v prodejně</h3></div>
         <div id="prodejnaTable"><div class="loading">Načítám...</div></div>
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap" id="prodejnaVratky" data-pohled="vratky">
         <div class="table-header"><h3>↩️ Vratky</h3>
           <div style="display:flex;gap:8px">
             <button class="btn btn-csv btn-sm no-print" onclick="exportCSV('vratky')">⬇ CSV</button>
@@ -529,7 +696,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <div class="table-header"><h3>Seznam kategorií</h3><button class="refresh-btn" onclick="loadKategorie()">↻ Obnovit</button></div>
         <div id="kategorieTable"><div class="loading">Načítám...</div></div>
       </div>
-      <div class="table-wrap" style="margin-top:20px;padding:20px">
+      <div class="table-wrap" id="webPoukazDlazdice" style="margin-top:20px;padding:20px">
         <h3 style="margin-bottom:6px">🎁 Dlaždice „Dárkové poukazy“</h3>
         <p style="color:var(--text-light);font-size:0.85rem;margin-bottom:14px">Poslední dlaždice v e-shopu. Bez nahraného obrázku ukazuje náhled vašeho poukazu – nahráním ho můžeš nahradit vlastním obrázkem.</p>
         <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
@@ -566,7 +733,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <div class="stat-card"><div class="stat-label">Zboží vydané za poukazy</div><div class="stat-value" id="ucetPoukazyZbozi" style="color:var(--sage)">...</div></div>
       </div>
       <div class="table-wrap">
-        <div class="table-header"><h3>📅 Tržby po měsících</h3></div>
+        <div class="table-header" id="reportTrzby"><h3>📅 Tržby po měsících</h3></div>
         <div id="ucetMesice"><div class="loading">Načítám...</div></div>
       </div>
       <div class="table-wrap">
@@ -1433,15 +1600,99 @@ if (sessionStorage.getItem('adminHeslo')) {
   setInterval(checkNoveObjednavky, 60000);
 }
 
-function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('open');
+// MENU (nová administrace): skupiny s podmenu, sbalení na ikony (tablet), vysouvací menu (mobil)
+const MOBIL_MENU = window.matchMedia('(max-width:768px)');
+function toggleSidebar(otevrit) {
+  const sb = document.getElementById('sidebar');
+  const ot = typeof otevrit === 'boolean' ? otevrit : !sb.classList.contains('open');
+  sb.classList.toggle('open', ot);
+  document.getElementById('sidebarZaves').classList.toggle('open', ot);
+  document.getElementById('menuToggle').setAttribute('aria-expanded', String(ot));
+  document.getElementById('menuToggle').setAttribute('aria-label', ot ? 'Zavřít menu' : 'Otevřít menu');
 }
+function otevritSkupinu(skupina, otevrit) {
+  skupina.classList.toggle('otevrena', otevrit);
+  skupina.querySelector('.nav-group-btn').setAttribute('aria-expanded', String(otevrit));
+}
+function prepnoutSkupinu(btn) {
+  const skupina = btn.closest('.nav-group');
+  // Ve sbaleném menu klik na ikonu skupiny menu rozbalí a skupinu otevře
+  if (document.body.classList.contains('menu-sbalene') && !MOBIL_MENU.matches) {
+    nastavitSbaleniMenu(false);
+    otevritSkupinu(skupina, true);
+    return;
+  }
+  otevritSkupinu(skupina, !skupina.classList.contains('otevrena'));
+}
+function nastavitSbaleniMenu(sbalit) {
+  document.body.classList.toggle('menu-sbalene', sbalit);
+  const btn = document.querySelector('.nav-sbalit');
+  if (btn) btn.setAttribute('aria-label', sbalit ? 'Rozbalit menu' : 'Sbalit menu');
+  try { localStorage.setItem('adminMenuSbalene', sbalit ? '1' : '0'); } catch (e) {}
+}
+function prepnoutSbaleniMenu() { nastavitSbaleniMenu(!document.body.classList.contains('menu-sbalene')); }
+// Výchozí stav: na tabletu sbalené, na počítači rozbalené; jinak podle poslední volby
+(function () {
+  let ulozene = null;
+  try { ulozene = localStorage.getItem('adminMenuSbalene'); } catch (e) {}
+  const sbalit = ulozene === null ? window.matchMedia('(min-width:769px) and (max-width:1199px)').matches : ulozene === '1';
+  document.body.classList.toggle('menu-sbalene', sbalit);
+})();
+// Zvýraznit skupinu s aktivní položkou a otevřít ji (bez rozbalení sbaleného menu)
+// Bez kliknutí v menu (např. odkaz z Přehledu) se zvýrazní hlavní položka dané stránky.
+// Otevřená zůstane jen skupina s aktivní položkou, ať je menu krátké.
+function polozkaMenuProStranku(name, pohled) {
+  const polozky = [...document.querySelectorAll('.sidebar .nav-item:not(.nav-akce)')];
+  const sPohledem = pohled && polozky.find(p => (p.getAttribute('onclick') || '').startsWith(`showPage('${name}',this,'${pohled}')`));
+  if (sPohledem) return sPohledem;
+  return polozky.find(p => p.getAttribute('onclick') === `showPage('${name}',this)`)
+    || polozky.find(p => (p.getAttribute('onclick') || '').startsWith(`showPage('${name}',this`)) || null;
+}
+// Záložky stránky (data-pohled): ukáže jen části patřící ke zvolené záložce.
+// Vrací true, když stránka záložku "pohled" má.
+function nastavitPohled(stranka, pohled) {
+  const page = document.getElementById('page-'+stranka);
+  const casti = [...page.querySelectorAll('[data-pohled]')];
+  if (!casti.length) return false;
+  const platny = !!pohled && casti.some(c => c.dataset.pohled.split(' ').includes(pohled));
+  const p = platny ? pohled : page.dataset.vychoziPohled;
+  casti.forEach(c => { c.hidden = !c.dataset.pohled.split(' ').includes(p); });
+  page.querySelectorAll('.pohledy [data-cil]').forEach(b => {
+    b.classList.toggle('active', b.dataset.cil === p);
+    b.setAttribute('aria-selected', String(b.dataset.cil === p));
+  });
+  return platny;
+}
+// Klik na záložku: bez znovunačtení dat, jen přepnout a zvýraznit položku menu
+function prepnoutPohled(stranka, pohled) {
+  nastavitPohled(stranka, pohled);
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const el = polozkaMenuProStranku(stranka, pohled);
+  if (el) el.classList.add('active');
+  zvyraznitVMenu(el);
+  window.scrollTo(0, 0);
+}
+function zvyraznitVMenu(el) {
+  const skupina = el && el.closest('.nav-group');
+  document.querySelectorAll('.nav-group').forEach(g => {
+    g.classList.toggle('ma-aktivni', g === skupina);
+    otevritSkupinu(g, g === skupina);
+  });
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('sidebar').classList.contains('open')) {
+    toggleSidebar(false);
+    document.getElementById('menuToggle').focus();
+  }
+});
 
-function showPage(name, el) {
+function showPage(name, el, kotva) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-'+name).classList.add('active');
+  if (!el) el = polozkaMenuProStranku(name, kotva);
   if (el) el.classList.add('active');
+  zvyraznitVMenu(el);
   if (name==='objednavky') loadObjednavky();
   if (name==='zakaznici') loadZakaznici();
   if (name==='sklad') { loadSklad(); loadPohyby(); }
@@ -1456,8 +1707,12 @@ function showPage(name, el) {
   if (name==='newsletter') loadNewsletter();
   if (name==='vratkyzadosti') loadVratkyZadosti();
   if (name==='poukazy') loadPoukazy();
-  // Close mobile sidebar
-  document.getElementById('sidebar').classList.remove('open');
+  // Zavřít menu na mobilu; záložka stránky, nebo kotva na její část, jinak nahoru
+  toggleSidebar(false);
+  const jePohled = nastavitPohled(name, kotva);
+  const cil = !jePohled && kotva && document.getElementById(kotva);
+  if (cil) setTimeout(() => cil.scrollIntoView({ block: 'start' }), 50);
+  else window.scrollTo(0, 0);
 }
 
 function stavBadge(stav) {
@@ -1507,37 +1762,126 @@ document.addEventListener('click', e => {
   if (!e.target.closest('.global-search')) document.getElementById('searchResults').style.display = 'none';
 });
 
-// PŘEHLED
+// PŘEHLED - co je dnes potřeba udělat. Jen ze stávajících API a se stejnými
+// pravidly jako dosud (tržby bez zrušených objednávek, poukaz započtený při
+// prodeji se v tržbách nepočítá podruhé, nízký sklad = kusů <= minimum).
+function dnesniDatumIso() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function jeDnes(datum) {
+  return new Date(datum).toLocaleDateString('cs-CZ') === new Date().toLocaleDateString('cs-CZ');
+}
+// 1 nová objednávka / 2 nové objednávky / 5 nových objednávek
+function pocetSlovy(n, [jedna, dveAzCtyri, pet]) {
+  return `${n} ${n === 1 ? jedna : n >= 2 && n <= 4 ? dveAzCtyri : pet}`;
+}
+const pole = x => Array.isArray(x) ? x : [];
+
 async function loadPrehled() {
   try {
-    const [obj, sklad, prodejna, celySklad, poukazyPouziti] = await Promise.all([
+    const [obj, prodejna, celySklad, poukazyPouziti, rezervace, sloty, zadostiVratky, zadostiPoukazy] = await Promise.all([
       adminFetch(API+'/objednavky').then(r=>r.json()).catch(()=>[]),
-      adminFetch(API+'/sklad/nizky-stav').then(r=>r.json()).catch(()=>[]),
       adminFetch(API+'/prodejna').then(r=>r.json()).catch(()=>[]),
       adminFetch(API+'/sklad/admin').then(r=>r.json()).catch(()=>[]),
-      adminFetch(API+'/poukazy/pouziti/vse').then(r=>r.json()).catch(()=>[])
+      adminFetch(API+'/poukazy/pouziti/vse').then(r=>r.json()).catch(()=>[]),
+      adminFetch(API+'/rezervace').then(r=>r.json()).catch(()=>[]),
+      adminFetch(API+'/rezervace/sloty').then(r=>r.json()).catch(()=>[]),
+      adminFetch(API+'/vratky-zadosti').then(r=>r.json()).catch(()=>[]),
+      adminFetch(API+'/poukazy/zadosti/vse').then(r=>r.json()).catch(()=>[])
     ]);
-    const platne = Array.isArray(obj) ? obj.filter(o=>o.stav!=='zrusena') : [];
+    const objednavky = pole(obj);
+    const platne = objednavky.filter(o=>o.stav!=='zrusena');
     // Uplatnění poukazu, u kterého už byly peníze připočítané do tržeb při jeho prodeji,
     // se do tržeb podruhé nezapočítává (viz Účetnictví).
     const jizZapocitanoProdejIdPrehled = new Set(
-      (Array.isArray(poukazyPouziti) ? poukazyPouziti : []).filter(x=>x.zapocitano_pri_vydani && x.prodej_id).map(x=>x.prodej_id)
+      pole(poukazyPouziti).filter(x=>x.zapocitano_pri_vydani && x.prodej_id).map(x=>x.prodej_id)
     );
-    const prodejnaProdeje = (Array.isArray(prodejna) ? prodejna : []).filter(p=>!jizZapocitanoProdejIdPrehled.has(p.id));
+    const prodejnaProdeje = pole(prodejna).filter(p=>!jizZapocitanoProdejIdPrehled.has(p.id));
+
+    // --- Karty ---
+    const dnesEshop = platne.filter(o=>jeDnes(o.vytvoreno)).reduce((s,o)=>s+Number(o.celkem),0);
+    const dnesProdejna = prodejnaProdeje.filter(p=>jeDnes(p.datum)).reduce((s,p)=>s+Number(p.celkem),0);
+    document.getElementById('prehledDnesTrzba').textContent = (dnesEshop + dnesProdejna).toLocaleString('cs-CZ')+' Kč';
+    document.getElementById('prehledDnesTrzbaRozpad').textContent = `prodejna ${dnesProdejna.toLocaleString('cs-CZ')} Kč · e-shop ${dnesEshop.toLocaleString('cs-CZ')} Kč`;
+
+    const nove = objednavky.filter(o=>o.stav==='nova');
+    document.getElementById('prehledNoveObj').textContent = nove.length;
+    document.getElementById('prehledNoveObjSub').textContent = nove.length ? `za ${nove.reduce((s,o)=>s+Number(o.celkem),0).toLocaleString('cs-CZ')} Kč` : 'vše vyřízeno';
+
+    const slotPodleId = new Map(pole(sloty).map(s=>[s.id, { ...s, datum: String(s.datum).slice(0,10) }]));
+    const dnesIso = dnesniDatumIso();
+    const rezervaceDnes = pole(rezervace)
+      .filter(r=>r.stav!=='zrusena' && slotPodleId.has(r.slot_id) && slotPodleId.get(r.slot_id).datum===dnesIso)
+      .map(r=>({ ...r, slot: slotPodleId.get(r.slot_id) }))
+      .sort((a,b)=>a.slot.cas_od.localeCompare(b.slot.cas_od));
+    document.getElementById('prehledDnesRez').textContent = rezervaceDnes.length;
+    const dnesCekajici = rezervaceDnes.filter(r=>r.stav==='cekajici').length;
+    document.getElementById('prehledDnesRezSub').textContent = rezervaceDnes.length
+      ? (dnesCekajici ? `${dnesCekajici} čeká na potvrzení` : 'vše potvrzeno')
+      : 'dnes žádné';
+
+    // Nízký sklad: stejné pravidlo jako /sklad/nizky-stav (kusů <= minimum), ale s ID
+    // produktu - z něj jde rovnou naskladnit
+    const nizke = pole(celySklad).filter(s=>s.nizky_stav && s.velikost != null).sort((a,b)=>a.pocet_kusu-b.pocet_kusu);
+    const vyprodane = nizke.filter(s=>Number(s.pocet_kusu)===0).length;
+    document.getElementById('statNizkyStav').textContent = nizke.length;
+    document.getElementById('statNizkyStavSub').textContent = nizke.length ? `z toho ${vyprodane} vyprodáno` : 'vše v pořádku';
+
+    // --- Co vyžaduje pozornost ---
+    const radky = [
+      [nove.length, '📦', ['nová objednávka', 'nové objednávky', 'nových objednávek'], "otevritObjednavkyFiltr('nova')", 'karta-objednavky'],
+      [pole(zadostiVratky).filter(z=>z.stav==='nova').length, '↩️', ['žádost o vrácení čeká', 'žádosti o vrácení čekají', 'žádostí o vrácení čeká'], "showPage('vratkyzadosti')", 'karta-vratky'],
+      [pole(rezervace).filter(r=>r.stav==='cekajici').length, '📅', ['rezervace čeká na potvrzení', 'rezervace čekají na potvrzení', 'rezervací čeká na potvrzení'], "showPage('rezervace')", 'karta-rezervace'],
+      [pole(zadostiPoukazy).filter(z=>z.stav==='nova').length, '🎁', ['žádost o dárkový poukaz', 'žádosti o dárkový poukaz', 'žádostí o dárkový poukaz'], "showPage('poukazy')", 'karta-poukazy'],
+      [nizke.length, '⚠️', ['položka s nízkým stavem skladu', 'položky s nízkým stavem skladu', 'položek s nízkým stavem skladu'], "otevritSkladFiltr('nizky')", 'karta-sklad']
+    ].filter(([n]) => n > 0);
+    document.getElementById('prehledPozornost').innerHTML = radky.length === 0
+      ? '<div class="empty">Vše je vyřízené ✅</div>'
+      : `<div class="pozornost-seznam">${radky.map(([n, ikona, tvary, akce, barva]) =>
+          `<button type="button" class="pozornost-radek ${barva}" onclick="${akce}"><span class="pozornost-ikona" aria-hidden="true">${ikona}</span><span class="pozornost-text">${pocetSlovy(n, tvary)}</span><span class="pozornost-sipka" aria-hidden="true">›</span></button>`
+        ).join('')}</div>`;
+
+    // --- Poslední objednávky ---
+    const posledni = objednavky.slice().sort((a,b)=>new Date(b.vytvoreno)-new Date(a.vytvoreno)).slice(0,5);
+    document.getElementById('prehledNovaTable').innerHTML = posledni.length === 0
+      ? '<div class="empty">Zatím žádné objednávky</div>'
+      : `<table><thead><tr><th>Objednávka</th><th>Zákazník</th><th>Částka</th><th>Stav</th></tr></thead><tbody>
+        ${posledni.map(o=>`<tr class="radek-odkaz" onclick="detailObjednavky(${o.id})" title="Otevřít detail">
+          <td><strong>#${escH(o.cislo||o.id)}</strong><br><small style="color:var(--text-light)">${new Date(o.vytvoreno).toLocaleDateString('cs-CZ')}</small></td>
+          <td>${escH(o.jmeno)||'—'}</td>
+          <td><strong>${Number(o.celkem).toLocaleString('cs-CZ')} Kč</strong></td>
+          <td>${stavBadge(o.stav)}${o.stav==='nova' ? `<br><button class="btn btn-green btn-sm" style="margin-top:4px" onclick="event.stopPropagation();zmenitStav(${o.id},'vyrizuje').then(loadPrehled)">Vyřídit</button>` : ''}</td></tr>`).join('')}
+        </tbody></table>`;
+
+    // --- Dnešní rezervace ---
+    document.getElementById('prehledRezervaceTable').innerHTML = rezervaceDnes.length === 0
+      ? '<div class="empty">Dnes žádné rezervace</div>'
+      : `<table><thead><tr><th>Čas</th><th>Zákazník</th><th>Stav</th></tr></thead><tbody>
+        ${rezervaceDnes.map(r=>`<tr class="radek-odkaz" onclick="showPage('rezervace')" title="Otevřít rezervace">
+          <td><strong>${escH(r.slot.cas_od.slice(0,5))}–${escH(r.slot.cas_do.slice(0,5))}</strong></td>
+          <td>${escH(r.jmeno)}<br><small style="color:var(--text-light)">${escH(r.telefon)}</small></td>
+          <td>${r.stav==='cekajici' ? '<span class="badge badge-vyrizuje">⏳ Čeká</span>' : '<span class="badge badge-doruceno">✅ Potvrzena</span>'}</td></tr>`).join('')}
+        </tbody></table>`;
+
+    // --- Nízký sklad ---
+    document.getElementById('prehledSkladTable').innerHTML = nizke.length === 0
+      ? '<div class="empty">Vše v pořádku ✅</div>'
+      : `<table><thead><tr><th>Produkt</th><th>Vel.</th><th>Ks</th><th></th></tr></thead><tbody>
+        ${nizke.slice(0,6).map(s=>`<tr><td><strong>${escH(s.nazev)}</strong></td><td>${escH(s.velikost)}</td>
+        <td><strong style="color:${Number(s.pocet_kusu)===0?'var(--red)':'var(--orange)'}">${Number(s.pocet_kusu)}</strong></td>
+        <td><button class="btn btn-green btn-sm" onclick="rychleNaskladnit(${s.id},${s.velikost},'${escAttr(escJs(s.nazev))}')">+ Naskladnit</button></td></tr>`).join('')}
+        </tbody></table>${nizke.length > 6 ? `<div style="padding:10px 14px"><button class="btn btn-outline btn-sm" onclick="otevritSkladFiltr('nizky')">Všech ${nizke.length} položek</button></div>` : ''}`;
+
+    // --- Celkové údaje (dosavadní obsah Přehledu, v etapě 3 do Reportů) ---
     const trzbyEshop = platne.reduce((s,o)=>s+o.celkem,0);
     const trzbyProdejna = prodejnaProdeje.reduce((s,p)=>s+Number(p.celkem),0);
-    const trzby = trzbyEshop + trzbyProdejna;
-    const nove = Array.isArray(obj) ? obj.filter(o=>o.stav==='nova').length : 0;
-    document.getElementById('statTrzby').textContent = trzby.toLocaleString('cs-CZ')+' Kč';
-    document.getElementById('statObjednavky').textContent = Array.isArray(obj)?obj.length:0;
-    document.getElementById('statNove').textContent = nove+' nových';
-    document.getElementById('statNizkyStav').textContent = Array.isArray(sklad)?sklad.length:0;
-    const hodnotaSkladu = Array.isArray(celySklad)
-      ? celySklad.reduce((s,p)=>s+(Number(p.cena)||0)*(Number(p.pocet_kusu)||0),0)
-      : 0;
+    document.getElementById('statTrzby').textContent = (trzbyEshop + trzbyProdejna).toLocaleString('cs-CZ')+' Kč';
+    document.getElementById('statObjednavky').textContent = objednavky.length;
+    document.getElementById('statNove').textContent = nove.length+' nových';
+    const hodnotaSkladu = pole(celySklad).reduce((s,p)=>s+(Number(p.cena)||0)*(Number(p.pocet_kusu)||0),0);
     document.getElementById('statHodnotaSkladu').textContent = hodnotaSkladu.toLocaleString('cs-CZ')+' Kč';
 
-    // Graf
     const mesice = {};
     const mn = ['Led','Úno','Bře','Dub','Kvě','Čer','Čvc','Srp','Zář','Říj','Lis','Pro'];
     platne.forEach(o => {
@@ -1561,28 +1905,18 @@ async function loadPrehled() {
           return `<div class="bar-item"><div class="bar" style="height:${h}%"><div class="bar-tooltip">${m.trzby.toLocaleString('cs-CZ')} Kč</div><span class="bar-label">${m.label}</span></div></div>`;
         }).join('');
 
-    // Nové objednávky
-    const noveObj = Array.isArray(obj) ? obj.filter(o=>o.stav==='nova').slice(0,5) : [];
-    document.getElementById('prehledNovaTable').innerHTML = noveObj.length === 0
-      ? '<div class="empty">Žádné nové objednávky ✅</div>'
-      : `<table><thead><tr><th>ID</th><th>Zákazník</th><th>Celkem</th><th>Akce</th></tr></thead><tbody>
-        ${noveObj.map(o=>`<tr><td><strong>#${escH(o.cislo||o.id)}</strong></td><td>${escH(o.jmeno)||'—'}</td><td><strong>${o.celkem.toLocaleString('cs-CZ')} Kč</strong></td>
-        <td style="display:flex;gap:4px"><button class="btn btn-blue btn-sm" onclick="detailObjednavky(${o.id})">Detail</button>
-        <button class="btn btn-green btn-sm" onclick="zmenitStav(${o.id},'vyrizuje').then(loadPrehled)">Vyřídit</button></td></tr>`).join('')}
-        </tbody></table>`;
-
-    // Nízký sklad
-    const nizke = Array.isArray(sklad) ? sklad.slice(0,6) : [];
-    document.getElementById('prehledSkladTable').innerHTML = nizke.length === 0
-      ? '<div class="empty">Vše v pořádku! ✅</div>'
-      : `<table><thead><tr><th>Produkt</th><th>Vel.</th><th>Ks</th><th>Akce</th></tr></thead><tbody>
-        ${nizke.map(s=>`<tr><td><strong>${escH(s.nazev)}</strong></td><td>${escH(s.velikost)}</td>
-        <td><strong style="color:${s.pocet_kusu===0?'var(--red)':'var(--orange)'}">${s.pocet_kusu}</strong></td>
-        <td><button class="btn btn-green btn-sm" onclick="rychleNaskladnit(${s.id},${s.velikost},'${escAttr(escJs(s.nazev))}')">+ Naskladnit</button></td></tr>`).join('')}
-        </tbody></table>`;
-
     checkNoveObjednavky();
   } catch(e) { console.error(e); }
+}
+
+// Odkazy z Přehledu na stránku s předvybraným filtrem
+function otevritObjednavkyFiltr(stav) {
+  objednavkyFiltr = stav;
+  showPage('objednavky');
+}
+function otevritSkladFiltr(typ) {
+  skladFiltrTyp = typ;
+  showPage('sklad');
 }
 
 // OBJEDNÁVKY
@@ -1591,20 +1925,21 @@ async function loadObjednavky() {
   try {
     const data = await adminFetch(API+'/objednavky').then(r=>r.json());
     vsechnyObjednavky = Array.isArray(data) ? data : [];
-    renderObjednavky(vsechnyObjednavky);
+    nastavitFiltrObjednavek(objednavkyFiltr);
   } catch(e) { document.getElementById('objednavkyTable').innerHTML = '<div class="error-msg">Chyba načítání</div>'; }
 }
 
 function renderObjednavky(data) {
   if (!data.length) { document.getElementById('objednavkyTable').innerHTML = '<div class="empty">Žádné objednávky</div>'; return; }
   document.getElementById('objednavkyTable').innerHTML = `
-    <table><thead><tr><th>ID</th><th>Zákazník</th><th>Celkem</th><th>Doprava</th><th>Platba</th><th>Stav</th><th>Datum</th><th>Akce</th></tr></thead>
+    <table><thead><tr><th>Objednávka</th><th>Zákazník</th><th>Datum</th><th>Částka</th><th>Stav</th><th>Akce</th></tr></thead>
     <tbody>${data.map(o=>`<tr>
-      <td><strong>#${escH(o.cislo || o.id)}</strong></td>
+      <td><strong>#${escH(o.cislo || o.id)}</strong>
+        <span class="objednavka-info">🚚 ${escH(DOPRAVA_LABELY[o.doprava]||o.doprava)||'—'}${o.vydejni_misto_nazev?` · 📍 ${escH(o.vydejni_misto_nazev)}`:''}</span>
+        <span class="objednavka-info">💳 ${escH(PLATBA_LABELY[o.platba]||o.platba)||'—'}</span></td>
       <td>${escH(o.jmeno)||'—'}<br><small style="color:var(--text-light)">${escH(o.email)}</small></td>
+      <td style="font-size:0.82rem;white-space:nowrap">${new Date(o.vytvoreno).toLocaleDateString('cs-CZ')}</td>
       <td><strong>${o.celkem.toLocaleString('cs-CZ')} Kč</strong></td>
-      <td style="font-size:0.78rem">${escH(DOPRAVA_LABELY[o.doprava]||o.doprava)||'—'}${o.vydejni_misto_nazev?`<br><small style="color:var(--text-light)">📍 ${escH(o.vydejni_misto_nazev)}</small>`:''}</td>
-      <td style="font-size:0.78rem">${escH(PLATBA_LABELY[o.platba]||o.platba)||'—'}</td>
       <td><select class="stav-select" onchange="zmenitStav(${o.id},this.value,this)" data-puvodni="${escAttr(o.stav)}">
         <option ${o.stav==='nova'?'selected':''} value="nova">🟢 Nová</option>
         <option ${o.stav==='vyrizuje'?'selected':''} value="vyrizuje">🟡 Vyřizuje se</option>
@@ -1613,7 +1948,6 @@ function renderObjednavky(data) {
         <option ${o.stav==='dorucena'?'selected':''} value="dorucena">✅ Doručeno</option>
         <option ${o.stav==='zrusena'?'selected':''} value="zrusena">❌ Zrušeno</option>
       </select></td>
-      <td style="font-size:0.78rem">${new Date(o.vytvoreno).toLocaleDateString('cs-CZ')}</td>
       <td style="display:flex;gap:4px">
         <button class="btn btn-blue btn-sm" onclick="detailObjednavky(${o.id})">Detail</button>
         <button class="btn btn-print btn-sm no-print" onclick="tiskObjednavkyId(${o.id})">🖨️</button>
@@ -1643,10 +1977,15 @@ function hledatObjednavky(q) {
   ));
 }
 
-function filtrovatObjednavky(stav, btn) {
-  document.querySelectorAll('.filter-pills .pill').forEach(p => p.classList.remove('active'));
-  btn.classList.add('active');
+// Zvolený filtr zůstane i po obnovení seznamu (a jde předat z Přehledu)
+let objednavkyFiltr = 'vse';
+function nastavitFiltrObjednavek(stav) {
+  objednavkyFiltr = stav;
+  document.querySelectorAll('#objednavkyFiltry .pill').forEach(p => p.classList.toggle('active', p.dataset.filtr === stav));
   renderObjednavky(stav==='vse' ? vsechnyObjednavky : vsechnyObjednavky.filter(o=>o.stav===stav));
+}
+function filtrovatObjednavky(stav, btn) {
+  nastavitFiltrObjednavek(stav);
 }
 
 // selectEl (volitelný) - <select> odkud změna přišla; při chybě se vrátí na
@@ -1925,30 +2264,42 @@ let newsletterSet = new Set();
 async function loadZakaznici() {
   document.getElementById('zakazniciTable').innerHTML = '<div class="loading">Načítám...</div>';
   try {
-    const [data, nl] = await Promise.all([
+    const [data, nl, obj] = await Promise.all([
       adminFetch(API+'/auth/zakaznici').then(r=>r.json()),
-      adminFetch(API+'/newsletter').then(r=>r.json()).catch(()=>[])
+      adminFetch(API+'/newsletter').then(r=>r.json()).catch(()=>[]),
+      adminFetch(API+'/objednavky').then(r=>r.json()).catch(()=>[])
     ]);
     vsechnyZakaznici = Array.isArray(data) ? data : [];
     newsletterSet = new Set((Array.isArray(nl) ? nl : []).map(n => (n.email || '').toLowerCase()));
-    renderZakaznici(vsechnyZakaznici);
+    // Počet a datum poslední objednávky podle vazby objednávky na zákazníka (zakaznik_id)
+    objednavkyZakazniku = new Map();
+    (Array.isArray(obj) ? obj : []).forEach(o => {
+      if (o.zakaznik_id == null) return;
+      const z = objednavkyZakazniku.get(o.zakaznik_id) || { pocet: 0, posledni: null };
+      z.pocet++;
+      if (!z.posledni || new Date(o.vytvoreno) > new Date(z.posledni)) z.posledni = o.vytvoreno;
+      objednavkyZakazniku.set(o.zakaznik_id, z);
+    });
+    const q = document.getElementById('zakazniciHledat').value;
+    if (q) hledatZakazniky(q); else renderZakaznici(vsechnyZakaznici);
   } catch(e) { document.getElementById('zakazniciTable').innerHTML = '<div class="error-msg">Chyba</div>'; }
 }
 
 function renderZakaznici(data) {
   if (!data.length) { document.getElementById('zakazniciTable').innerHTML = '<div class="empty">Žádní zákazníci</div>'; return; }
   document.getElementById('zakazniciTable').innerHTML = `
-    <table><thead><tr><th>ID</th><th>Jméno</th><th>Email</th><th>Telefon</th><th>Město</th><th>Newsletter</th><th>Registrace</th><th>Akce</th></tr></thead>
-    <tbody>${data.map(z=>`<tr>
-      <td>${z.id}</td><td><strong>${escH(z.jmeno)}</strong></td><td>${escH(z.email)}</td>
-      <td>${escH(z.telefon)||'—'}</td><td>${escH(z.mesto)||'—'}</td>
+    <table><thead><tr><th>Jméno</th><th>E-mail</th><th>Telefon</th><th>Počet objednávek</th><th>Poslední objednávka</th><th>Newsletter</th><th>Akce</th></tr></thead>
+    <tbody>${data.map(z=>{ const o = objednavkyZakazniku.get(z.id) || { pocet: 0, posledni: null }; return `<tr>
+      <td><strong>${escH(z.jmeno)||'—'}</strong>${z.mesto?`<br><small style="color:var(--text-light)">${escH(z.mesto)}</small>`:''}</td><td>${escH(z.email)}</td>
+      <td>${escH(z.telefon)||'—'}</td>
+      <td style="text-align:center">${o.pocet}</td>
+      <td>${o.posledni ? new Date(o.posledni).toLocaleDateString('cs-CZ') : '—'}</td>
       <td style="text-align:center">${newsletterSet.has((z.email || '').toLowerCase()) ? '✅' : '—'}</td>
-      <td>${new Date(z.vytvoreno).toLocaleDateString('cs-CZ')}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-outline btn-sm" onclick="upravitZakaznika(${z.id})">✏️ Upravit</button>
         <button class="btn btn-red btn-sm" onclick="smazatZakaznika(${z.id})">🗑️ Smazat</button>
       </td>
-    </tr>`).join('')}</tbody></table>`;
+    </tr>`; }).join('')}</tbody></table>`;
 }
 
 function upravitZakaznika(id) {
@@ -2010,10 +2361,14 @@ async function smazatZakaznika(id) {
   } catch(e) { alert('Chyba spojení'); }
 }
 
+let objednavkyZakazniku = new Map();
 function hledatZakazniky(q) {
+  const h = q.trim().toLowerCase();
+  const hCisla = h.replace(/\s+/g, '');
   renderZakaznici(vsechnyZakaznici.filter(z =>
-    z.jmeno.toLowerCase().includes(q.toLowerCase()) ||
-    z.email.toLowerCase().includes(q.toLowerCase())
+    (z.jmeno||'').toLowerCase().includes(h) ||
+    (z.email||'').toLowerCase().includes(h) ||
+    (hCisla && (z.telefon||'').replace(/\s+/g, '').includes(hCisla))
   ));
 }
 
@@ -2041,7 +2396,7 @@ async function loadSklad() {
     veskerySklad.forEach(s => { if (!produkty[s.id]) produkty[s.id] = {nazev:s.nazev, ean:s.ean}; });
     const popisky = popiskyProduktu(produkty);
     document.getElementById('nsProdukt').innerHTML = Object.keys(produkty).map(id=>`<option value="${id}">${popisky[id]}</option>`).join('');
-    renderSklad(veskerySklad);
+    vykreslitSklad();
   } catch(e) { document.getElementById('skladTable').innerHTML = '<div class="error-msg">Chyba</div>'; }
 }
 
@@ -2106,12 +2461,22 @@ async function smazatVybraneSklad() {
   } catch(e) { alert('❌ Chyba při hromadném mazání'); }
 }
 
+// Filtr (stejná pravidla jako dosud) + hledání; filtr jde předat z Přehledu
+let skladFiltrTyp = 'vse';
+function vykreslitSklad() {
+  const typ = skladFiltrTyp;
+  document.querySelectorAll('#skladFiltry .pill').forEach(p=>p.classList.toggle('active', p.dataset.filtr===typ));
+  let data = typ==='nizky' ? veskerySklad.filter(s=>s.nizky_stav&&s.pocet_kusu>0)
+    : typ==='nula' ? veskerySklad.filter(s=>s.pocet_kusu===0)
+    : veskerySklad;
+  const q = (document.getElementById('skladHledat').value || '').trim().toLowerCase();
+  if (q) data = data.filter(s => [s.nazev, s.znacka, s.ean, s.velikost].some(v => String(v ?? '').toLowerCase().includes(q)));
+  if (!data.length && veskerySklad.length) { document.getElementById('skladTable').innerHTML = '<div class="empty">Nic neodpovídá filtru</div>'; return; }
+  renderSklad(data);
+}
 function filtrovatSklad(typ, btn) {
-  document.querySelectorAll('#page-sklad .filter-pills .pill').forEach(p=>p.classList.remove('active'));
-  btn.classList.add('active');
-  if (typ==='nizky') renderSklad(veskerySklad.filter(s=>s.nizky_stav&&s.pocet_kusu>0));
-  else if (typ==='nula') renderSklad(veskerySklad.filter(s=>s.pocet_kusu===0));
-  else renderSklad(veskerySklad);
+  skladFiltrTyp = typ;
+  vykreslitSklad();
 }
 
 let vybranePohyby = new Set();
@@ -3940,10 +4305,10 @@ function zavritKameruVratka() {
 // ŽÁDOSTI O VRÁCENÍ (z e-shopu)
 // ═══════════════════════════════
 const stavZadostiPopisky = {
-  nova: '<span class="badge badge-nova">🆕 Nová</span>',
-  schvalena: '<span class="badge badge-ok">✅ Schválená</span>',
-  zamitnuta: '<span class="badge badge-zruseno">❌ Zamítnutá</span>',
-  vyrizena: '<span class="badge badge-ok">✔️ Vyřízená</span>'
+  nova: '<span class="badge badge-vyrizuje">⏳ Čeká na vyřízení</span>',
+  schvalena: '<span class="badge badge-odeslano">✅ Schváleno</span>',
+  zamitnuta: '<span class="badge badge-zruseno">❌ Zamítnuto</span>',
+  vyrizena: '<span class="badge badge-doruceno">✔️ Vyřízeno</span>'
 };
 
 async function loadVratkyZadosti() {
