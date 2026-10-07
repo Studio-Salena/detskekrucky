@@ -882,7 +882,10 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     <p style="color:var(--text-light);font-size:0.85rem">ℹ️ Sekce „Vyberte si" na webu se teď generuje automaticky podle kategorií – uprav ji v sekci <strong>🏷️ Kategorie</strong> (Popis a Značky u každé kategorie).</p>
   </div>
 
-  <button class="btn btn-primary" onclick="ulozitTexty()">💾 Uložit texty</button>
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <button class="btn btn-primary" id="textyUlozitBtn" onclick="ulozitTexty()">💾 Uložit texty</button>
+    <div id="textyMsgDole" role="status" aria-live="polite"></div>
+  </div>
   </div>
 </div>
 
@@ -6144,6 +6147,17 @@ async function ulozitTexty() {
   const eshopPruh = document.getElementById('txEshopPruh').value.trim().slice(0, 300);
   const payload = { ...textyWebuData, procBarefoot, trustBadges, mereniKroky, typyChodidel, eshopPruh };
 
+  // Hláška se ukáže u tlačítka (je až na konci dlouhé stránky) i nahoře;
+  // potvrzení po chvíli zmizí, chyba zůstane, dokud se neuloží znovu.
+  const btn = document.getElementById('textyUlozitBtn');
+  const hlaska = (html, trvale) => {
+    for (const id of ['textyMsg', 'textyMsgDole']) document.getElementById(id).innerHTML = html;
+    clearTimeout(ulozitTexty.casovac);
+    if (!trvale) ulozitTexty.casovac = setTimeout(() => hlaska('', true), 6000);
+  };
+  btn.disabled = true;
+  btn.textContent = 'Ukládám…';
+  hlaska('', true);
   try {
     const res = await adminFetch(API+'/nastaveni/texty', {
       method: 'POST',
@@ -6151,13 +6165,15 @@ async function ulozitTexty() {
       body: JSON.stringify(payload)
     });
     if (res.ok) {
-      document.getElementById('textyMsg').innerHTML='<div class="success-msg">✅ Texty uloženy</div>';
-      setTimeout(()=>document.getElementById('textyMsg').innerHTML='', 3000);
+      hlaska(`<div class="success-msg" style="margin:0">✅ Texty uloženy (${new Date().toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' })})</div>`);
     } else {
-      document.getElementById('textyMsg').innerHTML='<div class="error-msg">Chyba ukládání</div>';
+      hlaska('<div class="error-msg" style="margin:0">❌ Texty se nepodařilo uložit. Zkuste to prosím znovu.</div>', true);
     }
   } catch(e) {
-    document.getElementById('textyMsg').innerHTML='<div class="error-msg">Chyba ukládání</div>';
+    hlaska('<div class="error-msg" style="margin:0">❌ Texty se nepodařilo uložit (chyba spojení). Zkuste to prosím znovu.</div>', true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '💾 Uložit texty';
   }
 }
 </script>
