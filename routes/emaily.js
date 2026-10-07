@@ -52,7 +52,7 @@ function qrPlatbaUrl(castka, variabilniSymbol, zprava) {
 }
 
 const DOPRAVA_LABELY = { zasilkovna: 'Zásilkovna', ceska_posta: 'Česká pošta', osobni_odber: 'Osobní odběr' };
-const PLATBA_LABELY = { dobirka: 'Dobírka', prevod: 'Bankovní převod' };
+const PLATBA_LABELY = { dobirka: 'Dobírka', prevod: 'Bankovní převod', na_prodejne: 'Na prodejně při vyzvednutí' };
 
 // Barvy podle skutečné palety webu (eshop.html :root) - ne odhadnuté, ať
 // e-mail opravdu vizuálně ladí s e-shopem.

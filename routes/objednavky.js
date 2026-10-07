@@ -131,12 +131,13 @@ const PSC_RE = /^\d{3}\s?\d{2}$/;
 // Doprava a platba jen z nabídky e-shopu - dřív se uložil jakýkoli text
 // (do adminu i e-mailu) a neznámá doprava se účtovala jako Zásilkovna
 const POVOLENE_DOPRAVY = Object.keys(DOPRAVA_CENY);
-// Na e-shopu jen převod (QR kód); kartou se platí jen na prodejně (majitelka 2026-10-06).
-// Dobírka zůstává jen u starších objednávek (popisky v adminu a e-mailech).
-const POVOLENE_PLATBY = ['prevod'];
+// Na e-shopu převod (QR kód); při osobním odběru i platba na prodejně (hotově,
+// kartou, QR) - majitelka 2026-10-07. Dobírka zůstává jen u starších objednávek.
+const POVOLENE_PLATBY = ['prevod', 'na_prodejne'];
 function validovatDopravuAPlatbu({ doprava, platba }) {
   if (!POVOLENE_DOPRAVY.includes(doprava)) return 'Vyberte prosím způsob dopravy.';
   if (!POVOLENE_PLATBY.includes(platba)) return 'Vyberte prosím způsob platby.';
+  if (platba === 'na_prodejne' && doprava !== 'osobni_odber') return 'Platba na prodejně je možná jen při osobním odběru.';
   return null;
 }
 

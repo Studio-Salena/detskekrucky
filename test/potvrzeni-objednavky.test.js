@@ -221,3 +221,11 @@ test('B1.1 test 4: odpovědnost za snížení hodnoty zůstala ve VOP i na strá
     assert.ok(t.includes(SNIZENI_HODNOTY), `${soubor}: chybí věta o snížení hodnoty`);
   }
 });
+
+test('platba na prodejně: e-mail ukáže způsob platby a žádné pokyny k převodu ani QR', async () => {
+  const { html } = await vyrenderovatPotvrzeni({ ...OBJEDNAVKA, doprava: 'osobni_odber', platba: 'na_prodejne', celkem: 1290 });
+  const t = text(html);
+  assert.match(t, /Na prodejně při vyzvednutí/);
+  assert.doesNotMatch(t, /Pokyny k platbě|Variabilní symbol/);
+  assert.equal(html.includes('X-VS'), false);
+});

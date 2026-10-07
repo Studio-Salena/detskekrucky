@@ -252,3 +252,17 @@ test('krok 4a: doprava a platba jen z nabídky e-shopu (platba jen převodem) - 
     }
   }
 });
+
+test('platba na prodejně jen při osobním odběru (majitelka 2026-10-07)', async () => {
+  let ip = 0;
+  const zavolat = async (handler, body) => { const res = vytvoritRes(); await handler({ body, ip: '10.41.0.' + (++ip) }, res); return res; };
+  const ok = await zavolat(pripravitHandler(zakladniStav()), objednavkovyPozadavek({ doprava: 'osobni_odber', platba: 'na_prodejne' }));
+  assert.equal(ok.statusCode, 200);
+  for (const doprava of ['zasilkovna', 'ceska_posta']) {
+    const stav = zakladniStav();
+    const res = await zavolat(pripravitHandler(stav), objednavkovyPozadavek({ doprava, platba: 'na_prodejne' }));
+    assert.equal(res.statusCode, 400, doprava);
+    assert.match(res.body.chyba, /jen při osobním odběru/);
+    assert.equal(stav.objednavky.length, 0);
+  }
+});

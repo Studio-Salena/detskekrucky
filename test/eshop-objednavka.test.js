@@ -92,3 +92,10 @@ test('právní texty formuláře beze změny: souhlas, odkaz na VOP, tlačítko 
   assert.match(krok3, /id="orderSummary"/);
   assert.equal(ESHOP_HTML.includes('id="chPrevodQr"'), false, 'QR bez variabilního symbolu před objednávkou už není');
 });
+
+test('potvrzení: platba na prodejně bez platebních údajů, s informací o placení při vyzvednutí', () => {
+  const h = zavolat('potvrzeniObjednavkyHtml', { cislo: '261012', celkem: 690, email: 'jana@example.com', platba: 'na_prodejne' });
+  assert.match(h, /Zaplatíte při vyzvednutí na prodejně \(hotově, kartou nebo QR kódem\)/);
+  assert.doesNotMatch(h, /Variabilní symbol|2003533776/);
+  assert.match(zavolat('shrnutiUdajuHtml', { jmeno: 'Jana N', email: 'a@b.cz', telefon: '777 123 456', ulice: 'A 1', mesto: 'B', psc: '768 24', doprava: 'osobni_odber', platba: 'na_prodejne' }), /Platba:<\/strong> Na prodejně při vyzvednutí/);
+});
