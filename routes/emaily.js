@@ -51,7 +51,14 @@ function qrPlatbaUrl(castka, variabilniSymbol, zprava) {
   return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(spd)}`;
 }
 
-const DOPRAVA_LABELY = { zasilkovna: 'Zásilkovna', ceska_posta: 'Česká pošta', osobni_odber: 'Osobní odběr' };
+const DOPRAVA_LABELY = { zasilkovna: 'Zásilkovna', ceska_posta: 'Česká pošta', osobni_odber: 'Osobní odběr', gls_adresa: 'GLS – doručení na adresu', gls_vydejni_misto: 'GLS – výdejní místo' };
+
+// Výdejní místo (ověřené na serveru, ne z prohlížeče) jako HTML řádky
+function vydejniMistoHtml(misto, styl) {
+  if (!misto || !misto.id) return '';
+  const adresa = [misto.ulice, [misto.psc, misto.mesto].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  return `<p style="${styl}"><strong>Výdejní místo:</strong> ${escH(misto.nazev)}${adresa ? ', ' + escH(adresa) : ''} (ID ${escH(misto.id)})</p>`;
+}
 const PLATBA_LABELY = { dobirka: 'Dobírka', prevod: 'Bankovní převod', na_prodejne: 'Na prodejně při vyzvednutí' };
 
 // Barvy podle skutečné palety webu (eshop.html :root) - ne odhadnuté, ať
@@ -160,10 +167,12 @@ async function odeslat_potvrzeni(objednavka) {
   const cisloZobrazit = objednavka.cislo || objednavka.objednavka_id;
   // Datum a čas OBJEDNÁVKY (vznik záznamu), ne datum uzavření smlouvy
   const datumCas = formatovatDatumCasObjednavky(objednavka.vytvoreno);
-  // dopravaCena není v objektu zvlášť (jen celkem) - dopočítá se, ať jde
-  // zobrazit doprava jako vlastní řádek v tabulce se správným součtem.
+  // Cena dopravy uložená při objednávce; u starších volání se dopočítá z celkem,
+  // ať jde zobrazit doprava jako vlastní řádek v tabulce se správným součtem.
   const mezisoucet = objednavka.polozky.reduce((s, p) => s + p.cena * p.pocet, 0);
-  const dopravaCena = objednavka.celkem - mezisoucet + Number(objednavka.sleva || 0);
+  const dopravaCena = objednavka.doprava_cena != null
+    ? Number(objednavka.doprava_cena)
+    : objednavka.celkem - mezisoucet + Number(objednavka.sleva || 0);
   const dopravaLabel = DOPRAVA_LABELY[objednavka.doprava] || objednavka.doprava || '—';
   const platbaLabel = PLATBA_LABELY[objednavka.platba] || objednavka.platba || '—';
 
@@ -210,6 +219,7 @@ async function odeslat_potvrzeni(objednavka) {
         <td style="padding:20px;width:50%;vertical-align:top">
           <h3 style="margin:0 0 8px 0;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY}">Doprava a platba</h3>
           <p style="margin:0 0 4px 0;font-size:14px"><strong>Doprava:</strong> ${escH(dopravaLabel)}</p>
+          ${vydejniMistoHtml(objednavka.vydejni_misto, 'margin:0 0 4px 0;font-size:14px')}
           <p style="margin:0;font-size:14px"><strong>Platba:</strong> ${escH(platbaLabel)}</p>
         </td>
       </tr>
@@ -269,7 +279,8 @@ async function odeslat_upozorneni_objednavky(objednavka) {
     <p style="margin:0 0 16px 0;font-size:18px;font-weight:bold;color:${BARVA_ZNACKA}">Celkem: ${objednavka.celkem} Kč</p>
     <table role="presentation" style="width:100%;background:${BARVA_POZADI_BOX};border:1px solid ${BARVA_RAMECEK};border-radius:8px">
       <tr><td style="padding:16px 20px">
-        <p style="margin:0 0 6px 0;font-size:14px"><strong>Doprava:</strong> ${escH(objednavka.doprava)} &nbsp; <strong>Platba:</strong> ${escH(objednavka.platba)}</p>
+        <p style="margin:0 0 6px 0;font-size:14px"><strong>Doprava:</strong> ${escH(DOPRAVA_LABELY[objednavka.doprava] || objednavka.doprava)} &nbsp; <strong>Platba:</strong> ${escH(PLATBA_LABELY[objednavka.platba] || objednavka.platba)}</p>
+        ${vydejniMistoHtml(objednavka.vydejni_misto, 'margin:0 0 6px 0;font-size:14px')}
         <p style="margin:0 0 6px 0;font-size:14px"><strong>Zákazník:</strong> ${escH(objednavka.jmeno)}</p>
         <p style="margin:0 0 6px 0;font-size:14px"><strong>E-mail:</strong> ${escH(objednavka.email)}</p>
         <p style="margin:0 0 6px 0;font-size:14px"><strong>Telefon:</strong> ${escH(objednavka.telefon)}</p>

@@ -10,6 +10,8 @@ const { pripravit } = require('../lib/startServeru');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const { jeZablokovana, zaznamenatObjednavku } = require('../middleware/objednavkyLimiter');
 const { migrovatSnapshoty, SQL_UDAJE_OBJEDNAVKY } = require('../lib/objednavkySnapshot');
+const { METODY, nacistNastaveniDopravy, jeDostupna, vypocitatCenuDopravy } = require('../lib/doprava');
+const { overitVydejniMisto } = require('../lib/glsVydejniMista');
 
 // Idempotentní migrace - vazba objednávky na uplatněný dárkový poukaz, číslo
 // objednávky a číslo/datum vystavení faktury.
@@ -32,6 +34,18 @@ async function initObjednavkySloupce() {
       ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS cislo TEXT UNIQUE;
       ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS faktura_cislo TEXT UNIQUE;
       ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS faktura_datum TIMESTAMPTZ;
+      -- Doprava (2026-10): skutečná cena dopravy v době objednávky, dopravce a
+      -- výdejní místo (obecně, ne jen GLS - později i Zásilkovna). Údaje místa se
+      -- berou z ověřeného seznamu dopravce, ne z prohlížeče. Starší objednávky
+      -- zůstávají NULL (cena dopravy se u nich dopočítá jako dřív).
+      ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS doprava_cena NUMERIC;
+      ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS dopravce TEXT;
+      ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS vydejni_misto_id TEXT;
+      ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS vydejni_misto_nazev TEXT;
+      ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS vydejni_misto_ulice TEXT;
+      ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS vydejni_misto_mesto TEXT;
+      ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS vydejni_misto_psc TEXT;
+      ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS vydejni_misto_stat TEXT;
       CREATE TABLE IF NOT EXISTS objednavky_cislovani (
         rok INTEGER PRIMARY KEY,
         posledni_cislo INTEGER NOT NULL DEFAULT 0
@@ -44,6 +58,30 @@ async function initObjednavkySloupce() {
     console.log('Objednavky sloupce OK');
   } catch (e) {
     console.log('Objednavky sloupce chyba:', e.message);
+  }
+  // Zvlášť: víc příkazů v jednom dotazu běží jako jedna transakce, takže chyba
+  // u zásilek by jinak vrátila i nové sloupce objednávek, na kterých stojí ukládání objednávek.
+  // Zásilky u dopravců (připraveno pro MyGLS API, zatím se nic nevytváří).
+  // Přístupové údaje k API sem nepatří - jsou jen v proměnných prostředí.
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS zasilky (
+        id SERIAL PRIMARY KEY,
+        objednavka_id INTEGER NOT NULL REFERENCES objednavky(id) ON DELETE CASCADE,
+        dopravce TEXT NOT NULL,
+        stav TEXT NOT NULL DEFAULT 'pripravena',
+        cislo_zasilky TEXT,
+        tracking_url TEXT,
+        data JSONB,
+        chyba TEXT,
+        vytvoreno TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        aktualizovano TIMESTAMPTZ
+      );
+      CREATE INDEX IF NOT EXISTS zasilky_objednavka_idx ON zasilky (objednavka_id);
+    `);
+    console.log('Zasilky OK');
+  } catch (e) {
+    console.log('Zasilky chyba:', e.message);
   }
   try {
     const bezSnimku = await migrovatSnapshoty(pool);
@@ -115,27 +153,18 @@ async function ziskatFakturuCislo(objednavkaId) {
   }
 }
 
-const DOPRAVA_CENY = { zasilkovna: 79, ceska_posta: 89, osobni_odber: 0 };
-const DOPRAVA_ZDARMA_OD = 2000;
-
-function vypocitatDopravu(doprava, mezisoucet) {
-  if (doprava === 'osobni_odber') return 0;
-  if (mezisoucet >= DOPRAVA_ZDARMA_OD) return 0;
-  return DOPRAVA_CENY[doprava] ?? 79;
-}
-
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const TELEFON_RE = /^(\+420\s?)?\d{3}\s?\d{3}\s?\d{3}$/;
 const PSC_RE = /^\d{3}\s?\d{2}$/;
 
 // Doprava a platba jen z nabídky e-shopu - dřív se uložil jakýkoli text
-// (do adminu i e-mailu) a neznámá doprava se účtovala jako Zásilkovna
-const POVOLENE_DOPRAVY = Object.keys(DOPRAVA_CENY);
+// (do adminu i e-mailu) a neznámá doprava se účtovala jako Zásilkovna.
+// Nabízené způsoby a ceny jsou v nastavení dopravy (admin -> Nastavení -> Doprava).
 // Na e-shopu převod (QR kód); při osobním odběru i platba na prodejně (hotově,
 // kartou, QR) - majitelka 2026-10-07. Dobírka zůstává jen u starších objednávek.
 const POVOLENE_PLATBY = ['prevod', 'na_prodejne'];
-function validovatDopravuAPlatbu({ doprava, platba }) {
-  if (!POVOLENE_DOPRAVY.includes(doprava)) return 'Vyberte prosím způsob dopravy.';
+function validovatDopravuAPlatbu({ doprava, platba }, nastaveniDopravy) {
+  if (typeof doprava !== 'string' || !jeDostupna(nastaveniDopravy, doprava)) return 'Vyberte prosím způsob dopravy.';
   if (!POVOLENE_PLATBY.includes(platba)) return 'Vyberte prosím způsob platby.';
   if (platba === 'na_prodejne' && doprava !== 'osobni_odber') return 'Platba na prodejně je možná jen při osobním odběru.';
   return null;
@@ -153,7 +182,7 @@ function validovatObjednavku({ jmeno, email, telefon, ulice, mesto, psc }) {
 
 // Vytvorit novou objednavku
 router.post('/', async (req, res) => {
-  const { jmeno, email, telefon, ulice, mesto, psc, doprava, platba, poznamka, polozky, webova_stranka, poukaz_kod } = req.body;
+  const { jmeno, email, telefon, ulice, mesto, psc, doprava, platba, poznamka, polozky, webova_stranka, poukaz_kod, vydejni_misto_id } = req.body;
 
   // Honeypot - skryté pole, které reální uživatelé nikdy nevyplní, ale
   // formulářoví boti ano. Předstíráme úspěch, aby se bot nenaučil rozpoznat blokaci.
@@ -214,9 +243,29 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ chyba: 'Neplatný počet kusů (musí být celé kladné číslo).' });
     }
   }
-  const chybaValidace = validovatObjednavku({ jmeno, email, telefon, ulice, mesto, psc }) || validovatDopravuAPlatbu({ doprava, platba });
+  const nastaveniDopravy = await nacistNastaveniDopravy(pool);
+  const chybaValidace = validovatObjednavku({ jmeno, email, telefon, ulice, mesto, psc }) || validovatDopravuAPlatbu({ doprava, platba }, nastaveniDopravy);
   if (chybaValidace) {
     return res.status(400).json({ chyba: chybaValidace });
+  }
+
+  // Výdejní místo: z prohlížeče se bere JEN jeho ID a ověří se proti oficiálnímu
+  // seznamu dopravce; název a adresa se ukládají z ověřených dat. U ostatních
+  // způsobů dopravy se případně poslané výdejní místo ignoruje.
+  let vydejniMisto = null;
+  if (METODY[doprava].vydejniMisto === 'gls') {
+    if (!vydejni_misto_id || typeof vydejni_misto_id !== 'string') {
+      return res.status(400).json({ chyba: 'Pro doručení do výdejního místa GLS nejprve vyberte výdejní místo.' });
+    }
+    try {
+      vydejniMisto = await overitVydejniMisto(vydejni_misto_id);
+    } catch (e) {
+      console.error('Ověření výdejního místa GLS selhalo:', e.message);
+      return res.status(503).json({ chyba: 'Výdejní místo GLS se teď nepodařilo ověřit. Zkuste to prosím za chvíli, nebo zvolte jiný způsob dopravy.' });
+    }
+    if (!vydejniMisto) {
+      return res.status(400).json({ chyba: 'Vybrané výdejní místo GLS se nepodařilo najít. Vyberte prosím výdejní místo znovu.' });
+    }
   }
 
   const client = await pool.connect();
@@ -314,15 +363,21 @@ router.post('/', async (req, res) => {
     }
 
     // Doprava - podle zvoleného způsobu (po odečtení poukazu), osobní odběr je vždy zdarma
-    const dopravaCena = vypocitatDopravu(doprava, mezisoucet - sleva);
+    const dopravaCena = vypocitatCenuDopravy(nastaveniDopravy, doprava, mezisoucet - sleva);
     celkem = mezisoucet - sleva + dopravaCena;
 
     // Vytvorit objednavku
     const objednavka = await client.query(
       `INSERT INTO objednavky (zakaznik_id, doprava, platba, celkem, poznamka, poukaz_id, sleva,
-                               obj_jmeno, obj_email, obj_telefon, obj_ulice, obj_mesto, obj_psc)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id, vytvoreno`,
-      [zakaznik_id, doprava, platba, celkem, poznamka, poukaz_id, sleva, jmeno, email, telefon, ulice, mesto, psc]
+                               obj_jmeno, obj_email, obj_telefon, obj_ulice, obj_mesto, obj_psc,
+                               doprava_cena, dopravce, vydejni_misto_id, vydejni_misto_nazev,
+                               vydejni_misto_ulice, vydejni_misto_mesto, vydejni_misto_psc, vydejni_misto_stat)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING id, vytvoreno`,
+      [zakaznik_id, doprava, platba, celkem, poznamka, poukaz_id, sleva, jmeno, email, telefon, ulice, mesto, psc,
+        dopravaCena, METODY[doprava].dopravce,
+        vydejniMisto ? vydejniMisto.id : null, vydejniMisto ? vydejniMisto.nazev : null,
+        vydejniMisto ? vydejniMisto.ulice : null, vydejniMisto ? vydejniMisto.mesto : null,
+        vydejniMisto ? vydejniMisto.psc : null, vydejniMisto ? vydejniMisto.stat : null]
     );
     const objednavka_id = objednavka.rows[0].id;
     const cislo = await pridelitCisloObjednavky(client, objednavka_id);
@@ -386,6 +441,8 @@ try {
     platba,
     polozky: polozkySkutecne,
     sleva,
+    doprava_cena: dopravaCena,
+    vydejni_misto: vydejniMisto,
     // Datum a čas objednávky do potvrzení (ne datum uzavření smlouvy)
     vytvoreno: objednavka.rows[0].vytvoreno
   });
@@ -398,7 +455,8 @@ res.json({ zprava: 'Objednavka uspesne vytvorena', objednavka_id, cislo, celkem 
 // Upozornění majitelce se posílá až po odpovědi zákazníkovi, ať prodleva/chyba
 // s odesláním objednávku nezablokuje (stejný vzor jako u rezervací).
 odeslat_upozorneni_objednavky({
-  objednavka_id, cislo, celkem, jmeno, email, telefon, ulice, mesto, psc, doprava, platba, polozky: polozkySkutecne, sleva
+  objednavka_id, cislo, celkem, jmeno, email, telefon, ulice, mesto, psc, doprava, platba, polozky: polozkySkutecne, sleva,
+  doprava_cena: dopravaCena, vydejni_misto: vydejniMisto
 }).catch(e => console.error('Upozorneni majitelce o objednavce se nepodarilo odeslat:', e.message));
 
   } catch (err) {
@@ -413,7 +471,7 @@ odeslat_upozorneni_objednavky({
 router.get('/', vyzadovatAdmina, async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT o.id, o.cislo, o.stav, o.doprava, o.platba, o.celkem, o.vytvoreno,
+      SELECT o.id, o.cislo, o.stav, o.doprava, o.platba, o.celkem, o.vytvoreno, o.vydejni_misto_nazev,
              ${SQL_UDAJE_OBJEDNAVKY}
       FROM objednavky o
       JOIN zakaznici z ON o.zakaznik_id = z.id

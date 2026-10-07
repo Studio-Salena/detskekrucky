@@ -658,6 +658,20 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           <div id="nastaveni-msg" style="margin-top:12px;color:green;font-weight:600"></div>
         </div>
       </div>
+      <div class="table-wrap" style="margin-top:16px" id="nastaveni-doprava">
+        <div class="table-header"><h3>🚚 Doprava</h3></div>
+        <div style="padding:20px">
+          <p style="color:var(--text-light);font-size:0.85rem;margin:0 0 12px">Způsob dopravy se zákazníkům v e-shopu ukáže, jen když je zapnutý a má vyplněnou cenu. Cena se k objednávce uloží v okamžiku objednání – pozdější změna starší objednávky neovlivní.</p>
+          <div id="dopravaMetody"><div class="loading">Načítám...</div></div>
+          <table style="width:100%;border-collapse:collapse;margin-top:8px">
+            <tr><td style="padding:8px;font-weight:600">Doprava zdarma od (Kč)</td><td><input id="doprava-zdarma-od" class="form-input" type="number" min="0" step="1" placeholder="prázdné = nikdy zdarma"></td></tr>
+            <tr><td style="padding:8px;font-weight:600">Příplatek za dobírku (Kč)<br><small style="font-weight:400;color:var(--text-light)">Připraveno pro ceník GLS, dobírka na e-shopu zatím není.</small></td><td><input id="doprava-dobirka" class="form-input" type="number" min="0" step="1" placeholder="nevyplněno"></td></tr>
+          </table>
+          <div id="glsApiStav" class="info-box" style="margin-top:12px;font-size:0.85rem"></div>
+          <button class="btn btn-primary" style="margin-top:16px" onclick="ulozitDopravu()">💾 Uložit dopravu</button>
+          <div id="doprava-msg" style="margin-top:12px;font-weight:600"></div>
+        </div>
+      </div>
     </div>
 
     <!-- NEWSLETTER -->
@@ -1589,8 +1603,8 @@ function renderObjednavky(data) {
       <td><strong>#${escH(o.cislo || o.id)}</strong></td>
       <td>${escH(o.jmeno)||'—'}<br><small style="color:var(--text-light)">${escH(o.email)}</small></td>
       <td><strong>${o.celkem.toLocaleString('cs-CZ')} Kč</strong></td>
-      <td style="font-size:0.78rem">${escH(o.doprava)||'—'}</td>
-      <td style="font-size:0.78rem">${escH(o.platba)||'—'}</td>
+      <td style="font-size:0.78rem">${escH(DOPRAVA_LABELY[o.doprava]||o.doprava)||'—'}${o.vydejni_misto_nazev?`<br><small style="color:var(--text-light)">📍 ${escH(o.vydejni_misto_nazev)}</small>`:''}</td>
+      <td style="font-size:0.78rem">${escH(PLATBA_LABELY[o.platba]||o.platba)||'—'}</td>
       <td><select class="stav-select" onchange="zmenitStav(${o.id},this.value,this)" data-puvodni="${escAttr(o.stav)}">
         <option ${o.stav==='nova'?'selected':''} value="nova">🟢 Nová</option>
         <option ${o.stav==='vyrizuje'?'selected':''} value="vyrizuje">🟡 Vyřizuje se</option>
@@ -1679,7 +1693,8 @@ async function detailObjednavky(id) {
       <div class="info-box"><strong>${escH(data.jmeno)||'—'}</strong><br>
         📧 ${escH(data.email)||'—'} &nbsp;|&nbsp; 📞 ${escH(data.telefon)||'—'}<br>
         📍 ${escH(data.ulice)||'—'}, ${escH(data.mesto)||'—'} ${escH(data.psc)}</div>
-      <div class="info-box">🚚 <strong>${escH(data.doprava)||'—'}</strong> &nbsp;|&nbsp; 💳 <strong>${escH(data.platba)||'—'}</strong> &nbsp;|&nbsp; ${stavBadge(data.stav)}</div>
+      <div class="info-box">🚚 <strong>${escH(DOPRAVA_LABELY[data.doprava]||data.doprava)||'—'}</strong>${data.doprava_cena!=null?` (${Number(data.doprava_cena)===0?'zdarma':Number(data.doprava_cena).toLocaleString('cs-CZ')+' Kč'})`:''} &nbsp;|&nbsp; 💳 <strong>${escH(PLATBA_LABELY[data.platba]||data.platba)||'—'}</strong> &nbsp;|&nbsp; ${stavBadge(data.stav)}</div>
+      ${vydejniMistoDetailHtml(data)}
       <div class="section-divider">Položky</div>
       <table><thead><tr><th>Produkt</th><th>Vel.</th><th>Ks</th><th>Cena/ks</th><th>Celkem</th></tr></thead>
       <tbody>${polozky.map(p=>`<tr>
@@ -1699,7 +1714,30 @@ function tiskObjednavky() {
   if (aktivniDetailObjId) tiskObjednavkyId(aktivniDetailObjId);
 }
 
-const DOPRAVA_LABELY = { zasilkovna: 'Zásilkovna', ceska_posta: 'Česká pošta', osobni_odber: 'Osobní odběr' };
+const DOPRAVA_LABELY = { zasilkovna: 'Zásilkovna', ceska_posta: 'Česká pošta', osobni_odber: 'Osobní odběr', gls_adresa: 'GLS – na adresu', gls_vydejni_misto: 'GLS – výdejní místo' };
+
+// Výdejní místo (údaje ověřené serverem proti seznamu dopravce) + ID ke zkopírování do MyGLS
+function vydejniMistoAdresa(d) {
+  return [d.vydejni_misto_ulice, [d.vydejni_misto_psc, d.vydejni_misto_mesto].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+}
+function vydejniMistoDetailHtml(d) {
+  let html = '';
+  if (d.vydejni_misto_id) {
+    html += `<div class="info-box">📍 <strong>Výdejní místo${d.dopravce==='gls'?' GLS':''}:</strong> ${escH(d.vydejni_misto_nazev)||'—'}<br>
+      ${escH(vydejniMistoAdresa(d))||''}<br>
+      ID místa: <code>${escH(d.vydejni_misto_id)}</code>
+      <button type="button" class="btn btn-outline btn-sm" data-id="${escAttr(d.vydejni_misto_id)}" onclick="kopirovatIdMista(this)">📋 Kopírovat ID</button></div>`;
+  }
+  if (d.dopravce === 'gls') {
+    html += `<div class="info-box" style="font-size:0.85rem">ℹ️ Napojení na GLS API zatím není aktivní – zásilku založte ručně v MyGLS${d.vydejni_misto_id?' (doručení do výdejního místa, ID výše)':''}.</div>`;
+  }
+  return html;
+}
+async function kopirovatIdMista(btn) {
+  const id = btn.dataset.id;
+  try { await navigator.clipboard.writeText(id); btn.textContent = '✓ Zkopírováno'; }
+  catch(e) { prompt('Zkopíruj ID výdejního místa (Ctrl+C, Enter):', id); }
+}
 const PLATBA_LABELY = { dobirka: 'Dobírka', prevod: 'Bankovní převod', na_prodejne: 'Na prodejně při vyzvednutí' };
 
 async function tiskObjednavkyId(id) {
@@ -1711,9 +1749,10 @@ async function tiskObjednavkyId(id) {
     const polozky = data.polozky || [];
     const dopravaLabel = DOPRAVA_LABELY[data.doprava] || data.doprava || '—';
     const platbaLabel = PLATBA_LABELY[data.platba] || data.platba || '—';
-    // dopravaCena není v API zvlášť - dopočítá se z celkem (celkem = mezisoucet - sleva + doprava).
+    // Cena dopravy uložená při objednávce; u starších objednávek (bez doprava_cena)
+    // se dopočítá z celkem (celkem = mezisoucet - sleva + doprava).
     const mezisoucet = polozky.reduce((s,p) => s + p.cena*p.pocet, 0);
-    const dopravaCena = data.celkem - mezisoucet + Number(data.sleva||0);
+    const dopravaCena = data.doprava_cena != null ? Number(data.doprava_cena) : data.celkem - mezisoucet + Number(data.sleva||0);
     const datumVystaveni = faktura.faktura_datum ? new Date(faktura.faktura_datum).toLocaleDateString('cs-CZ') : new Date().toLocaleDateString('cs-CZ');
 
     const printWin = window.open('','_blank');
@@ -1768,6 +1807,7 @@ async function tiskObjednavkyId(id) {
         <div class="info-block">
           <h3>Doprava a platba</h3>
           <p><strong>Doprava:</strong> ${escH(dopravaLabel)}</p>
+          ${data.vydejni_misto_id?`<p><strong>Výdejní místo:</strong> ${escH(data.vydejni_misto_nazev)}, ${escH(vydejniMistoAdresa(data))} (ID ${escH(data.vydejni_misto_id)})</p>`:''}
           <p><strong>Platba:</strong> ${escH(platbaLabel)}</p>
         </div>
       </div>
@@ -2458,6 +2498,7 @@ async function ulozitUpravuProduktu() {
 // ÚČETNICTVÍ
 // NASTAVENÍ - Otevírací doba
 async function loadNastaveni() {
+  loadDopravu();
   try {
     const r = await adminFetch(API + '/nastaveni/oteviraci-doba');
     if (r.ok) {
@@ -2480,6 +2521,69 @@ async function loadNastaveni() {
       document.getElementById('banner-aktivni').value = b.aktivni || 'ne';
     }
   } catch(e) {}
+}
+
+// NASTAVENÍ - Doprava (ceny a zapnutí způsobů dopravy, stav GLS API)
+let dopravaMetodyAdmin = [];
+async function loadDopravu() {
+  const box = document.getElementById('dopravaMetody');
+  try {
+    const r = await adminFetch(API + '/doprava/admin');
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    dopravaMetodyAdmin = d.metody;
+    box.innerHTML = `<table style="width:100%;border-collapse:collapse">
+      <thead><tr><th style="text-align:left;padding:8px">Způsob dopravy</th><th style="text-align:left;padding:8px">Nabízet</th><th style="text-align:left;padding:8px">Cena (Kč)</th></tr></thead>
+      <tbody>${d.metody.map(m => {
+        const n = d.nastaveni.metody[m.kod] || {};
+        return `<tr>
+          <td style="padding:8px;font-weight:600">${escH(m.nazev)}</td>
+          <td style="padding:8px"><input type="checkbox" id="doprava-aktivni-${escAttr(m.kod)}" ${n.aktivni?'checked':''}></td>
+          <td style="padding:8px">${m.vzdyZdarma ? 'vždy zdarma' : `<input id="doprava-cena-${escAttr(m.kod)}" class="form-input" type="number" min="0" step="1" placeholder="cena nezadána" value="${n.cena==null?'':escAttr(n.cena)}">`}</td>
+        </tr>`;
+      }).join('')}</tbody></table>`;
+    document.getElementById('doprava-zdarma-od').value = d.nastaveni.zdarmaOd == null ? '' : d.nastaveni.zdarmaOd;
+    document.getElementById('doprava-dobirka').value = d.nastaveni.priplatky.dobirka == null ? '' : d.nastaveni.priplatky.dobirka;
+    const g = d.glsApi;
+    document.getElementById('glsApiStav').textContent = g.nakonfigurovano
+      ? 'GLS API: přístupové údaje jsou na serveru nastavené, napojení ale zatím není aktivní. Zásilky GLS se zakládají ručně v MyGLS.'
+      : 'GLS API: zatím není nastavené (chybí na Renderu: ' + g.chybejiciPromenne.join(', ') + '). Zásilky GLS se zakládají ručně v MyGLS.';
+  } catch(e) {
+    box.innerHTML = '<div class="error-msg">Nastavení dopravy se nepodařilo načíst.</div>';
+  }
+}
+
+function cisloNeboNull(hodnota) {
+  const t = String(hodnota).trim();
+  return t === '' ? null : Number(t);
+}
+
+async function ulozitDopravu() {
+  const msg = document.getElementById('doprava-msg');
+  if (!dopravaMetodyAdmin.length) return;
+  const metody = {};
+  for (const m of dopravaMetodyAdmin) {
+    const cenaEl = document.getElementById('doprava-cena-' + m.kod);
+    metody[m.kod] = {
+      aktivni: document.getElementById('doprava-aktivni-' + m.kod).checked,
+      cena: m.vzdyZdarma ? 0 : cisloNeboNull(cenaEl.value)
+    };
+  }
+  const telo = {
+    metody,
+    zdarmaOd: cisloNeboNull(document.getElementById('doprava-zdarma-od').value),
+    priplatky: { dobirka: cisloNeboNull(document.getElementById('doprava-dobirka').value) }
+  };
+  try {
+    const r = await adminFetch(API + '/doprava', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(telo) });
+    const d = await r.json().catch(() => ({}));
+    msg.style.color = r.ok ? 'green' : 'var(--red)';
+    msg.textContent = r.ok ? '✅ Doprava uložena' : (d.chyba || 'Uložení se nepovedlo.');
+    if (r.ok) loadDopravu();
+  } catch(e) {
+    msg.style.color = 'var(--red)';
+    msg.textContent = 'Uložení se nepovedlo.';
+  }
 }
 
 async function ulozitOteviracku() {

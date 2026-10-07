@@ -45,6 +45,10 @@ function vytvoritMockClient(stav) {
       if (stav.callLog) stav.callLog.push({ sql: s, params });
 
       if (s.startsWith('ALTER TABLE')) return {};
+      // Nastavení dopravy (lib/doprava.js) - bez uloženého platí výchozí ceny
+      if (s === "SELECT hodnota FROM nastaveni WHERE klic = 'doprava'") {
+        return { rows: stav.nastaveniDopravy ? [{ hodnota: stav.nastaveniDopravy }] : [] };
+      }
       if (s.startsWith('BEGIN')) return {};
       if (s.startsWith('COMMIT')) { this.committed = true; return {}; }
       if (s.startsWith('ROLLBACK')) { this.rolledBack = true; return {}; }
@@ -171,9 +175,13 @@ function vytvoritMockClient(stav) {
       if (s.startsWith('INSERT INTO objednavky (')) {
         const id = stav.dalsiObjednavkaId++;
         const [zakaznik_id, doprava, platba, celkem, poznamka, poukaz_id, sleva,
-          obj_jmeno, obj_email, obj_telefon, obj_ulice, obj_mesto, obj_psc] = params;
+          obj_jmeno, obj_email, obj_telefon, obj_ulice, obj_mesto, obj_psc,
+          doprava_cena, dopravce, vydejni_misto_id, vydejni_misto_nazev,
+          vydejni_misto_ulice, vydejni_misto_mesto, vydejni_misto_psc, vydejni_misto_stat] = params;
         stav.objednavky.push({ id, zakaznik_id, doprava, platba, celkem, poznamka, poukaz_id, sleva, stav: 'nova',
-          obj_jmeno, obj_email, obj_telefon, obj_ulice, obj_mesto, obj_psc, udaje_doplneny_zpetne: false });
+          obj_jmeno, obj_email, obj_telefon, obj_ulice, obj_mesto, obj_psc, udaje_doplneny_zpetne: false,
+          doprava_cena, dopravce, vydejni_misto_id, vydejni_misto_nazev,
+          vydejni_misto_ulice, vydejni_misto_mesto, vydejni_misto_psc, vydejni_misto_stat });
         return { rows: [{ id }] };
       }
       // Migrace snímků při načtení routeru (lib/objednavkySnapshot.js) - samotné
@@ -189,8 +197,8 @@ function vytvoritMockClient(stav) {
         const maSnimek = o.obj_email != null;
         return Object.fromEntries(pole.map(p => [p, (maSnimek ? o['obj_' + p] : z[p]) ?? null]));
       };
-      if (s.startsWith('SELECT o.id, o.cislo, o.stav, o.doprava, o.platba, o.celkem, o.vytvoreno, CASE WHEN o.obj_email IS NOT NULL THEN o.obj_jmeno ELSE z.jmeno END AS jmeno')) {
-        return { rows: stav.objednavky.map(o => ({ id: o.id, cislo: o.cislo, stav: o.stav, doprava: o.doprava, platba: o.platba, celkem: o.celkem, vytvoreno: o.vytvoreno, ...udajeObjednavky(o) })) };
+      if (s.startsWith('SELECT o.id, o.cislo, o.stav, o.doprava, o.platba, o.celkem, o.vytvoreno, o.vydejni_misto_nazev, CASE WHEN o.obj_email IS NOT NULL THEN o.obj_jmeno ELSE z.jmeno END AS jmeno')) {
+        return { rows: stav.objednavky.map(o => ({ id: o.id, cislo: o.cislo, stav: o.stav, doprava: o.doprava, platba: o.platba, celkem: o.celkem, vytvoreno: o.vytvoreno, vydejni_misto_nazev: o.vydejni_misto_nazev ?? null, ...udajeObjednavky(o) })) };
       }
       if (s.startsWith('SELECT o.*, CASE WHEN o.obj_email IS NOT NULL THEN o.obj_jmeno ELSE z.jmeno END AS jmeno')) {
         const o = stav.objednavky.find(o => o.id === Number(params[0]));

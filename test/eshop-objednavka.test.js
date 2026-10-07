@@ -25,8 +25,10 @@ const konstanta = nazev => ESHOP_HTML.match(new RegExp(`const ${nazev} = [^;]+;`
 const sandbox = {};
 vm.createContext(sandbox);
 vm.runInContext([
-  ...['DOPRAVA_CENY', 'DOPRAVA_ZDARMA_OD', 'DOPRAVA_NAZVY', 'PLATBA_NAZVY', 'UCET_IBAN'].map(konstanta),
-  ...['vypocitatDopravu', 'escHtml', 'escAttr', 'spocitatObjednavku', 'souhrnObjednavkyHtml', 'qrPlatbaUrl', 'potvrzeniObjednavkyHtml', 'shrnutiUdajuHtml'].map(vytahnout)
+  ...['DOPRAVA_VYCHOZI', 'DOPRAVA_NAZVY', 'PLATBA_NAZVY', 'UCET_IBAN', 'CHYBA_BEZ_VYDEJNIHO_MISTA'].map(konstanta),
+  'var nastaveniDopravy = DOPRAVA_VYCHOZI; var glsVydejniMisto = null;',
+  ...['vypocitatDopravu', 'escHtml', 'escAttr', 'spocitatObjednavku', 'souhrnObjednavkyHtml', 'qrPlatbaUrl', 'potvrzeniObjednavkyHtml', 'shrnutiUdajuHtml',
+    'jeVydejniMistoGls', 'chybaVydejnihoMista', 'adresaVydejnihoMista', 'platneNastaveniDopravy'].map(vytahnout)
 ].join('\n'), sandbox);
 const zavolat = (fn, ...args) => {
   const v = vm.runInContext(`${fn}(...${JSON.stringify(args)})`, sandbox);
@@ -98,4 +100,82 @@ test('potvrzení: platba na prodejně bez platebních údajů, s informací o pl
   assert.match(h, /Zaplatíte při vyzvednutí na prodejně \(hotově, kartou nebo QR kódem\)/);
   assert.doesNotMatch(h, /Variabilní symbol|2003533776/);
   assert.match(zavolat('shrnutiUdajuHtml', { jmeno: 'Jana N', email: 'a@b.cz', telefon: '777 123 456', ulice: 'A 1', mesto: 'B', psc: '768 24', doprava: 'osobni_odber', platba: 'na_prodejne' }), /Platba:<\/strong> Na prodejně při vyzvednutí/);
+});
+
+// --- Doprava z nastavení a výdejní místo GLS (2026-10) ---
+const nastavitDopravu = d => vm.runInContext(`nastaveniDopravy = ${JSON.stringify(d)}; glsVydejniMisto = null;`, sandbox);
+const SE_GLS = {
+  zdarmaOd: 2000,
+  metody: [
+    { kod: 'zasilkovna', nazev: 'Zásilkovna', cena: 85, vydejniMisto: null, vzdyZdarma: false },
+    { kod: 'gls_vydejni_misto', nazev: 'GLS – doručení do výdejního místa', cena: 69, vydejniMisto: 'gls', vzdyZdarma: false },
+    { kod: 'osobni_odber', nazev: 'Osobní odběr – prodejna Hulín', cena: 0, vydejniMisto: null, vzdyZdarma: true }
+  ]
+};
+
+test('doprava: výchozí ceny = dosavadní (79/89/0, zdarma od 2 000 Kč), GLS ve výchozí nabídce není', () => {
+  nastavitDopravu(JSON.parse(JSON.stringify(vm.runInContext('DOPRAVA_VYCHOZI', sandbox))));
+  assert.equal(zavolat('vypocitatDopravu', 'zasilkovna', 1999), 79);
+  assert.equal(zavolat('vypocitatDopravu', 'ceska_posta', 100), 89);
+  assert.equal(zavolat('vypocitatDopravu', 'zasilkovna', 2000), 0);
+  assert.equal(zavolat('vypocitatDopravu', 'osobni_odber', 100), 0);
+  assert.equal(zavolat('jeVydejniMistoGls', 'gls_vydejni_misto'), false);
+});
+
+test('doprava: ceny z nastavení serveru, zdarma od podle nastavení, prázdné = nikdy zdarma', () => {
+  nastavitDopravu(SE_GLS);
+  assert.equal(zavolat('vypocitatDopravu', 'zasilkovna', 500), 85);
+  assert.equal(zavolat('vypocitatDopravu', 'gls_vydejni_misto', 500), 69);
+  assert.equal(zavolat('vypocitatDopravu', 'gls_vydejni_misto', 2500), 0);
+  nastavitDopravu({ ...SE_GLS, zdarmaOd: null });
+  assert.equal(zavolat('vypocitatDopravu', 'gls_vydejni_misto', 99999), 69);
+  assert.equal(zavolat('vypocitatDopravu', 'osobni_odber', 10), 0);
+});
+
+test('doprava: nevalidní odpověď serveru se nepoužije (zůstanou výchozí ceny)', () => {
+  assert.equal(zavolat('platneNastaveniDopravy', SE_GLS), true);
+  assert.equal(zavolat('platneNastaveniDopravy', { zdarmaOd: 2000, metody: [] }), false);
+  assert.equal(zavolat('platneNastaveniDopravy', { zdarmaOd: 2000, metody: [{ kod: 'gls_adresa', nazev: 'GLS', cena: null }] }), false);
+  assert.equal(zavolat('platneNastaveniDopravy', null), false);
+});
+
+test('výdejní místo GLS: bez vybraného místa přesná chybová hláška, u jiné dopravy se nevyžaduje', () => {
+  nastavitDopravu(SE_GLS);
+  assert.equal(zavolat('chybaVydejnihoMista', 'gls_vydejni_misto'), 'Pro doručení do výdejního místa GLS nejprve vyberte výdejní místo.');
+  assert.equal(zavolat('chybaVydejnihoMista', 'zasilkovna'), null);
+  vm.runInContext(`glsVydejniMisto = { id: '39301-ELPESRO', nazev: 'Elpe', ulice: 'Myslotínská 2449', mesto: 'Pelhřimov', psc: '39301' };`, sandbox);
+  assert.equal(zavolat('chybaVydejnihoMista', 'gls_vydejni_misto'), null);
+});
+
+test('shrnutí: výdejní místo GLS místo doručovací adresy, adresa zákazníka zvlášť; vše escapované', () => {
+  nastavitDopravu(SE_GLS);
+  const u = { jmeno: 'Jana N', email: 'a@b.cz', telefon: '777 123 456', ulice: 'Hlavní 1', mesto: 'Hulín', psc: '768 24', doprava: 'gls_vydejni_misto', platba: 'prevod',
+    vydejniMisto: { id: 'X1-ABC', nazev: '<img src=x onerror=alert(1)>', ulice: 'A&B 1', mesto: 'Brno', psc: '60200' } };
+  const h = zavolat('shrnutiUdajuHtml', u);
+  assert.match(h, /Doprava:<\/strong> GLS – doručení do výdejního místa/);
+  assert.match(h, /Výdejní místo: &lt;img src=x onerror=alert\(1\)&gt;, A&amp;B 1, 60200 Brno/);
+  assert.equal(h.includes('<img'), false);
+  assert.match(h, /Hlavní 1, 768 24 Hulín/);
+  // přepnutí zpět na adresu: údaje výdejního místa se nepoužijí
+  assert.doesNotMatch(zavolat('shrnutiUdajuHtml', { ...u, doprava: 'zasilkovna', vydejniMisto: null }), /Výdejní místo/);
+});
+
+test('mapa GLS: zprávy jen z našeho iframe a domény GLS, údaje místa jen jako text, ID se ověřuje na serveru', () => {
+  const zpracovani = vytahnout('zpracovatZpravuMapyGls');
+  assert.match(zpracovani, /e\.source !== glsMapaIframe\.contentWindow\) return;/);
+  assert.match(zpracovani, /if \(!GLS_MAPA_ORIGINY\.includes\(e\.origin\)\) return;/);
+  assert.match(zpracovani, /GLS_ID_RE\.test\(id\)/);
+  assert.match(zpracovani, /overitVydejniMistoGls\(id\)/);
+  assert.doesNotMatch(zpracovani, /innerHTML|detail\.name|detail\.address/);
+  assert.match(konstanta('GLS_MAPA_ORIGINY'), /\['https:\/\/ps-maps\.gls-czech\.cz', 'https:\/\/ps-maps\.gls-czech\.com'\]/);
+  assert.doesNotMatch(vytahnout('vykreslitVydejniMistoGls'), /innerHTML/);
+  assert.match(vytahnout('overitVydejniMistoGls'), /API \+ '\/doprava\/gls-misto\/' \+ encodeURIComponent\(id\)/);
+  assert.equal(/gls_psd_widget\.js/.test(ESHOP_HTML), false, 'skript widgetu GLS se nevkládá');
+  assert.equal(/GLS_(PASSWORD|USERNAME|CLIENT_NUMBER)/.test(ESHOP_HTML), false);
+});
+
+test('objednávka posílá ID výdejního místa jen u dopravy do výdejního místa', () => {
+  const odeslani = vytahnout('odeslatObjednavku');
+  assert.match(odeslani, /vydejni_misto_id: jeVydejniMistoGls\(doprava\) && glsVydejniMisto \? glsVydejniMisto\.id : undefined/);
+  assert.match(odeslani, /chybaVydejnihoMista\(doprava\)/);
 });

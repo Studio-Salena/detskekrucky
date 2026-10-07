@@ -915,6 +915,22 @@ footer{background:var(--text)}
 /* Plovoucí tlačítka (WhatsApp, Messenger, nahoru) nesmí zakrývat otevřené filtry */
 body:has(.katalog-filtry.open) .float-contact,
 body:has(.katalog-filtry.open) #back-to-top{display:none}
+/* VÝDEJNÍ MÍSTO GLS 2026-10 - výběr na mapě GLS v našem vlastním okně */
+.vydejni-misto{border:1px solid var(--tan-light);border-radius:12px;padding:12px 14px;margin:-4px 0 14px;background:var(--cream);display:flex;flex-direction:column;gap:10px}
+.vydejni-misto[hidden],.vydejni-misto-vybrane[hidden],.vydejni-misto-chyba[hidden]{display:none}
+.vydejni-misto-vybrane{font-size:0.9rem;line-height:1.45}
+.vydejni-misto-vybrane strong{display:block}
+.vydejni-misto-btn{align-self:flex-start;min-height:44px;padding:10px 18px;border:1px solid var(--brown);border-radius:24px;background:#fff;color:var(--brown);font-weight:700;font-family:'Nunito',sans-serif;font-size:0.92rem;cursor:pointer}
+.vydejni-misto-btn:focus-visible{outline:2px solid var(--brown);outline-offset:2px}
+.vydejni-misto-chyba{color:#b3261e;font-size:0.85rem;font-weight:700}
+.gls-mapa{position:fixed;inset:0;z-index:2100;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:12px}
+.gls-mapa[hidden]{display:none}
+.gls-mapa-okno{background:#fff;border-radius:14px;width:100%;max-width:1100px;height:100%;max-height:820px;display:flex;flex-direction:column;overflow:hidden}
+.gls-mapa-hlavicka{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 8px 8px 16px;border-bottom:1px solid var(--tan-light);font-family:'Nunito',sans-serif}
+.gls-mapa-zavrit{width:44px;height:44px;border:0;border-radius:50%;background:transparent;font-size:1.3rem;cursor:pointer;color:var(--text)}
+.gls-mapa-zavrit:focus-visible{outline:2px solid var(--brown)}
+.gls-mapa iframe{flex:1;width:100%;border:0}
+@media (max-width:600px){.gls-mapa{padding:0}.gls-mapa-okno{border-radius:0;max-height:none}}
 </style>
 </head>
 <body>
@@ -1167,6 +1183,16 @@ body:has(.katalog-filtry.open) #back-to-top{display:none}
   <div class="galerie-pocitadlo" id="galeriePocitadlo"></div>
 </div>
 
+<!-- MAPA VÝDEJNÍCH MÍST GLS - iframe se vkládá až při otevření (otevritMapuGls) -->
+<div class="gls-mapa" id="glsMapa" hidden role="dialog" aria-modal="true" aria-labelledby="glsMapaNadpis">
+  <div class="gls-mapa-okno">
+    <div class="gls-mapa-hlavicka">
+      <strong id="glsMapaNadpis">Výdejní místo GLS</strong>
+      <button type="button" class="gls-mapa-zavrit" onclick="zavritMapuGls()" aria-label="Zavřít mapu">✕</button>
+    </div>
+  </div>
+</div>
+
 <!-- CHECKOUT MODAL -->
 <div class="modal-overlay" id="modalCheckout">
   <div class="checkout-modal" role="dialog" aria-modal="true" aria-labelledby="checkoutNadpis">
@@ -1185,6 +1211,11 @@ body:has(.katalog-filtry.open) #back-to-top{display:none}
         <label class="volba"><input type="radio" name="chDoprava" value="zasilkovna" checked><span class="volba-nazev">Zásilkovna</span><span class="volba-cena" data-doprava-cena="zasilkovna"></span></label>
         <label class="volba"><input type="radio" name="chDoprava" value="ceska_posta"><span class="volba-nazev">Česká pošta</span><span class="volba-cena" data-doprava-cena="ceska_posta"></span></label>
         <label class="volba"><input type="radio" name="chDoprava" value="osobni_odber"><span class="volba-nazev">Osobní odběr – prodejna Hulín</span><span class="volba-cena" data-doprava-cena="osobni_odber"></span></label>
+      </div>
+      <div class="vydejni-misto" id="glsVydejniMistoBox" hidden>
+        <div class="vydejni-misto-vybrane" id="glsVybraneMisto" aria-live="polite" hidden></div>
+        <button type="button" class="vydejni-misto-btn" id="glsVybratBtn" onclick="otevritMapuGls()">Vybrat výdejní místo GLS</button>
+        <div class="vydejni-misto-chyba" id="glsMistoChyba" role="alert" hidden></div>
       </div>
       <div class="vyzkouseni-info" id="vyzkouseniInfo" style="display:none">
         &#128094; Při osobním odběru si boty rovnou vyzkoušíte přímo na prodejně: <strong>Holešovská 752, Hulín 768 24</strong>. Ozveme se, jakmile bude objednávka připravená k vyzvednutí.
@@ -1406,12 +1437,23 @@ let kosik = JSON.parse(localStorage.getItem('kosik') || '[]');
 let aktivniProdukt = null;
 let vybranaVelikost = null;
 
-const DOPRAVA_CENY = { zasilkovna: 79, ceska_posta: 89, osobni_odber: 0 };
-const DOPRAVA_ZDARMA_OD = 2000;
+// Nabízené způsoby dopravy a ceny. Výchozí = dosavadní ceny; skutečné se načtou
+// z /api/doprava (admin -> Nastavení -> Doprava). Rozhoduje vždy cena spočítaná
+// serverem, tady jde jen o zobrazení.
+const DOPRAVA_VYCHOZI = {
+  zdarmaOd: 2000,
+  metody: [
+    { kod: 'zasilkovna', nazev: 'Zásilkovna', cena: 79, vydejniMisto: null, vzdyZdarma: false },
+    { kod: 'ceska_posta', nazev: 'Česká pošta', cena: 89, vydejniMisto: null, vzdyZdarma: false },
+    { kod: 'osobni_odber', nazev: 'Osobní odběr – prodejna Hulín', cena: 0, vydejniMisto: null, vzdyZdarma: true }
+  ]
+};
+let nastaveniDopravy = DOPRAVA_VYCHOZI;
 function vypocitatDopravu(doprava, mezisoucet) {
-  if (doprava === 'osobni_odber') return 0;
-  if (mezisoucet >= DOPRAVA_ZDARMA_OD) return 0;
-  return DOPRAVA_CENY[doprava] ?? 79;
+  const m = nastaveniDopravy.metody.find(m => m.kod === doprava);
+  if (!m || m.vzdyZdarma) return 0;
+  if (nastaveniDopravy.zdarmaOd !== null && mezisoucet >= nastaveniDopravy.zdarmaOd) return 0;
+  return m.cena;
 }
 
 const kategorieBg = {
@@ -2887,10 +2929,14 @@ function renderKosik() {
   const total = kosik.reduce((s, i) => s + i.cena * i.pocet, 0);
   document.getElementById('cartTotal').textContent = total + ' Kč';
   const nudge = document.getElementById('dopravaNudge');
-  if (total >= DOPRAVA_ZDARMA_OD) {
+  const zdarmaOd = nastaveniDopravy.zdarmaOd;
+  nudge.hidden = zdarmaOd === null;
+  if (zdarmaOd === null) {
+    nudge.textContent = '';
+  } else if (total >= zdarmaOd) {
     nudge.textContent = '🎉 Máte dopravu zdarma!';
   } else {
-    nudge.textContent = `🚚 Ještě ${DOPRAVA_ZDARMA_OD - total} Kč do dopravy zdarma`;
+    nudge.textContent = `🚚 Ještě ${zdarmaOd - total} Kč do dopravy zdarma`;
   }
   el.innerHTML = kosik.map((item, idx) => `
     <div class="cart-item">
@@ -3006,12 +3052,139 @@ async function pripravitCheckoutProUcet() {
 }
 
 // Objednávka ve 3 krocích (krok 4b): 1 doprava a platba, 2 údaje, 3 shrnutí, 4 potvrzení
-const DOPRAVA_NAZVY = { zasilkovna: 'Zásilkovna', ceska_posta: 'Česká pošta', osobni_odber: 'Osobní odběr – prodejna Hulín' };
+const DOPRAVA_NAZVY = { zasilkovna: 'Zásilkovna', ceska_posta: 'Česká pošta', osobni_odber: 'Osobní odběr – prodejna Hulín', gls_adresa: 'GLS – doručení na adresu', gls_vydejni_misto: 'GLS – doručení do výdejního místa' };
 const PLATBA_NAZVY = { dobirka: 'Dobírka', prevod: 'Bankovní převod', na_prodejne: 'Na prodejně při vyzvednutí (hotově, kartou nebo QR)' };
 function zvolenaDoprava() {
   const el = document.querySelector('#chDoprava input:checked');
-  return el ? el.value : 'zasilkovna';
+  return el ? el.value : (nastaveniDopravy.metody[0] || {}).kod;
 }
+
+// Volby dopravy podle nastavení; zvolená volba zůstane, pokud je dál v nabídce
+function vykreslitVolbyDopravy() {
+  const box = document.getElementById('chDoprava');
+  const predtim = zvolenaDoprava();
+  box.innerHTML = nastaveniDopravy.metody.map(m => `<label class="volba"><input type="radio" name="chDoprava" value="${escAttr(m.kod)}"><span class="volba-nazev">${escHtml(m.nazev)}</span><span class="volba-cena" data-doprava-cena="${escAttr(m.kod)}"></span></label>`).join('');
+  const vstupy = [...box.querySelectorAll('input')];
+  const vstup = vstupy.find(i => i.value === predtim) || vstupy[0];
+  if (vstup) vstup.checked = true;
+}
+
+function platneNastaveniDopravy(d) {
+  return !!(d && (d.zdarmaOd === null || Number.isInteger(d.zdarmaOd)) && Array.isArray(d.metody) && d.metody.length > 0
+    && d.metody.every(m => m && typeof m.kod === 'string' && typeof m.nazev === 'string' && Number.isInteger(m.cena)));
+}
+async function nacistNastaveniDopravy() {
+  try {
+    const r = await fetch(API + '/doprava');
+    const d = r.ok ? await r.json() : null;
+    if (!platneNastaveniDopravy(d)) return;
+    nastaveniDopravy = d;
+    vykreslitVolbyDopravy();
+    renderKosik();
+    if (document.getElementById('modalCheckout').classList.contains('open')) vykreslitSouhrnObjednavky();
+  } catch (e) { /* zůstanou výchozí ceny */ }
+}
+
+// --- Výdejní místo GLS ---
+// Mapa GLS běží v iframe z jejich domény a vybrané místo pošle zprávou (postMessage).
+// Bere se jen zpráva z našeho iframe a z domény GLS, z ní jen ID místa; název
+// a adresu vrátí náš server z oficiálního seznamu GLS. Vše se vypisuje jako text.
+const GLS_MAPA_URL = 'https://ps-maps.gls-czech.cz/?find=1&closeBtn=0&ctrcode=CZ&lng=cs';
+const GLS_MAPA_ORIGINY = ['https://ps-maps.gls-czech.cz', 'https://ps-maps.gls-czech.com'];
+const GLS_ID_RE = /^[A-Za-z0-9_-]{3,40}$/;
+const CHYBA_BEZ_VYDEJNIHO_MISTA = 'Pro doručení do výdejního místa GLS nejprve vyberte výdejní místo.';
+let glsVydejniMisto = null;
+let glsMapaIframe = null;
+let glsMapaFokusPred = null;
+
+function jeVydejniMistoGls(doprava) {
+  const m = nastaveniDopravy.metody.find(m => m.kod === doprava);
+  return !!(m && m.vydejniMisto === 'gls');
+}
+function chybaVydejnihoMista(doprava) {
+  return jeVydejniMistoGls(doprava) && !glsVydejniMisto ? CHYBA_BEZ_VYDEJNIHO_MISTA : null;
+}
+function adresaVydejnihoMista(m) {
+  return [m.ulice, [m.psc, m.mesto].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+}
+function zobrazitChybuMistaGls(text) {
+  const el = document.getElementById('glsMistoChyba');
+  el.textContent = text || '';
+  el.hidden = !text;
+}
+function vykreslitVydejniMistoGls() {
+  const box = document.getElementById('glsVybraneMisto');
+  box.textContent = '';
+  if (glsVydejniMisto) {
+    const nazev = document.createElement('strong');
+    nazev.textContent = glsVydejniMisto.nazev;
+    const adresa = document.createElement('span');
+    adresa.textContent = adresaVydejnihoMista(glsVydejniMisto);
+    box.append(nazev, adresa);
+  }
+  box.hidden = !glsVydejniMisto;
+  document.getElementById('glsVybratBtn').textContent = glsVydejniMisto ? 'Změnit výdejní místo' : 'Vybrat výdejní místo GLS';
+}
+
+function otevritMapuGls() {
+  zobrazitChybuMistaGls('');
+  const mapa = document.getElementById('glsMapa');
+  if (!glsMapaIframe) {
+    glsMapaIframe = document.createElement('iframe');
+    glsMapaIframe.title = 'Mapa výdejních míst GLS';
+    glsMapaIframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox');
+    glsMapaIframe.setAttribute('allow', 'geolocation');
+    glsMapaIframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+    glsMapaIframe.src = GLS_MAPA_URL;
+    mapa.querySelector('.gls-mapa-okno').appendChild(glsMapaIframe);
+  }
+  glsMapaFokusPred = document.activeElement;
+  mapa.hidden = false;
+  mapa.querySelector('.gls-mapa-zavrit').focus();
+}
+function zavritMapuGls() {
+  document.getElementById('glsMapa').hidden = true;
+  if (glsMapaFokusPred && typeof glsMapaFokusPred.focus === 'function') glsMapaFokusPred.focus();
+}
+
+async function overitVydejniMistoGls(id) {
+  const btn = document.getElementById('glsVybratBtn');
+  btn.disabled = true;
+  try {
+    const r = await fetch(API + '/doprava/gls-misto/' + encodeURIComponent(id));
+    const d = await r.json().catch(() => ({}));
+    if (r.ok && d && d.id && typeof d.nazev === 'string') {
+      glsVydejniMisto = { id: String(d.id), nazev: d.nazev, ulice: String(d.ulice || ''), mesto: String(d.mesto || ''), psc: String(d.psc || '') };
+      zobrazitChybuMistaGls('');
+      document.getElementById('checkoutMsg').innerHTML = '';
+    } else {
+      zobrazitChybuMistaGls(typeof d.chyba === 'string' ? d.chyba : 'Výdejní místo se nepodařilo ověřit. Vyberte prosím jiné.');
+    }
+  } catch (e) {
+    zobrazitChybuMistaGls('Výdejní místo se nepodařilo ověřit. Zkontrolujte připojení a zkuste to znovu.');
+  } finally {
+    btn.disabled = false;
+    vykreslitVydejniMistoGls();
+  }
+}
+
+function zpracovatZpravuMapyGls(e) {
+  if (!glsMapaIframe || e.source !== glsMapaIframe.contentWindow) return;
+  if (!GLS_MAPA_ORIGINY.includes(e.origin)) return;
+  const d = e.data;
+  if (!d || typeof d !== 'object') return;
+  if (d.event_id === 'closeWidget') { zavritMapuGls(); return; }
+  if (d.event_id !== 'ps_data_handover') return;
+  const detail = d.parcelshop && d.parcelshop.detail;
+  const id = detail && typeof detail.pclshopid === 'string' ? detail.pclshopid.trim() : '';
+  zavritMapuGls();
+  if (!GLS_ID_RE.test(id)) { zobrazitChybuMistaGls('Výdejní místo se nepodařilo načíst. Vyberte ho prosím znovu.'); return; }
+  overitVydejniMistoGls(id);
+}
+window.addEventListener('message', zpracovatZpravuMapyGls);
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !document.getElementById('glsMapa').hidden) { e.stopPropagation(); zavritMapuGls(); }
+}, true);
 function zvolenaPlatba() {
   const el = document.querySelector('#chPlatba input:checked');
   return el ? el.value : 'prevod';
@@ -3044,6 +3217,7 @@ function vykreslitSouhrnObjednavky() {
   });
   document.getElementById('orderSummary').innerHTML = souhrnObjednavkyHtml(kosik, uplatnenyPoukaz, doprava);
   document.getElementById('vyzkouseniInfo').style.display = doprava === 'osobni_odber' ? 'block' : 'none';
+  document.getElementById('glsVydejniMistoBox').hidden = !jeVydejniMistoGls(doprava);
   // Platit na prodejně jde jen při osobním odběru - jinak zpět na převod
   const naProdejne = document.getElementById('volbaNaProdejne');
   naProdejne.hidden = doprava !== 'osobni_odber';
@@ -3067,10 +3241,12 @@ function aktualizovatPlatbuInfo() {
 
 // Rekapitulace údajů ve shrnutí, s odkazy zpět k úpravě
 function shrnutiUdajuHtml(u) {
-  const adresa = u.doprava === 'osobni_odber' ? 'Vyzvednutí na prodejně: Holešovská 752, Hulín 768 24' : `${u.ulice}, ${u.psc} ${u.mesto}`;
+  const adresa = u.doprava === 'osobni_odber' ? 'Vyzvednutí na prodejně: Holešovská 752, Hulín 768 24'
+    : u.vydejniMisto ? `Výdejní místo: ${u.vydejniMisto.nazev}, ${adresaVydejnihoMista(u.vydejniMisto)}`
+    : `${u.ulice}, ${u.psc} ${u.mesto}`;
   return `<div class="shrnuti-blok"><div><strong>Doprava:</strong> ${escHtml(DOPRAVA_NAZVY[u.doprava] || u.doprava)}<br>${escHtml(adresa)}</div><button type="button" class="detail-odkaz" onclick="prejitNaKrok(1)">Upravit</button></div>
     <div class="shrnuti-blok"><div><strong>Platba:</strong> ${escHtml(PLATBA_NAZVY[u.platba] || u.platba)}</div><button type="button" class="detail-odkaz" onclick="prejitNaKrok(1)">Upravit</button></div>
-    <div class="shrnuti-blok"><div><strong>${escHtml(u.jmeno)}</strong><br>${escHtml(u.email)} · ${escHtml(u.telefon)}${u.doprava === 'osobni_odber' ? `<br>${escHtml(`${u.ulice}, ${u.psc} ${u.mesto}`)}` : ''}</div><button type="button" class="detail-odkaz" onclick="prejitNaKrok(2)">Upravit</button></div>`;
+    <div class="shrnuti-blok"><div><strong>${escHtml(u.jmeno)}</strong><br>${escHtml(u.email)} · ${escHtml(u.telefon)}${u.doprava === 'osobni_odber' || u.vydejniMisto ? `<br>${escHtml(`${u.ulice}, ${u.psc} ${u.mesto}`)}` : ''}</div><button type="button" class="detail-odkaz" onclick="prejitNaKrok(2)">Upravit</button></div>`;
 }
 
 function udajeZFormulare() {
@@ -3078,11 +3254,21 @@ function udajeZFormulare() {
   return {
     jmeno: hodnota('chJmeno'), email: hodnota('chEmail'), telefon: hodnota('chTelefon'),
     ulice: hodnota('chUlice'), mesto: hodnota('chMesto'), psc: hodnota('chPsc'),
-    doprava: zvolenaDoprava(), platba: zvolenaPlatba()
+    doprava: zvolenaDoprava(), platba: zvolenaPlatba(),
+    vydejniMisto: jeVydejniMistoGls(zvolenaDoprava()) ? glsVydejniMisto : null
   };
 }
 
 function prejitNaKrok(krok) {
+  if (krok >= 2 && krok <= 3) {
+    const chybaMista = chybaVydejnihoMista(zvolenaDoprava());
+    if (chybaMista) {
+      if (krok === 3) prejitNaKrok(1);
+      zobrazitChybuMistaGls(chybaMista);
+      zobrazitChybuCheckoutu(`<div class="msg msg-error">${escHtml(chybaMista)}</div>`);
+      return;
+    }
+  }
   if (krok === 3) {
     const chyba = validovatCheckoutFormular(udajeZFormulare());
     if (chyba) { zobrazitChybuCheckoutu(`<div class="msg msg-error">${escHtml(chyba)}</div>`); return; }
@@ -3184,6 +3370,13 @@ async function odeslatObjednavku() {
     zobrazitChybuCheckoutu(`<div class="msg msg-error">${escHtml(chybaValidace)}</div>`);
     return;
   }
+  const chybaMista = chybaVydejnihoMista(doprava);
+  if (chybaMista) {
+    prejitNaKrok(1);
+    zobrazitChybuMistaGls(chybaMista);
+    zobrazitChybuCheckoutu(`<div class="msg msg-error">${escHtml(chybaMista)}</div>`);
+    return;
+  }
   if (!document.getElementById('chSouhlas').checked) {
     zobrazitChybuCheckoutu('<div class="msg msg-error">Pro odeslání objednávky je potřeba souhlasit s obchodními podmínkami.</div>');
     return;
@@ -3209,7 +3402,8 @@ async function odeslatObjednavku() {
         jmeno, email, telefon, ulice, mesto, psc,
         doprava, platba, celkem: total, webova_stranka,
         polozky: kosik.map(i => ({produkt_id: i.id, velikost: i.velikost, pocet: i.pocet, cena: i.cena})),
-        poukaz_kod: uplatnenyPoukaz ? uplatnenyPoukaz.kod : null
+        poukaz_kod: uplatnenyPoukaz ? uplatnenyPoukaz.kod : null,
+        vydejni_misto_id: jeVydejniMistoGls(doprava) && glsVydejniMisto ? glsVydejniMisto.id : undefined
       })
     });
     const data = await res.json();
@@ -3279,6 +3473,7 @@ ulozitKosik();
 katalogStav = stavZUrl(location.search);
 nacistKategorieFiltru().then(() => { if (produktyNacteny) vykreslitKatalog(); });
 nacistProdukty();
+nacistNastaveniDopravy();
 // Texty webu z adminu: pruh nad hlavičkou (prázdný = skrytý) a návod na měření pro detail boty
 fetch(API + '/nastaveni/texty').then(r => r.ok ? r.json() : null).then(data => {
   if (!data) return;
