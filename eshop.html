@@ -876,6 +876,25 @@ footer{background:var(--text)}
 .detail-nozicka h3,.detail-sekce h3{font-family:var(--font-brand);font-weight:700;font-size:1.45rem;color:var(--brown)}
 .paticka-sloupce h4{font-family:var(--font-brand);font-weight:700;font-size:1.3rem;text-transform:none;letter-spacing:0}
 
+/* Přilepená lišta Přidat do košíku v detailu (počítač); na mobilu je přilepené hlavní tlačítko */
+.detail-lista{position:sticky;bottom:0;z-index:3;margin:24px -32px -32px;padding:12px 32px;background:#fff;border-top:1px solid var(--tan-light);box-shadow:0 -8px 20px rgba(61,43,31,0.08);display:flex;align-items:center;gap:18px;border-radius:0 0 var(--r-l) var(--r-l)}
+.detail-lista[hidden]{display:none}
+.detail-lista-info{flex:1;min-width:0;display:flex;flex-direction:column}
+.detail-lista-info strong{font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.detail-lista-info span{font-size:0.85rem;color:var(--text-light)}
+.detail-lista-cena{font-weight:800;font-size:1.25rem;color:var(--brown);white-space:nowrap}
+.detail-lista .modal-add-btn{width:auto;margin:0;padding:12px 26px;white-space:nowrap}
+/* Mobil: přilepené hlavní tlačítko drží jen v horní části detailu - níž (popis, podobné boty) převezme lištu */
+@media(max-width:768px){
+  .detail-lista{margin:24px -16px 0;padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));gap:12px;border-radius:0}
+  .detail-lista-info strong{display:none}
+  .detail-lista-info span{font-size:0.85rem;color:var(--text)}
+  .detail-lista-cena{font-size:1.1rem}
+  .detail-lista .modal-add-btn{padding:12px 18px}
+}
+/* Hláška (toast) nesmí zakrýt přilepené tlačítko v detailu boty na mobilu */
+@media(max-width:768px){body:has(#modalDetail.open) .toast{bottom:calc(96px + env(safe-area-inset-bottom,0px))}}
+
 /* Mobil: struktura beze změny, jen dotykové plochy a odstupy */
 @media(max-width:768px){
   .hero{padding:32px 16px 28px}
@@ -1130,6 +1149,12 @@ body:has(.katalog-filtry.open) #back-to-top{display:none}
     <section class="detail-sekce"><h3>Popis</h3><div class="modal-popis" id="detailPopis"></div></section>
     <section class="detail-sekce" id="detailParametrySekce" hidden><h3>Parametry</h3><table class="detail-parametry" id="detailParametry"></table></section>
     <section class="detail-sekce" id="detailPodobneSekce" hidden><h3>Podobné boty</h3><div class="detail-podobne" id="detailPodobne"></div></section>
+    <!-- Přilepená lišta s Přidat do košíku (počítač): ukáže se, když hlavní tlačítko odjede z obrazovky -->
+    <div class="detail-lista" id="detailLista" hidden>
+      <div class="detail-lista-info"><strong id="detailListaNazev"></strong><span id="detailListaVelikost">Vyberte velikost</span></div>
+      <span class="detail-lista-cena" id="detailListaCena"></span>
+      <button type="button" class="modal-add-btn" onclick="pridatZListy()">&#128722; Přidat do košíku</button>
+    </div>
   </div>
 </div>
 
@@ -2495,6 +2520,10 @@ function openDetail(klic, { zHistorie = false } = {}) {
   document.getElementById('detailPodobneSekce').hidden = !podobne.length;
   document.getElementById('detailPodobne').innerHTML = podobne.map(x => kartaProduktuHtml(x, katalogStav || prazdnyStavKatalogu())).join('');
 
+  document.getElementById('detailListaNazev').textContent = `${p.znacka || ''} ${p.nazev}`.trim();
+  document.getElementById('detailListaVelikost').textContent = 'Vyberte velikost';
+  document.getElementById('detailListaCena').textContent = document.getElementById('detailPrice').textContent;
+  document.getElementById('detailLista').hidden = true;
   modal.classList.add('open');
   modal.querySelector('.modal').scrollTop = 0;
 }
@@ -2665,6 +2694,8 @@ function vybrVelikost(vel, btn) {
   // Ceny se mezi velikostmi stejného modelu občas liší - po výběru konkrétní
   // velikosti se místo "od X Kč" ukáže přesná cena pro tu velikost.
   document.getElementById('detailPrice').textContent = (velData ? velData.cena : aktivniProdukt.cena) + ' Kč';
+  document.getElementById('detailListaCena').textContent = document.getElementById('detailPrice').textContent;
+  document.getElementById('detailListaVelikost').textContent = 'Velikost ' + vel;
 
   const rozmeryEl = document.getElementById('detailRozmery');
   if (velData && (velData.delka_mm || velData.sirka_mm)) {
@@ -2686,8 +2717,28 @@ function vybrVelikost(vel, btn) {
   }
 }
 
+// Přilepená lišta v detailu: bez vybrané velikosti posune k tabulce velikostí
+function pridatZListy() {
+  if (!vybranaVelikost) {
+    document.getElementById('detailSizes').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    showToast('Nejdříve prosím vyberte velikost.');
+    return;
+  }
+  addToCartFromModal();
+}
+
+// Lišta se ukáže, jen když hlavní tlačítko Přidat do košíku není vidět (posunuto dolů k popisu)
+(function sledovatHlavniTlacitko() {
+  if (!('IntersectionObserver' in window)) return;
+  const okno = document.querySelector('#modalDetail .modal');
+  const lista = document.getElementById('detailLista');
+  new IntersectionObserver(([z]) => {
+    lista.hidden = z.isIntersecting || !document.getElementById('modalDetail').classList.contains('open');
+  }, { root: okno, threshold: 0 }).observe(document.querySelector('#modalDetail .detail-koupit'));
+})();
+
 function addToCartFromModal() {
-  if (!vybranaVelikost) { showToast('Vyberte prosím velikost!'); return; }
+  if (!vybranaVelikost) { showToast('Nejdříve prosím vyberte velikost.'); return; }
   addToCart(aktivniProdukt, vybranaVelikost);
   closeModal();
 }
