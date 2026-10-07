@@ -107,11 +107,32 @@ body{background:var(--app-bg)}
 .prehled-mrizka{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr) minmax(0,1fr);gap:20px}
 .prehled-mrizka .badge,.prehled-mrizka .btn,.prehled-mrizka td:nth-child(3){white-space:nowrap}
 .radek-odkaz{cursor:pointer}
-.prehled-celkove{margin-top:4px}
-.prehled-celkove summary{cursor:pointer;font-weight:700;color:var(--text-light);padding:10px 0;font-size:0.9rem}
 .objednavka-info{display:block;font-size:0.75rem;color:var(--text-light);margin-top:2px}
 @media(max-width:1199px){.prehled-mrizka{grid-template-columns:1fr 1fr}.prehled-mrizka > :last-child{grid-column:1/-1}}
 @media(max-width:768px){.prehled-mrizka{grid-template-columns:1fr}.pohledy{width:100%}.pohledy button{flex:1}}
+
+/* REZERVACE A REPORTY (etapa 3) */
+.stats-grid.rez-karty{grid-template-columns:repeat(5,minmax(0,1fr))}
+.rez-mrizka{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:20px;margin-bottom:20px}
+.rez-obdobi-popis{font-size:0.88rem;color:var(--text-light);margin:-8px 0 14px}
+.odkaz-tlacitko{background:none;border:0;padding:0;color:var(--sb-bg);font:inherit;font-weight:700;text-decoration:underline;cursor:pointer}
+.rez-kalendar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;padding:12px 14px 4px}
+.rez-den-nazev{font-size:0.7rem;font-weight:800;color:var(--text-light);text-align:center;text-transform:uppercase;letter-spacing:1px;padding-bottom:4px}
+.rez-den{min-height:54px;border:1px solid var(--app-line);border-radius:10px;background:#fff;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;padding:5px 7px;cursor:pointer;font-family:'Nunito',sans-serif;color:var(--text)}
+.rez-den:hover{border-color:var(--sb-bg)}
+.rez-den:focus-visible{outline:2px solid var(--sb-bg);outline-offset:1px}
+.rez-den.minuly{background:var(--app-bg);color:var(--text-light)}
+.rez-den.dnes{border:2px solid var(--sb-akcent)}
+.rez-den.vybrany{background:var(--sb-bg);color:#fff;border-color:var(--sb-bg)}
+.rez-den-cislo{font-weight:800;font-size:0.85rem}
+.rez-den-info{display:flex;align-items:center;gap:3px;font-size:0.7rem;font-weight:700;flex-wrap:wrap}
+.tecka{display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:2px}
+.tecka-rez{background:#e0a35f}
+.tecka-volno{background:#6fb07f}
+.rez-kalendar-legenda{font-size:0.75rem;color:var(--text-light);padding:4px 16px 12px;display:flex;align-items:center;gap:4px}
+.report-pozn{font-size:0.85rem;color:var(--text-light);margin:-6px 0 14px;max-width:80ch}
+@media(max-width:1199px){.stats-grid.rez-karty{grid-template-columns:repeat(3,minmax(0,1fr))}.rez-mrizka{grid-template-columns:1fr}}
+@media(max-width:768px){.stats-grid.rez-karty{grid-template-columns:repeat(2,minmax(0,1fr))}.stats-grid.rez-karty > :last-child{grid-column:1/-1}.pohledy button{padding:9px 8px}.rez-den{min-height:46px;padding:4px}.rez-den-info{font-size:0.62rem}}
 
 /* OBSAH */
 .main{flex:1;min-width:0;margin-left:var(--sb-sirka);padding:calc(var(--topbar-v) + 24px) 28px 28px;min-height:100vh;transition:margin-left 0.2s}
@@ -171,7 +192,7 @@ body{background:var(--app-bg)}
 .chart-wrap{background:#fff;border-radius:16px;border:1px solid var(--tan-light);padding:20px;margin-bottom:24px}
 .chart-title{font-family:'Cormorant',serif;color:var(--brown);font-size:1rem;margin-bottom:16px}
 .bar-chart{display:flex;align-items:flex-end;gap:8px;height:120px;padding-bottom:24px;position:relative;border-bottom:2px solid var(--tan-light)}
-.bar-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+.bar-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;height:100%}
 .bar{background:linear-gradient(180deg,var(--brown),var(--tan));border-radius:6px 6px 0 0;width:100%;min-height:4px;transition:all 0.3s;cursor:pointer;position:relative}
 .bar:hover{background:linear-gradient(180deg,var(--brown-dark),var(--brown))}
 .bar-tooltip{position:absolute;bottom:105%;left:50%;transform:translateX(-50%);background:var(--brown);color:#fff;padding:3px 8px;border-radius:6px;font-size:0.7rem;white-space:nowrap;display:none}
@@ -374,9 +395,9 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <div class="nav-group">
         <button type="button" class="nav-group-btn" onclick="prepnoutSkupinu(this)" aria-expanded="false" title="Reporty"><span class="icon">📈</span><span class="nav-text">Reporty</span><span class="nav-group-dot" aria-hidden="true"></span><span class="nav-sipka" aria-hidden="true">›</span></button>
         <div class="nav-sub">
-          <button type="button" class="nav-item" onclick="showPage('ucetnictvi',this,'reportTrzby')"><span class="nav-text">Tržby</span></button>
+          <button type="button" class="nav-item" onclick="showPage('reporty',this,'trzby')"><span class="nav-text">Tržby</span></button>
           <button type="button" class="nav-item" onclick="showPage('prodejna',this,'prehledy')"><span class="nav-text">Prodeje</span></button>
-          <button type="button" class="nav-item" onclick="showPage('poukazy',this)"><span class="nav-text">Poukazy</span></button>
+          <button type="button" class="nav-item" onclick="showPage('reporty',this,'poukazy')"><span class="nav-text">Poukazy</span></button>
           <button type="button" class="nav-item" onclick="showPage('ucetnictvi',this)"><span class="nav-text">Účetnictví</span></button>
         </div>
       </div>
@@ -419,7 +440,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
 
       <!-- Čtyři hlavní karty - jen ze stávajících dat (objednávky, prodejna, rezervace, sklad) -->
       <div class="stats-grid prehled-karty">
-        <button type="button" class="stat-card stat-odkaz karta-trzba" onclick="showPage('ucetnictvi',null,'reportTrzby')">
+        <button type="button" class="stat-card stat-odkaz karta-trzba" onclick="showPage('reporty',null,'trzby')">
           <span class="stat-label">Dnešní tržba</span><span class="stat-value" id="prehledDnesTrzba">...</span><span class="stat-sub" id="prehledDnesTrzbaRozpad"></span>
         </button>
         <button type="button" class="stat-card stat-odkaz karta-objednavky" onclick="otevritObjednavkyFiltr('nova')">
@@ -453,19 +474,6 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         </div>
       </div>
 
-      <!-- Dosavadní celkové údaje Přehledu; v etapě 3 se přesunou do Reportů -->
-      <details class="prehled-celkove">
-        <summary>Celkové údaje (tržby celkem, hodnota skladu, tržby po měsících)</summary>
-        <div class="stats-grid" style="margin-top:16px">
-          <div class="stat-card"><div class="stat-label">Tržby celkem</div><div class="stat-value" id="statTrzby">...</div><div class="stat-sub">bez zrušených</div></div>
-          <div class="stat-card"><div class="stat-label">Objednávky</div><div class="stat-value" id="statObjednavky">...</div><div class="stat-sub stat-red" id="statNove"></div></div>
-          <div class="stat-card"><div class="stat-label">Hodnota skladu</div><div class="stat-value" id="statHodnotaSkladu">...</div><div class="stat-sub">v prodejních cenách</div></div>
-        </div>
-        <div class="chart-wrap no-print">
-          <div class="chart-title">📈 Tržby po měsících</div>
-          <div class="bar-chart" id="barChart"><div class="loading">Načítám...</div></div>
-        </div>
-      </details>
     </div>
 
     <!-- OBJEDNÁVKY -->
@@ -543,7 +551,15 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <div id="poukazyZadostiTable"><div class="loading">Načítám...</div></div>
       </div>
       <div class="table-wrap">
-        <div class="table-header"><h3>🎁 Vydané poukazy</h3></div>
+        <div class="table-header"><h3>🎁 Vydané poukazy</h3>
+          <div class="filter-pills" id="poukazyFiltry" style="margin:0">
+            <span class="pill active" data-filtr="vse" onclick="filtrovatPoukazy('vse')">Vše</span>
+            <span class="pill" data-filtr="aktivni" onclick="filtrovatPoukazy('aktivni')">✅ Aktivní</span>
+            <span class="pill" data-filtr="vycerpane" onclick="filtrovatPoukazy('vycerpane')">✔️ Vyčerpané</span>
+            <span class="pill" data-filtr="expirovane" onclick="filtrovatPoukazy('expirovane')">⏰ Expirované</span>
+            <span class="pill" data-filtr="zrusene" onclick="filtrovatPoukazy('zrusene')">❌ Zrušené</span>
+          </div>
+        </div>
         <div id="poukazyTable"><div class="loading">Načítám...</div></div>
       </div>
     </div>
@@ -710,6 +726,55 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           </div>
         </div>
         <div id="poukazDlazdiceMsg" style="margin-top:8px"></div>
+      </div>
+    </div>
+
+    <!-- REPORTY (etapa 3): Tržby a Poukazy. Prodeje = Prodejna → Uzávěrky a přehledy, Účetnictví = vlastní stránka -->
+    <div class="page" id="page-reporty" data-vychozi-pohled="trzby">
+      <div class="page-header">
+        <div class="page-title">📈 Reporty</div>
+        <div class="table-actions">
+          <button class="btn btn-outline" onclick="showPage('ucetnictvi')">💰 Účetnictví a export pro účetní</button>
+          <button class="refresh-btn" onclick="loadReporty()">↻ Obnovit</button>
+        </div>
+      </div>
+      <div class="pohledy" role="tablist" aria-label="Reporty">
+        <button type="button" role="tab" data-cil="trzby" onclick="prepnoutPohled('reporty','trzby')">Tržby</button>
+        <button type="button" role="tab" onclick="showPage('prodejna',null,'prehledy')">Prodeje</button>
+        <button type="button" role="tab" data-cil="poukazy" onclick="prepnoutPohled('reporty','poukazy')">Poukazy</button>
+        <button type="button" role="tab" onclick="showPage('ucetnictvi')">Účetnictví</button>
+      </div>
+
+      <div data-pohled="trzby">
+        <p class="report-pozn">Stejný výpočet jako dosud na Přehledu: e-shop bez zrušených objednávek + prodejna; útrata poukazu, který byl započtený už při prodeji, se nepočítá podruhé.</p>
+        <div class="stats-grid" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+          <div class="stat-card"><div class="stat-label">Tržby celkem</div><div class="stat-value" id="statTrzby">...</div><div class="stat-sub" id="reportTrzbyRozpad">bez zrušených</div></div>
+          <div class="stat-card"><div class="stat-label">Tento měsíc</div><div class="stat-value" id="reportTrzbyMesic">...</div><div class="stat-sub" id="reportTrzbyMesicRozpad"></div></div>
+          <div class="stat-card"><div class="stat-label">Objednávky z e-shopu</div><div class="stat-value" id="statObjednavky">...</div><div class="stat-sub stat-red" id="statNove"></div></div>
+          <div class="stat-card"><div class="stat-label">Hodnota skladu</div><div class="stat-value" id="statHodnotaSkladu">...</div><div class="stat-sub">v prodejních cenách</div></div>
+        </div>
+        <div class="chart-wrap no-print">
+          <div class="chart-title">📈 Tržby po měsících (posledních 6 měsíců)</div>
+          <div class="bar-chart" id="barChart"><div class="loading">Načítám...</div></div>
+        </div>
+        <div class="table-wrap">
+          <div class="table-header"><h3>📅 Tržby po měsících – e-shop a prodejna</h3></div>
+          <div id="reportTrzbyTabulka"><div class="loading">Načítám...</div></div>
+        </div>
+      </div>
+
+      <div data-pohled="poukazy">
+        <p class="report-pozn">Ze stávajících údajů o dárkových poukazech. Poukazy vydáváte a spravujete v E-shop → Dárkové poukazy.</p>
+        <div class="stats-grid" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+          <div class="stat-card"><div class="stat-label">Vydáno celkem</div><div class="stat-value" id="reportPoukazyVydano">...</div><div class="stat-sub" id="reportPoukazyVydanoSub"></div></div>
+          <div class="stat-card"><div class="stat-label">Uplatněno celkem</div><div class="stat-value" id="reportPoukazyUplatneno">...</div><div class="stat-sub" id="reportPoukazyUplatnenoSub"></div></div>
+          <div class="stat-card"><div class="stat-label">Nevyužitý zůstatek aktivních</div><div class="stat-value" id="reportPoukazyZustatek">...</div><div class="stat-sub" id="reportPoukazyZustatekSub"></div></div>
+          <div class="stat-card"><div class="stat-label">Vyčerpané</div><div class="stat-value" id="reportPoukazyVycerpane">...</div><div class="stat-sub">poukazů</div></div>
+        </div>
+        <div class="table-wrap">
+          <div class="table-header"><h3>📅 Poukazy po měsících</h3></div>
+          <div id="reportPoukazyTabulka"><div class="loading">Načítám...</div></div>
+        </div>
       </div>
     </div>
 
@@ -886,27 +951,36 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       </div>
       <div id="rezervaceMsg"></div>
 
-      <!-- Stats -->
-      <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px">
-        <div class="stat-card"><div class="stat-label">Celkem rezervací</div><div class="stat-value" id="rezStatCelkem">—</div></div>
-        <div class="stat-card"><div class="stat-label">Čekajících</div><div class="stat-value stat-orange" id="rezStatCekajici">—</div></div>
-        <div class="stat-card"><div class="stat-label">Volných termínů</div><div class="stat-value stat-green" id="rezStatVolne">—</div></div>
+      <!-- Období: rezervace i termíny se filtrují podle data termínu (etapa 3) -->
+      <div class="pohledy" id="rezObdobi" role="group" aria-label="Období">
+        <button type="button" data-obdobi="dnes" onclick="nastavitObdobiRezervaci('dnes')">Dnes</button>
+        <button type="button" data-obdobi="tyden" onclick="nastavitObdobiRezervaci('tyden')">Tento týden</button>
+        <button type="button" data-obdobi="mesic" onclick="nastavitObdobiRezervaci('mesic')">Tento měsíc</button>
+        <button type="button" data-obdobi="vse" class="active" onclick="nastavitObdobiRezervaci('vse')">Vše (<span id="rezStatCelkem">—</span>)</button>
+      </div>
+      <p class="rez-obdobi-popis" id="rezObdobiPopis" hidden></p>
+
+      <div class="stats-grid rez-karty">
+        <button type="button" class="stat-card stat-odkaz karta-rezervace" onclick="nastavitObdobiRezervaci('dnes')"><span class="stat-label">Dnes</span><span class="stat-value" id="rezStatDnes">—</span><span class="stat-sub">rezervací</span></button>
+        <button type="button" class="stat-card stat-odkaz karta-rezervace" onclick="nastavitObdobiRezervaci('tyden')"><span class="stat-label">Tento týden</span><span class="stat-value" id="rezStatTyden">—</span><span class="stat-sub">rezervací</span></button>
+        <button type="button" class="stat-card stat-odkaz karta-rezervace" onclick="nastavitObdobiRezervaci('mesic')"><span class="stat-label">Tento měsíc</span><span class="stat-value" id="rezStatMesic">—</span><span class="stat-sub">rezervací</span></button>
+        <button type="button" class="stat-card stat-odkaz karta-objednavky" onclick="filtrovatRez('cekajici',document.querySelector('#rezStavFiltry [data-filtr=cekajici]'))"><span class="stat-label">Čekající</span><span class="stat-value stat-orange" id="rezStatCekajici">—</span><span class="stat-sub">k potvrzení</span></button>
+        <button type="button" class="stat-card stat-odkaz karta-trzba" onclick="filtrovatSloty('volne',document.querySelector('#slotFiltry [data-filtr=volne]'))"><span class="stat-label">Volné termíny</span><span class="stat-value stat-green" id="rezStatVolne">—</span><span class="stat-sub">od dneška</span></button>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
-        <!-- Termíny -->
+      <div class="rez-mrizka">
+        <!-- Kalendář: klik na den vybere období "den" a předvyplní datum pro přidání termínů -->
         <div class="table-wrap">
           <div class="table-header">
-            <h3>🕐 Termíny</h3>
+            <h3 id="rezKalendarNadpis">📆 Kalendář</h3>
             <div class="table-actions">
-              <div class="filter-pills" style="margin:0">
-                <span class="pill active" onclick="filtrovatSloty('vse',this)">Vše</span>
-                <span class="pill" onclick="filtrovatSloty('volne',this)">Volné</span>
-                <span class="pill" onclick="filtrovatSloty('obsazene',this)">Obsazené</span>
-              </div>
+              <button type="button" class="btn btn-outline btn-sm" onclick="posunoutKalendarRezervaci(-1)" aria-label="Předchozí měsíc">‹</button>
+              <button type="button" class="btn btn-outline btn-sm" onclick="posunoutKalendarRezervaci(0)">Dnes</button>
+              <button type="button" class="btn btn-outline btn-sm" onclick="posunoutKalendarRezervaci(1)" aria-label="Další měsíc">›</button>
             </div>
           </div>
-          <div id="slotTable"><div class="loading">Načítám...</div></div>
+          <div id="rezKalendar" class="rez-kalendar"></div>
+          <p class="rez-kalendar-legenda"><span class="tecka tecka-rez"></span> rezervace <span class="tecka tecka-volno"></span> volné termíny</p>
         </div>
 
         <!-- Rychlé přidání termínů -->
@@ -914,7 +988,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           <div class="table-header"><h3>⚡ Rychlé přidání termínů</h3></div>
           <div style="padding:16px">
             <div class="form-group">
-              <label>Datum</label>
+              <label for="qDatum">Datum</label>
               <input type="date" id="qDatum" style="padding:9px 12px;border:2px solid var(--tan-light);border-radius:10px;font-family:'Nunito',sans-serif;font-size:0.88rem;outline:none;width:100%">
             </div>
             <div style="font-size:0.78rem;font-weight:700;color:var(--text-light);margin-bottom:8px">Klikni na časy které chceš přidat:</div>
@@ -940,17 +1014,32 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <!-- Rezervace tabulka -->
       <div class="table-wrap">
         <div class="table-header">
-          <h3>📋 Příchozí rezervace</h3>
+          <h3>📋 Rezervace</h3>
           <div class="table-actions">
-            <div class="filter-pills" style="margin:0">
-              <span class="pill active" onclick="filtrovatRez('vse',this)">Vše</span>
-              <span class="pill" onclick="filtrovatRez('cekajici',this)">⏳ Čekající</span>
-              <span class="pill" onclick="filtrovatRez('potvrzena',this)">✅ Potvrzené</span>
-              <span class="pill" onclick="filtrovatRez('zrusena',this)">❌ Zrušené</span>
+            <div class="filter-pills" id="rezStavFiltry" style="margin:0">
+              <span class="pill active" data-filtr="vse" onclick="filtrovatRez('vse',this)">Vše</span>
+              <span class="pill" data-filtr="cekajici" onclick="filtrovatRez('cekajici',this)">⏳ Čekající</span>
+              <span class="pill" data-filtr="potvrzena" onclick="filtrovatRez('potvrzena',this)">✅ Potvrzené</span>
+              <span class="pill" data-filtr="zrusena" onclick="filtrovatRez('zrusena',this)">❌ Zrušené</span>
             </div>
           </div>
         </div>
         <div id="rezervaceTable"><div class="loading">Načítám...</div></div>
+      </div>
+
+      <!-- Termíny (volné i obsazené) -->
+      <div class="table-wrap">
+        <div class="table-header">
+          <h3>🕐 Termíny</h3>
+          <div class="table-actions">
+            <div class="filter-pills" id="slotFiltry" style="margin:0">
+              <span class="pill active" data-filtr="vse" onclick="filtrovatSloty('vse',this)">Vše</span>
+              <span class="pill" data-filtr="volne" onclick="filtrovatSloty('volne',this)">Volné</span>
+              <span class="pill" data-filtr="obsazene" onclick="filtrovatSloty('obsazene',this)">Obsazené</span>
+            </div>
+          </div>
+        </div>
+        <div id="slotTable"><div class="loading">Načítám...</div></div>
       </div>
     </div>
 
@@ -1707,6 +1796,7 @@ function showPage(name, el, kotva) {
   if (name==='newsletter') loadNewsletter();
   if (name==='vratkyzadosti') loadVratkyZadosti();
   if (name==='poukazy') loadPoukazy();
+  if (name==='reporty') loadReporty();
   // Zavřít menu na mobilu; záložka stránky, nebo kotva na její část, jinak nahoru
   toggleSidebar(false);
   const jePohled = nastavitPohled(name, kotva);
@@ -1872,38 +1962,6 @@ async function loadPrehled() {
         <td><strong style="color:${Number(s.pocet_kusu)===0?'var(--red)':'var(--orange)'}">${Number(s.pocet_kusu)}</strong></td>
         <td><button class="btn btn-green btn-sm" onclick="rychleNaskladnit(${s.id},${s.velikost},'${escAttr(escJs(s.nazev))}')">+ Naskladnit</button></td></tr>`).join('')}
         </tbody></table>${nizke.length > 6 ? `<div style="padding:10px 14px"><button class="btn btn-outline btn-sm" onclick="otevritSkladFiltr('nizky')">Všech ${nizke.length} položek</button></div>` : ''}`;
-
-    // --- Celkové údaje (dosavadní obsah Přehledu, v etapě 3 do Reportů) ---
-    const trzbyEshop = platne.reduce((s,o)=>s+o.celkem,0);
-    const trzbyProdejna = prodejnaProdeje.reduce((s,p)=>s+Number(p.celkem),0);
-    document.getElementById('statTrzby').textContent = (trzbyEshop + trzbyProdejna).toLocaleString('cs-CZ')+' Kč';
-    document.getElementById('statObjednavky').textContent = objednavky.length;
-    document.getElementById('statNove').textContent = nove.length+' nových';
-    const hodnotaSkladu = pole(celySklad).reduce((s,p)=>s+(Number(p.cena)||0)*(Number(p.pocet_kusu)||0),0);
-    document.getElementById('statHodnotaSkladu').textContent = hodnotaSkladu.toLocaleString('cs-CZ')+' Kč';
-
-    const mesice = {};
-    const mn = ['Led','Úno','Bře','Dub','Kvě','Čer','Čvc','Srp','Zář','Říj','Lis','Pro'];
-    platne.forEach(o => {
-      const d = new Date(o.vytvoreno);
-      const k = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-      if (!mesice[k]) mesice[k] = {label:mn[d.getMonth()]+' '+String(d.getFullYear()).slice(2), trzby:0};
-      mesice[k].trzby += o.celkem;
-    });
-    prodejnaProdeje.forEach(p => {
-      const d = new Date(p.datum);
-      const k = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-      if (!mesice[k]) mesice[k] = {label:mn[d.getMonth()]+' '+String(d.getFullYear()).slice(2), trzby:0};
-      mesice[k].trzby += Number(p.celkem);
-    });
-    const mList = Object.entries(mesice).sort((a,b)=>a[0].localeCompare(b[0])).slice(-6);
-    const maxTrz = Math.max(...mList.map(([,m])=>m.trzby), 1);
-    document.getElementById('barChart').innerHTML = mList.length === 0
-      ? '<div class="empty">Žádné tržby</div>'
-      : mList.map(([,m]) => {
-          const h = Math.max((m.trzby/maxTrz)*100, 4);
-          return `<div class="bar-item"><div class="bar" style="height:${h}%"><div class="bar-tooltip">${m.trzby.toLocaleString('cs-CZ')} Kč</div><span class="bar-label">${m.label}</span></div></div>`;
-        }).join('');
 
     checkNoveObjednavky();
   } catch(e) { console.error(e); }
@@ -4427,6 +4485,21 @@ function zavritKameruPole(wrapId, videoId) {
 // ═══════════════════════════════
 let poslednePoukazData = null;
 
+// Filtr seznamu poukazů; "expirovaný" = aktivní po datu platnosti (stejně jako štítek v tabulce)
+let poukazyFiltr = 'vse', vsechnyPoukazy = [];
+function poukazyPodleFiltru(seznam) {
+  const ted = new Date();
+  const poPlatnosti = p => new Date(p.platnost_do) < ted;
+  if (poukazyFiltr === 'aktivni') return seznam.filter(p => p.stav === 'aktivni' && !poPlatnosti(p));
+  if (poukazyFiltr === 'vycerpane') return seznam.filter(p => p.stav === 'pouzity');
+  if (poukazyFiltr === 'expirovane') return seznam.filter(p => p.stav === 'aktivni' && poPlatnosti(p));
+  if (poukazyFiltr === 'zrusene') return seznam.filter(p => p.stav === 'zruseny');
+  return seznam;
+}
+function filtrovatPoukazy(f) {
+  poukazyFiltr = f;
+  loadPoukazy();
+}
 async function loadPoukazy() {
   try {
     const data = await adminFetch(API+'/poukazy').then(r=>r.json());
@@ -4439,13 +4512,16 @@ async function loadPoukazy() {
     document.getElementById('poukazyPocet').textContent = seznam.length;
     document.getElementById('poukazyVyuzite').textContent = vyuzite.length;
 
-    if (!seznam.length) {
-      document.getElementById('poukazyTable').innerHTML = '<div class="empty">Zatím žádné vydané poukazy</div>';
+    vsechnyPoukazy = seznam;
+    const zobrazit = poukazyPodleFiltru(seznam);
+    document.querySelectorAll('#poukazyFiltry .pill').forEach(p=>p.classList.toggle('active', p.dataset.filtr===poukazyFiltr));
+    if (!zobrazit.length) {
+      document.getElementById('poukazyTable').innerHTML = seznam.length ? '<div class="empty">Žádné poukazy v tomto filtru</div>' : '<div class="empty">Zatím žádné vydané poukazy</div>';
     } else {
       const stavPopisek = {aktivni:'<span class="badge badge-ok">✅ Aktivní</span>', pouzity:'<span class="badge badge-zruseno">✔️ Vyčerpaný</span>', zruseny:'<span class="badge badge-zruseno">❌ Zrušený</span>'};
       document.getElementById('poukazyTable').innerHTML = `
         <table><thead><tr><th>Kód</th><th>Hodnota</th><th>Zůstatek</th><th>Platnost do</th><th>Kde</th><th>Kupující</th><th>Stav</th><th>Akce</th></tr></thead>
-        <tbody>${seznam.map(p=>`<tr>
+        <tbody>${zobrazit.map(p=>`<tr>
           <td><code style="background:var(--cream);padding:2px 6px;border-radius:4px">${escH(p.kod)}</code></td>
           <td><strong>${Number(p.hodnota).toLocaleString('cs-CZ')} Kč</strong></td>
           <td><strong style="color:${Number(p.zustatek)>0?'var(--sage)':'var(--text-light)'}">${Number(p.zustatek).toLocaleString('cs-CZ')} Kč</strong></td>
@@ -5241,9 +5317,7 @@ async function loadRezervace() {
     vsechnySloty = Array.isArray(sloty) ? sloty : [];
     vsechnySloty.forEach(s => { s.datum = String(s.datum).slice(0, 10); });
     vsechnyRezervace = Array.isArray(rez) ? rez : [];
-    renderSloty(vsechnySloty);
-    renderRezervace(vsechnyRezervace);
-    updateRezStats();
+    vykreslitRezervaceStranky();
     // badge čekajících v sidebaru
     const cekajici = vsechnyRezervace.filter(r=>r.stav==='cekajici').length;
     const badge = document.getElementById('navBadgeRez');
@@ -5254,19 +5328,199 @@ async function loadRezervace() {
   }
 }
 
+// REZERVACE - období (dnes / tento týden / tento měsíc / den z kalendáře / vše)
+// kombinované s dosavadními filtry stavu. Data i akce beze změny.
+let rezObdobi = 'vse';
+let rezKalendarMesic = (() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); })();
+// REPORTY (etapa 3). Tržby = dosavadní výpočet z Přehledu (e-shop bez zrušených
+// + prodejna, poukaz započtený při prodeji se nepočítá podruhé). Poukazy = souhrn
+// ze stávajících údajů o poukazech a jejich uplatnění.
+const MESICE_KRATCE = ['Led','Úno','Bře','Dub','Kvě','Čer','Čvc','Srp','Zář','Říj','Lis','Pro'];
+const klicMesice = datum => { const d = new Date(datum); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); };
+const nazevMesice = klic => { const [r, m] = klic.split('-'); return new Date(Number(r), Number(m)-1, 1).toLocaleDateString('cs-CZ', { month: 'long', year: 'numeric' }); };
+const kc = n => Number(n).toLocaleString('cs-CZ') + ' Kč';
+// Posledních n měsíců včetně aktuálního, od nejnovějšího
+function poslednichMesicu(n) {
+  const d = new Date(), vysledek = [];
+  for (let i = 0; i < n; i++) vysledek.push(klicMesice(new Date(d.getFullYear(), d.getMonth() - i, 1)));
+  return vysledek;
+}
+
+async function loadReporty() {
+  try {
+    const [obj, prodejna, celySklad, poukazyPouziti, poukazy] = await Promise.all([
+      adminFetch(API+'/objednavky').then(r=>r.json()).catch(()=>[]),
+      adminFetch(API+'/prodejna').then(r=>r.json()).catch(()=>[]),
+      adminFetch(API+'/sklad/admin').then(r=>r.json()).catch(()=>[]),
+      adminFetch(API+'/poukazy/pouziti/vse').then(r=>r.json()).catch(()=>[]),
+      adminFetch(API+'/poukazy').then(r=>r.json()).catch(()=>[])
+    ]);
+    const objednavky = pole(obj);
+    const platne = objednavky.filter(o=>o.stav!=='zrusena');
+    const jizZapocitano = new Set(pole(poukazyPouziti).filter(x=>x.zapocitano_pri_vydani && x.prodej_id).map(x=>x.prodej_id));
+    const prodejnaProdeje = pole(prodejna).filter(p=>!jizZapocitano.has(p.id));
+
+    // --- Tržby ---
+    const trzbyEshop = platne.reduce((s,o)=>s+o.celkem,0);
+    const trzbyProdejna = prodejnaProdeje.reduce((s,p)=>s+Number(p.celkem),0);
+    document.getElementById('statTrzby').textContent = kc(trzbyEshop + trzbyProdejna);
+    document.getElementById('reportTrzbyRozpad').textContent = `prodejna ${kc(trzbyProdejna)} · e-shop ${kc(trzbyEshop)}`;
+    document.getElementById('statObjednavky').textContent = objednavky.length;
+    document.getElementById('statNove').textContent = objednavky.filter(o=>o.stav==='nova').length + ' nových';
+    const hodnotaSkladu = pole(celySklad).reduce((s,p)=>s+(Number(p.cena)||0)*(Number(p.pocet_kusu)||0),0);
+    document.getElementById('statHodnotaSkladu').textContent = kc(hodnotaSkladu);
+
+    const mesice = {};
+    const pricist = (k, kde, castka) => { mesice[k] = mesice[k] || { eshop: 0, prodejna: 0 }; mesice[k][kde] += castka; };
+    platne.forEach(o => pricist(klicMesice(o.vytvoreno), 'eshop', o.celkem));
+    prodejnaProdeje.forEach(p => pricist(klicMesice(p.datum), 'prodejna', Number(p.celkem)));
+    const tento = mesice[klicMesice(new Date())] || { eshop: 0, prodejna: 0 };
+    document.getElementById('reportTrzbyMesic').textContent = kc(tento.eshop + tento.prodejna);
+    document.getElementById('reportTrzbyMesicRozpad').textContent = `prodejna ${kc(tento.prodejna)} · e-shop ${kc(tento.eshop)}`;
+
+    // graf: stejně jako dřív na Přehledu posledních 6 měsíců s tržbou
+    const mList = Object.entries(mesice).sort((a,b)=>a[0].localeCompare(b[0])).slice(-6);
+    const maxTrz = Math.max(...mList.map(([,m])=>m.eshop+m.prodejna), 1);
+    document.getElementById('barChart').innerHTML = mList.length === 0
+      ? '<div class="empty">Žádné tržby</div>'
+      : mList.map(([k,m]) => {
+          const t = m.eshop + m.prodejna;
+          const h = Math.max((t/maxTrz)*100, 4);
+          const [r, mm] = k.split('-');
+          return `<div class="bar-item"><div class="bar" style="height:${h}%"><div class="bar-tooltip">${t.toLocaleString('cs-CZ')} Kč</div><span class="bar-label">${MESICE_KRATCE[Number(mm)-1]} ${r.slice(2)}</span></div></div>`;
+        }).join('');
+
+    const radky = poslednichMesicu(12).filter(k => mesice[k]);
+    document.getElementById('reportTrzbyTabulka').innerHTML = radky.length === 0
+      ? '<div class="empty">Za posledních 12 měsíců žádné tržby</div>'
+      : `<table><thead><tr><th>Měsíc</th><th style="text-align:right">Prodejna</th><th style="text-align:right">E-shop</th><th style="text-align:right">Celkem</th></tr></thead><tbody>
+        ${radky.map(k => `<tr><td>${nazevMesice(k)}</td><td style="text-align:right">${kc(mesice[k].prodejna)}</td><td style="text-align:right">${kc(mesice[k].eshop)}</td><td style="text-align:right"><strong>${kc(mesice[k].prodejna + mesice[k].eshop)}</strong></td></tr>`).join('')}
+        </tbody></table>`;
+
+    // --- Poukazy ---
+    const seznam = pole(poukazy);
+    const pouziti = pole(poukazyPouziti);
+    const ted = new Date();
+    const aktivni = seznam.filter(p=>p.stav==='aktivni');
+    const poPlatnosti = aktivni.filter(p=>new Date(p.platnost_do) < ted);
+    document.getElementById('reportPoukazyVydano').textContent = kc(seznam.reduce((s,p)=>s+Number(p.hodnota),0));
+    document.getElementById('reportPoukazyVydanoSub').textContent = pocetSlovy(seznam.length, ['poukaz', 'poukazy', 'poukazů']);
+    document.getElementById('reportPoukazyUplatneno').textContent = kc(pouziti.reduce((s,x)=>s+Number(x.castka),0));
+    document.getElementById('reportPoukazyUplatnenoSub').textContent = pocetSlovy(pouziti.length, ['uplatnění', 'uplatnění', 'uplatnění']);
+    document.getElementById('reportPoukazyZustatek').textContent = kc(aktivni.reduce((s,p)=>s+Number(p.zustatek),0));
+    document.getElementById('reportPoukazyZustatekSub').textContent = poPlatnosti.length
+      ? `z toho ${kc(poPlatnosti.reduce((s,p)=>s+Number(p.zustatek),0))} po platnosti`
+      : pocetSlovy(aktivni.length, ['aktivní poukaz', 'aktivní poukazy', 'aktivních poukazů']);
+    document.getElementById('reportPoukazyVycerpane').textContent = seznam.filter(p=>p.stav==='pouzity').length;
+
+    const pm = {};
+    seznam.forEach(p => { const k = klicMesice(p.vytvoreno); pm[k] = pm[k] || { vydanoPocet: 0, vydano: 0, uplatneno: 0 }; pm[k].vydanoPocet++; pm[k].vydano += Number(p.hodnota); });
+    pouziti.forEach(x => { const k = klicMesice(x.vytvoreno); pm[k] = pm[k] || { vydanoPocet: 0, vydano: 0, uplatneno: 0 }; pm[k].uplatneno += Number(x.castka); });
+    const radkyP = poslednichMesicu(12).filter(k => pm[k]);
+    document.getElementById('reportPoukazyTabulka').innerHTML = radkyP.length === 0
+      ? '<div class="empty">Za posledních 12 měsíců žádné poukazy</div>'
+      : `<table><thead><tr><th>Měsíc</th><th style="text-align:right">Vydáno (ks)</th><th style="text-align:right">Vydáno (hodnota)</th><th style="text-align:right">Uplatněno</th></tr></thead><tbody>
+        ${radkyP.map(k => `<tr><td>${nazevMesice(k)}</td><td style="text-align:right">${pm[k].vydanoPocet}</td><td style="text-align:right">${kc(pm[k].vydano)}</td><td style="text-align:right">${kc(pm[k].uplatneno)}</td></tr>`).join('')}
+        </tbody></table>`;
+  } catch(e) { console.error(e); }
+}
+
+function isoDatum(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function rozsahObdobi(obdobi) {
+  const dnes = new Date(); dnes.setHours(0, 0, 0, 0);
+  if (obdobi === 'dnes') return [isoDatum(dnes), isoDatum(dnes)];
+  if (obdobi === 'tyden') {
+    const po = new Date(dnes); po.setDate(dnes.getDate() - ((dnes.getDay() + 6) % 7));
+    const ne = new Date(po); ne.setDate(po.getDate() + 6);
+    return [isoDatum(po), isoDatum(ne)];
+  }
+  if (obdobi === 'mesic') return [isoDatum(new Date(dnes.getFullYear(), dnes.getMonth(), 1)), isoDatum(new Date(dnes.getFullYear(), dnes.getMonth() + 1, 0))];
+  if (obdobi.startsWith('den:')) return [obdobi.slice(4), obdobi.slice(4)];
+  return null;
+}
+const vRozsahu = (datum, r) => !r || (!!datum && datum >= r[0] && datum <= r[1]);
+function datumRezervace(r) {
+  const s = vsechnySloty.find(x => x.id === r.slot_id);
+  return s ? s.datum : null;
+}
+function vykreslitRezervaceStranky() {
+  const r = rozsahObdobi(rezObdobi);
+  const sloty = vsechnySloty.filter(s => vRozsahu(s.datum, r));
+  renderSloty(slotyFilter === 'vse' ? sloty : slotyFilter === 'volne' ? sloty.filter(s => !s.obsazeno) : sloty.filter(s => s.obsazeno));
+  const rez = vsechnyRezervace.filter(x => vRozsahu(datumRezervace(x), r));
+  renderRezervace(rezFilter === 'vse' ? rez : rez.filter(x => x.stav === rezFilter));
+  document.querySelectorAll('#rezObdobi [data-obdobi]').forEach(b => b.classList.toggle('active', b.dataset.obdobi === rezObdobi));
+  document.querySelectorAll('#slotFiltry .pill').forEach(p => p.classList.toggle('active', p.dataset.filtr === slotyFilter));
+  document.querySelectorAll('#rezStavFiltry .pill').forEach(p => p.classList.toggle('active', p.dataset.filtr === rezFilter));
+  const popis = document.getElementById('rezObdobiPopis');
+  if (r) {
+    const f = iso => new Date(iso + 'T00:00:00').toLocaleDateString('cs-CZ');
+    popis.innerHTML = (r[0] === r[1] ? `Zobrazen den <strong>${f(r[0])}</strong>` : `Zobrazeno období <strong>${f(r[0])} – ${f(r[1])}</strong>`)
+      + ` · <button type="button" class="odkaz-tlacitko" onclick="nastavitObdobiRezervaci('vse')">zobrazit vše</button>`;
+    popis.hidden = false;
+  } else popis.hidden = true;
+  updateRezStats();
+  vykreslitKalendarRezervaci();
+}
+function nastavitObdobiRezervaci(obdobi) {
+  rezObdobi = obdobi;
+  if (obdobi.startsWith('den:')) {
+    const d = new Date(obdobi.slice(4) + 'T00:00:00');
+    rezKalendarMesic = new Date(d.getFullYear(), d.getMonth(), 1);
+    document.getElementById('qDatum').value = obdobi.slice(4);
+  }
+  vykreslitRezervaceStranky();
+}
+function posunoutKalendarRezervaci(o) {
+  if (o === 0) { const d = new Date(); rezKalendarMesic = new Date(d.getFullYear(), d.getMonth(), 1); }
+  else rezKalendarMesic = new Date(rezKalendarMesic.getFullYear(), rezKalendarMesic.getMonth() + o, 1);
+  vykreslitKalendarRezervaci();
+}
+function vykreslitKalendarRezervaci() {
+  const el = document.getElementById('rezKalendar');
+  if (!el) return;
+  const rok = rezKalendarMesic.getFullYear(), mesic = rezKalendarMesic.getMonth();
+  document.getElementById('rezKalendarNadpis').textContent = '📆 ' + rezKalendarMesic.toLocaleDateString('cs-CZ', { month: 'long', year: 'numeric' });
+  const rezPodleDne = {}, volnePodleDne = {};
+  vsechnyRezervace.filter(r => r.stav !== 'zrusena').forEach(r => { const d = datumRezervace(r); if (d) rezPodleDne[d] = (rezPodleDne[d] || 0) + 1; });
+  vsechnySloty.filter(s => !s.obsazeno).forEach(s => { volnePodleDne[s.datum] = (volnePodleDne[s.datum] || 0) + 1; });
+  const dnesIso = isoDatum(new Date());
+  const prvni = new Date(rok, mesic, 1), pocetDni = new Date(rok, mesic + 1, 0).getDate();
+  const posun = (prvni.getDay() + 6) % 7;
+  let html = ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne'].map(d => `<div class="rez-den-nazev">${d}</div>`).join('');
+  for (let i = 0; i < posun; i++) html += '<div></div>';
+  for (let den = 1; den <= pocetDni; den++) {
+    const iso = isoDatum(new Date(rok, mesic, den));
+    const rez = rezPodleDne[iso] || 0, volne = volnePodleDne[iso] || 0;
+    const tridy = ['rez-den', iso === dnesIso ? 'dnes' : '', rezObdobi === 'den:' + iso ? 'vybrany' : '', iso < dnesIso ? 'minuly' : ''].filter(Boolean).join(' ');
+    const popis = `${den}. ${mesic + 1}.: ${rez} rezervací, ${volne} volných termínů`;
+    html += `<button type="button" class="${tridy}" onclick="nastavitObdobiRezervaci('den:${iso}')" aria-label="${popis}" title="${popis}">
+      <span class="rez-den-cislo">${den}</span>
+      <span class="rez-den-info">${rez ? `<span class="tecka tecka-rez"></span>${rez}` : ''}${volne ? `<span class="tecka tecka-volno"></span>${volne}` : ''}</span>
+    </button>`;
+  }
+  el.innerHTML = html;
+}
+
 function updateRezStats() {
   document.getElementById('rezStatCelkem').textContent = vsechnyRezervace.length;
   document.getElementById('rezStatCekajici').textContent = vsechnyRezervace.filter(r=>r.stav==='cekajici').length;
-  document.getElementById('rezStatVolne').textContent = vsechnySloty.filter(s=>!s.obsazeno).length;
+  // volné termíny od dneška (minulé volné termíny už nejdou rezervovat)
+  const dnesIso = isoDatum(new Date());
+  document.getElementById('rezStatVolne').textContent = vsechnySloty.filter(s=>!s.obsazeno && s.datum >= dnesIso).length;
+  const platne = vsechnyRezervace.filter(r=>r.stav!=='zrusena');
+  for (const [id, obdobi] of [['rezStatDnes','dnes'],['rezStatTyden','tyden'],['rezStatMesic','mesic']]) {
+    const r = rozsahObdobi(obdobi);
+    document.getElementById(id).textContent = platne.filter(x=>vRozsahu(datumRezervace(x), r)).length;
+  }
 }
 
 let slotyFilter = 'vse';
 function filtrovatSloty(f, btn) {
   slotyFilter = f;
-  document.querySelectorAll('#page-rezervace .filter-pills:first-of-type .pill').forEach(p=>p.classList.remove('active'));
-  btn.classList.add('active');
-  const filtered = f==='vse' ? vsechnySloty : f==='volne' ? vsechnySloty.filter(s=>!s.obsazeno) : vsechnySloty.filter(s=>s.obsazeno);
-  renderSloty(filtered);
+  vykreslitRezervaceStranky();
 }
 
 function renderSloty(data) {
@@ -5286,13 +5540,7 @@ function renderSloty(data) {
 let rezFilter = 'vse';
 function filtrovatRez(f, btn) {
   rezFilter = f;
-  document.querySelectorAll('#page-rezervace .filter-pills').forEach(fp => {
-    // pouze pills uvnitř příchozích rezervací
-  });
-  btn.closest('.filter-pills').querySelectorAll('.pill').forEach(p=>p.classList.remove('active'));
-  btn.classList.add('active');
-  const filtered = f==='vse' ? vsechnyRezervace : vsechnyRezervace.filter(r=>r.stav===f);
-  renderRezervace(filtered);
+  vykreslitRezervaceStranky();
 }
 
 function renderRezervace(data) {
