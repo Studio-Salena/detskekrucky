@@ -228,6 +228,12 @@ test('MyGLS požadavek: heslo jen jako SHA-512 bajty, datum ve formátu \\/Date(
   assert.equal(json.PrintDateFrom, '/Date(1699913600000)/');
 });
 
+test('zkouška spojení: kód 26 (žádné zásilky v období) = přihlášení prošlo, spojení OK; kód -1 = nepřijaté přihlášení', async () => {
+  const v = await gls.overitSpojeni({ env: ENV_OSTRE, fetchFn: falesnyFetch({ GetParcelListErrors: [{ ErrorCode: 26, ErrorDescription: 'Parcel not found with current settings' }], PrintDataInfoList: null }).fetchFn });
+  assert.deepEqual(v, { prostredi: 'ostre', pocetZasilek: 0 });
+  await assert.rejects(gls.overitSpojeni({ env: ENV_TEST, fetchFn: falesnyFetch({ GetParcelListErrors: [{ ErrorCode: -1, ErrorDescription: 'Unauthorized.' }] }).fetchFn }), /GLS nepřijalo přihlášení.*testovací prostředí má od GLS vlastní přístupové údaje: Unauthorized\. \(kód -1\)/);
+});
+
 test('MyGLS chyby: přihlášení, chybový seznam, výpadek - srozumitelně a bez hesla', async () => {
   await assert.rejects(gls.overitSpojeni({ env: ENV_TEST, fetchFn: falesnyFetch({}, 401).fetchFn }), /Přihlášení do MyGLS se nepovedlo/);
   await assert.rejects(gls.overitSpojeni({ env: ENV_TEST, fetchFn: falesnyFetch({ GetParcelListErrors: [{ ErrorCode: 27, ErrorDescription: 'User is not authorized' }] }).fetchFn }),
