@@ -6928,17 +6928,36 @@ function closeModal(id) {
   const ov = document.getElementById(id);
   const bylo = ov.classList.contains('open');
   ov.classList.remove('open');
+  ov._zmeneno = false;
   const i = otevrenaOkna.indexOf(id);
   if (i >= 0) otevrenaOkna.splice(i, 1);
   if (bylo && ov._fokusPred && document.contains(ov._fokusPred) && typeof ov._fokusPred.focus === 'function') ov._fokusPred.focus({ preventScroll: true });
   if (bylo && ['modalUpravitSklad', 'modalUpravitProdukt', 'modalUpravitModel', 'modalNovyProdukt'].includes(id) && typeof obnovitDetailModelu === 'function') obnovitDetailModelu();
 }
+// Neuložené změny v okně: dotaz při zavření křížkem, Esc i tlačítkem Zrušit/Zavřít
+const DOTAZ_NEULOZENO = 'Zavřít okno? Neuložené změny se ztratí.';
+const jeTlacitkoZavrit = b => !!b && b.matches('.modal button:not(.modal-zavrit)') && /^(Zrušit|Zavřít)$/.test(b.textContent.trim());
 // Zavřít jako tlačítko Zrušit/Zavřít okna (to umí i vypnout kameru apod.)
 function zavritOkno(id) {
   const ov = document.getElementById(id);
-  const zrusit = [...ov.querySelectorAll('.modal button:not(.modal-zavrit)')].find(b => /^(Zrušit|Zavřít)$/.test(b.textContent.trim()));
+  if (ov._zmeneno && !confirm(DOTAZ_NEULOZENO)) return;
+  ov._zmeneno = false;
+  const zrusit = [...ov.querySelectorAll('.modal button:not(.modal-zavrit)')].find(jeTlacitkoZavrit);
   if (zrusit) zrusit.click(); else closeModal(id);
 }
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('button');
+  if (!jeTlacitkoZavrit(b)) return;
+  const ov = b.closest('.modal-overlay');
+  if (ov && ov._zmeneno && !confirm(DOTAZ_NEULOZENO)) { e.preventDefault(); e.stopImmediatePropagation(); return; }
+  if (ov) ov._zmeneno = false;
+}, true);
+// Zavření nebo obnovení stránky s rozpracovaným oknem: varování prohlížeče
+window.addEventListener('beforeunload', e => {
+  if (!otevrenaOkna.some(id => document.getElementById(id)._zmeneno)) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
 document.querySelectorAll('.modal-overlay > .modal').forEach(okno => {
   const id = okno.parentElement.id;
   const btn = document.createElement('button');
@@ -6960,7 +6979,6 @@ document.addEventListener('keydown', e => {
   const id = otevrenaOkna[otevrenaOkna.length - 1];
   const ov = document.getElementById(id);
   e.stopImmediatePropagation();
-  if (ov._zmeneno && !confirm('Zavřít okno? Neuložené změny se ztratí.')) return;
   zavritOkno(id);
 }, true);
 
