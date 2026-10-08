@@ -177,6 +177,9 @@ body{background:var(--app-bg)}
 .detail-fotky img.hlavni{border:2px solid var(--brown)}
 .detail-velikosti td,.detail-velikosti th{white-space:nowrap}
 #produktyTable tr[hidden]{display:none}
+.seznam-foto-bunka{width:64px}
+.seznam-foto{display:flex;align-items:center;justify-content:center;width:52px;height:52px;object-fit:contain;background:#fff;border:1px solid var(--app-line);border-radius:10px}
+.seznam-foto.bez-fotky{background:var(--app-bg);font-size:1.3rem;opacity:0.6}
 @media(max-width:768px){.detail-udaje{grid-template-columns:1fr}.detail-udaje dt{margin-top:6px}}
 
 /* OBSAH */
@@ -2805,7 +2808,9 @@ function vykreslitSklad() {
     : typ==='nula' ? veskerySklad.filter(s=>s.pocet_kusu===0)
     : veskerySklad;
   const q = normalizovat((document.getElementById('skladHledat').value || '').trim());
-  if (q) data = data.filter(s => [s.nazev, s.znacka, s.ean, s.velikost].some(v => normalizovat(v).includes(q)));
+  // každé slovo hledání musí být ve značce, názvu, EAN nebo velikosti ("Froddo Autumn 24")
+  const slova = q.split(/\s+/).filter(Boolean);
+  if (slova.length) data = data.filter(s => { const t = normalizovat([s.znacka, s.nazev, s.ean, s.velikost].join(' ')); return slova.every(w => t.includes(w)); });
   if (!data.length && veskerySklad.length) { document.getElementById('skladTable').innerHTML = '<div class="empty">Nic neodpovídá filtru</div>'; return; }
   renderSklad(data);
 }
@@ -3014,22 +3019,21 @@ function vykreslitSeznamProduktu() {
   if (!vse.length) { el.innerHTML = '<div class="empty">Zatím žádné produkty</div>'; return; }
   if (!list.length) { el.innerHTML = '<div class="empty">Nic neodpovídá hledání nebo filtru</div>'; return; }
   const rozbalitVse = !!q;
-  el.innerHTML = `<table class="produkty-seznam"><thead><tr><th>Produkt</th><th>Kategorie</th><th>Velikosti</th><th>Skladem</th><th>Cena</th><th>E-shop</th><th>Vlastnosti</th><th></th></tr></thead>
+  el.innerHTML = `<table class="produkty-seznam"><thead><tr><th>Fotka</th><th>Produkt</th><th>Kategorie</th><th>Cena</th><th>E-shop</th><th>Vlastnosti</th><th></th></tr></thead>
     ${seskupitPodleZnacky(list).map(([klic, sk]) => {
       const rozbaleno = rozbalitVse || produktyRozbaleneZnacky.has(klic);
       return `<tbody class="model-skupina" data-znacka="${escAttr(klic)}">
-        <tr class="skupina-hlavicka"><td colspan="8"><button type="button" class="skupina-prepinac" aria-expanded="${rozbaleno}" onclick="prepnoutZnackuProduktu(this)">
+        <tr class="skupina-hlavicka"><td colspan="7"><button type="button" class="skupina-prepinac" aria-expanded="${rozbaleno}" onclick="prepnoutZnackuProduktu(this)">
           <span class="skupina-sipka" aria-hidden="true">›</span> <strong>${escH(sk.nazev)}</strong>
-          <span class="skupina-info">${pocetSlovy(sk.modely.length, ['produkt', 'produkty', 'produktů'])} · ${sk.modely.reduce((s, m) => s + Number(m.kusu || 0), 0)} ks skladem</span>
+          <span class="skupina-info">${pocetSlovy(sk.modely.length, ['produkt', 'produkty', 'produktů'])}</span>
         </button></td></tr>
         ${sk.modely.map(m => {
           const bez = modelBezVlastnosti(m);
           return `<tr class="radek-odkaz" data-seznam-model="${Number(m.id)}"${rozbaleno ? '' : ' hidden'} onclick="otevritDetailModelu(${Number(m.id)})">
+            <td class="seznam-foto-bunka">${m.foto ? `<img class="seznam-foto" src="${escAttr(m.foto)}" alt="" loading="lazy">` : '<span class="seznam-foto bez-fotky" title="Bez fotky">👟</span>'}</td>
             <td><strong>${escH(m.znacka || '')}</strong> ${escH(m.nazev)}
-              <div style="font-size:0.75rem;color:var(--text-light)">${m.ma_fotku ? '📷 fotka' : '<span style="color:var(--red)">bez fotky</span>'}</div></td>
+              <div style="font-size:0.75rem;color:var(--text-light)">vel. ${escH(rozsahVelikosti(m.velikosti))}${m.foto ? '' : ' · <span style="color:var(--red)">bez fotky</span>'}</div></td>
             <td>${escH(nazevKategorie(m.kategorie))}</td>
-            <td>${escH(rozsahVelikosti(m.velikosti))}</td>
-            <td><strong>${Number(m.kusu || 0)}</strong> ks</td>
             <td style="white-space:nowrap">${cenaOdDo(m)}</td>
             <td>${eshopStavModelu(m)}</td>
             <td>${bez ? '<span style="color:var(--text-light);font-size:0.8rem">—</span>' : (m.vyplneno && !m.kategorie_ke_kontrole ? '<span class="badge badge-ok">✓ vyplněno</span>' : '<span class="badge badge-nizky">chybí</span>')}</td>
@@ -3151,39 +3155,43 @@ function vykreslitDetailModelu() {
     </section>
 
     <section class="detail-sekce">
-      <div class="detail-sekce-hlavicka"><h4>Velikosti</h4>
+      <div class="detail-sekce-hlavicka"><h4>Velikosti a ceny</h4>
         <div class="table-actions">
           <button type="button" class="btn btn-primary btn-sm" onclick="pridatVelikostModelu()">+ Přidat velikost</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="otevritSkladModelu()">📦 Otevřít ve skladu</button>
           <button type="button" class="btn btn-outline btn-sm" onclick="nastavitEshopModelu(true)">👁️ Zobrazit vše na e-shopu</button>
           <button type="button" class="btn btn-outline btn-sm" onclick="nastavitEshopModelu(false)">🙈 Skrýt vše</button>
           <button type="button" class="btn btn-red btn-sm" id="detailSmazatVybrane" disabled onclick="smazatVybraneVelikosti()">🗑️ Smazat vybrané</button>
         </div></div>
       <div style="overflow-x:auto">
       <table class="detail-velikosti" onchange="oznacitVyberVelikosti()"><thead><tr>
-        <th><input type="checkbox" data-vyber-vse-velikosti aria-label="Vybrat všechny velikosti"></th><th>Velikost</th><th>EAN</th><th>Skladem</th><th>Min.</th><th>Dostupnost</th><th>Cena</th><th>E-shop</th><th>Akce</th>
+        <th><input type="checkbox" data-vyber-vse-velikosti aria-label="Vybrat všechny velikosti"></th><th>Velikost</th><th>Cena</th><th>E-shop</th><th>Akce</th>
       </tr></thead><tbody>
       ${varianty.map((v, i) => {
-        const maSklad = v.velikost != null;
         return `<tr>
           <td><input type="checkbox" data-vyber-velikost="${i}" aria-label="Vybrat velikost ${escAttr(v.velikost ?? '')}"></td>
           <td><strong>${escH(v.velikost ?? '—')}</strong></td>
-          <td style="font-variant-numeric:tabular-nums">${escH(v.ean || '—')}</td>
-          <td><strong style="color:${!maSklad ? 'inherit' : Number(v.pocet_kusu) === 0 ? 'var(--red)' : v.nizky_stav ? 'var(--orange)' : 'inherit'}">${maSklad ? Number(v.pocet_kusu) + ' ks' : '—'}</strong></td>
-          <td>${maSklad ? Number(v.min_pocet ?? 0) : '—'}</td>
-          <td>${escH(v.dostupnost || '—')}</td>
           <td style="white-space:nowrap">${Number(v.cena).toLocaleString('cs-CZ')} Kč${v.cena_puvodni ? `<br><small style="color:var(--text-light);text-decoration:line-through">${Number(v.cena_puvodni).toLocaleString('cs-CZ')} Kč</small>` : ''}</td>
           <td><button type="button" class="btn btn-sm ${v.na_eshopu ? 'btn-outline' : 'btn-green'}" onclick="akceVelikosti('eshop', ${i})" title="${v.na_eshopu ? 'Zobrazeno na e-shopu - kliknutím skrýt' : 'Skryto - kliknutím zobrazit'}">${v.na_eshopu ? '👁️ Zobrazeno' : '🙈 Skryto'}</button></td>
           <td style="white-space:nowrap">
-            <button type="button" class="btn btn-green btn-sm" onclick="akceVelikosti('plus', ${i})" title="Naskladnit"${maSklad ? '' : ' disabled'}>+</button>
-            <button type="button" class="btn btn-orange btn-sm" onclick="akceVelikosti('minus', ${i})" title="Odečíst ze skladu"${maSklad ? '' : ' disabled'}>−</button>
-            <button type="button" class="btn btn-outline btn-sm" onclick="akceVelikosti('sklad', ${i})" title="Velikost, EAN, rozměry, dostupnost"${maSklad ? '' : ' disabled'}>📦</button>
             <button type="button" class="btn btn-outline btn-sm" onclick="akceVelikosti('produkt', ${i})" title="Cena, popis, fotky">✏️</button>
             <button type="button" class="btn btn-red btn-sm" onclick="akceVelikosti('smazat', ${i})" title="Smazat velikost">🗑️</button>
           </td>
         </tr>`;
       }).join('')}
       </tbody></table></div>
+      <p class="detail-pozn">EAN, počty kusů, minimální stav a naskladnění jsou ve Skladu (tlačítko „📦 Otevřít ve skladu“).</p>
     </section>`;
+}
+
+// Sklad vyfiltrovaný na tento produkt (značka + název)
+function otevritSkladModelu() {
+  if (!detailModeluData) return;
+  const m = detailModeluData.model;
+  closeModal('modalDetailModelu');
+  skladFiltrTyp = 'vse';
+  document.getElementById('skladHledat').value = `${m.znacka || ''} ${m.nazev}`.trim();
+  showPage('sklad');
 }
 
 function oznacitZmenuDetailu() {

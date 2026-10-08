@@ -236,6 +236,8 @@ test('Produkty v adminu proti PostgreSQL: seznam s cenou od-do a skrytými, deta
     assert.equal(froddo.skryto, 1);
     assert.equal(r1.body.modely.find(m => m.znacka === 'Beda').skryto, 0);
     assert.deepEqual(froddo.eany, ['8590000000024'], 'EAN kódy modelu pro hledání');
+    assert.equal(froddo.foto, 'https://img.example/a.jpg', 'úvodní fotka = hlavní nahraná');
+    assert.equal(r1.body.modely.find(m => m.znacka === 'Beda').foto, null, 'bez fotky null');
 
     const r2 = res();
     await najit('get', '/:id')({ params: { id: String(froddo.id) } }, r2);

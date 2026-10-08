@@ -103,6 +103,11 @@ router.get('/', async (req, res) => {
              MAX(p.cena) AS cena_do,
              COUNT(DISTINCT p.id) FILTER (WHERE p.na_eshopu IS FALSE)::int AS skryto,
              COALESCE(ARRAY_AGG(DISTINCT s.ean) FILTER (WHERE s.ean IS NOT NULL AND s.ean <> ''), '{}') AS eany,
+             -- úvodní fotka do seznamu: hlavní nahraná fotka, jinak starší odkaz z pole emoji
+             COALESCE((
+               SELECT pi.url FROM product_images pi JOIN produkty p2 ON p2.id = pi.produkt_id
+               WHERE p2.model_id = m.id ORDER BY pi.is_primary DESC, pi.position, pi.id LIMIT 1
+             ), MIN(p.emoji) FILTER (WHERE p.emoji LIKE 'http%')) AS foto,
              -- emoji může být NULL -> BOOL_OR vrátí NULL; COALESCE, ať je výsledek vždy true/false
              (COALESCE(BOOL_OR(p.emoji LIKE 'http%'), false) OR EXISTS (
                SELECT 1 FROM product_images pi JOIN produkty p2 ON p2.id = pi.produkt_id WHERE p2.model_id = m.id
