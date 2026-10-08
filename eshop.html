@@ -430,6 +430,9 @@ footer.paticka .footer-copy{text-align:center;border-top:1px solid rgba(255,255,
 .order-summary-total{display:flex;justify-content:space-between;font-weight:700;font-size:1rem;color:var(--brown);border-top:1px solid var(--tan);padding-top:10px;margin-top:8px}
 .doprava-nudge{font-size:0.8rem;text-align:center;padding:8px 12px;border-radius:10px;background:var(--sage-light);color:var(--brown-dark);font-weight:700;margin-bottom:12px}
 .vyzkouseni-info{background:var(--cream);border:1px solid var(--tan-light);border-radius:12px;padding:14px;font-size:0.85rem;color:var(--text-light);margin:-4px 0 14px;line-height:1.5}
+.dodaci-lhuta{font-size:0.82rem;color:var(--text-light);margin:-4px 0 14px;line-height:1.5}
+.osobni-udaje-info{font-size:0.78rem;color:var(--text-light);margin:-6px 0 12px 26px;line-height:1.45}
+.osobni-udaje-info a{color:var(--brown)}
 .honeypot-pole{position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden}
 .submit-btn{width:100%;padding:16px;background:var(--brown);color:#fff;border:none;border-radius:12px;font-family:'Nunito',sans-serif;font-weight:700;font-size:1rem;cursor:pointer;margin-bottom:10px;box-shadow:0 4px 15px rgba(139,69,19,0.3)}
 .submit-btn:hover{background:var(--brown-dark)}
@@ -1222,6 +1225,7 @@ body:has(.katalog-filtry.open) #back-to-top{display:none}
         <button type="button" class="vydejni-misto-btn" id="zasVybratBtn" onclick="otevritMapuZasilkovny()">Vybrat výdejní místo Zásilkovny</button>
         <div class="vydejni-misto-chyba" id="zasMistoChyba" role="alert" hidden></div>
       </div>
+      <p class="dodaci-lhuta" id="dodaciLhuta">Zboží skladem odešleme do 2&nbsp;pracovních dnů od připsání platby, doručení pak obvykle trvá 2–5 pracovních dnů. Zboží označené „U&nbsp;dodavatele“ odešleme do 7–14 dnů.</p>
       <div class="vyzkouseni-info" id="vyzkouseniInfo" style="display:none">
         &#128094; Při osobním odběru si boty rovnou vyzkoušíte přímo na prodejně: <strong>Holešovská 752, Hulín 768 24</strong>. Ozveme se, jakmile bude objednávka připravená k vyzvednutí.
       </div>
@@ -1285,9 +1289,10 @@ body:has(.katalog-filtry.open) #back-to-top{display:none}
       <div class="form-group" style="display:flex;align-items:flex-start;gap:8px">
         <input type="checkbox" id="chSouhlas" style="width:18px;height:18px;flex-shrink:0;margin-top:2px">
         <label for="chSouhlas" style="font-size:0.85rem;font-weight:400;color:var(--text);cursor:pointer">
-          Souhlasím s <a href="obchodni-podminky.html" target="_blank" style="color:var(--brown);font-weight:700">obchodními podmínkami</a> a zpracováním osobních údajů pro účely vyřízení objednávky.
+          Seznámil(a) jsem se s <a href="obchodni-podminky.html" target="_blank" style="color:var(--brown);font-weight:700">obchodními podmínkami</a> a souhlasím s nimi.
         </label>
       </div>
+      <p class="osobni-udaje-info">Osobní údaje zpracováváme za účelem vyřízení objednávky. Podrobnosti najdete v bodě 7 <a href="obchodni-podminky.html#gdpr" target="_blank">obchodních podmínek</a> (Ochrana osobních údajů).</p>
       <div class="honeypot-pole" aria-hidden="true">
         <label for="chWebovaStranka">Nevyplňujte toto pole</label>
         <input type="text" id="chWebovaStranka" name="webova_stranka" tabindex="-1" autocomplete="off">
@@ -3325,6 +3330,7 @@ function vykreslitSouhrnObjednavky() {
   });
   document.getElementById('orderSummary').innerHTML = souhrnObjednavkyHtml(kosik, uplatnenyPoukaz, doprava);
   document.getElementById('vyzkouseniInfo').style.display = doprava === 'osobni_odber' ? 'block' : 'none';
+  document.getElementById('dodaciLhuta').hidden = doprava === 'osobni_odber';
   document.getElementById('glsVydejniMistoBox').hidden = !jeVydejniMistoGls(doprava);
   document.getElementById('zasVydejniMistoBox').hidden = !jeVydejniMistoZasilkovny(doprava);
   // Platit na prodejně jde jen při osobním odběru - jinak zpět na převod

@@ -229,3 +229,20 @@ test('platba na prodejně: e-mail ukáže způsob platby a žádné pokyny k př
   assert.doesNotMatch(t, /Pokyny k platbě|Variabilní symbol/);
   assert.equal(html.includes('X-VS'), false);
 });
+
+test('VOP 10/2026: platba bez dobírky a Stripe, odeslání do 2 pracovních dnů, Fio banka u terminálu', () => {
+  const t = textStranky(fs.readFileSync(path.join(KOREN, 'obchodni-podminky.html'), 'utf8'));
+  assert.doesNotMatch(t, /Dobírkou|dobírky|Stripe|na základě výzvy prodávajícího/);
+  assert.match(t, /Zboží skladem odešleme do 2 pracovních dnů od připsání platby, zboží „u dodavatele“ do 7–14 dnů\./);
+  assert.match(t, /výdejní místo Zásilkovny \(79 Kč\) nebo prostřednictvím České pošty \(89 Kč\)/);
+  assert.match(t, /poskytovatele platebního terminálu na prodejně \(Fio banka, a\.s\.\)/);
+  assert.match(t, /platné od 8\. 10\. 2026/);
+});
+
+test('potvrzovací e-mail: kdy zboží odešleme / u osobního odběru, že se ozveme', async () => {
+  assert.match(text((await vyrenderovatPotvrzeni()).html), /Zboží skladem odešleme do 2 pracovních dnů od připsání platby/);
+  const odber = text((await vyrenderovatPotvrzeni({ ...OBJEDNAVKA, doprava: 'osobni_odber', platba: 'na_prodejne', celkem: 1290 })).html);
+  assert.match(odber, /Ozveme se, jakmile bude objednávka připravená k vyzvednutí\./);
+  // (celé VOP v e-mailu tu větu obsahují - kontroluje se jen přehled objednávky)
+  assert.doesNotMatch(odber.slice(0, odber.indexOf('Produkt Vel.')), /odešleme do 2 pracovních dnů/);
+});

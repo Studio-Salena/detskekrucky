@@ -534,6 +534,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <div class="nav-sub">
           <button type="button" class="nav-item" onclick="showPage('nastaveni',this)"><span class="nav-text">Otevírací doba</span></button>
           <button type="button" class="nav-item" onclick="showPage('newsletter',this)"><span class="nav-text">Newsletter</span></button>
+          <button type="button" class="nav-item" onclick="showPage('nastaveni',this,'doprava')"><span class="nav-text">Doprava</span></button>
           <button type="button" class="nav-item" onclick="showPage('nastaveni',this,'system')"><span class="nav-text">Systém</span></button>
         </div>
       </div>
@@ -1074,6 +1075,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <div class="pohledy" role="tablist" aria-label="Nastavení">
         <button type="button" role="tab" data-cil="oteviraci" onclick="prepnoutPohled('nastaveni','oteviraci')">Otevírací doba</button>
         <button type="button" role="tab" onclick="showPage('newsletter')">Newsletter</button>
+        <button type="button" role="tab" data-cil="doprava" onclick="prepnoutPohled('nastaveni','doprava')">Doprava</button>
         <button type="button" role="tab" data-cil="system" onclick="prepnoutPohled('nastaveni','system')">Systém</button>
       </div>
       <div class="table-wrap" data-pohled="oteviraci">
@@ -1092,7 +1094,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           <div id="nastaveni-msg" style="margin-top:12px;color:green;font-weight:600"></div>
         </div>
       </div>
-      <div class="table-wrap" id="nastaveni-doprava" data-pohled="system">
+      <div class="table-wrap" id="nastaveni-doprava" data-pohled="doprava">
         <div class="table-header"><h3>🚚 Doprava</h3></div>
         <div style="padding:20px">
           <p style="color:var(--text-light);font-size:0.85rem;margin:0 0 12px">Způsob dopravy se zákazníkům v e-shopu ukáže, jen když je zapnutý a má vyplněnou cenu. Cena se k objednávce uloží v okamžiku objednání – pozdější změna starší objednávky neovlivní.</p>

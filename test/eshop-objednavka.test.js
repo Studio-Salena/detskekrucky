@@ -86,8 +86,11 @@ test('shrnutí údajů: osobní odběr ukáže prodejnu, jinak adresu; vše esca
   assert.match(zavolat('shrnutiUdajuHtml', { ...u, doprava: 'zasilkovna' }), /Hlavní 1, 768 24 Hulín/);
 });
 
-test('právní texty formuláře beze změny: souhlas, odkaz na VOP, tlačítko až v posledním kroku', () => {
-  assert.match(ESHOP_HTML, /Souhlasím s <a href="obchodni-podminky.html" target="_blank" style="color:var\(--brown\);font-weight:700">obchodními podmínkami<\/a> a zpracováním osobních údajů pro účely vyřízení objednávky\./);
+test('právní texty formuláře: souhlas jen s VOP (varianta A), informace o osobních údajích bez zaškrtávání, dodací lhůta, tlačítko až v posledním kroku', () => {
+  assert.match(ESHOP_HTML, /Seznámil\(a\) jsem se s <a href="obchodni-podminky.html" target="_blank" style="color:var\(--brown\);font-weight:700">obchodními podmínkami<\/a> a souhlasím s nimi\./);
+  assert.match(ESHOP_HTML, /<p class="osobni-udaje-info">Osobní údaje zpracováváme za účelem vyřízení objednávky\. Podrobnosti najdete v bodě 7 <a href="obchodni-podminky.html#gdpr" target="_blank">obchodních podmínek<\/a> \(Ochrana osobních údajů\)\.<\/p>/);
+  assert.doesNotMatch(ESHOP_HTML, /zpracováním osobních údajů pro účely vyřízení objednávky/);
+  assert.match(ESHOP_HTML, /Zboží skladem odešleme do 2&nbsp;pracovních dnů od připsání platby/);
   const krok3 = ESHOP_HTML.slice(ESHOP_HTML.indexOf('data-krok="3" aria-label="Shrnutí"'), ESHOP_HTML.indexOf('data-krok="4"'));
   assert.match(krok3, /id="submitBtn"/);
   assert.match(krok3, /id="chSouhlas"/);

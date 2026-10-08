@@ -221,6 +221,9 @@ async function odeslat_potvrzeni(objednavka) {
           <p style="margin:0 0 4px 0;font-size:14px"><strong>Doprava:</strong> ${escH(dopravaLabel)}</p>
           ${vydejniMistoHtml(objednavka.vydejni_misto, 'margin:0 0 4px 0;font-size:14px')}
           <p style="margin:0;font-size:14px"><strong>Platba:</strong> ${escH(platbaLabel)}</p>
+          <p style="margin:8px 0 0 0;font-size:13px;color:${BARVA_TEXT_TLUMENY}">${objednavka.doprava === 'osobni_odber'
+            ? 'Ozveme se, jakmile bude objednávka připravená k vyzvednutí.'
+            : 'Zboží skladem odešleme do 2 pracovních dnů od připsání platby, zboží „u dodavatele“ do 7–14 dnů.'}</p>
         </td>
       </tr>
     </table>
