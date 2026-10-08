@@ -34,6 +34,7 @@ Web a e-shop pro obchod s barefoot obuví pro děti (majitelka: Monika Škarpich
 - Doprava: Zásilkovna s výběrem výdejního místa (79 Kč), Česká pošta (89 Kč, nechat, i když se nepoužívá), osobní odběr; zdarma od 2 000 Kč
 - Administrace (hnědá, barvy webu): Přehled, E-shop (objednávky, zákazníci, vrácení, poukazy), Prodejna (pokladna/POS), Sklad, Sortiment (katalog), Rezervace, Reporty a Účetnictví, Web (texty), Nastavení (otevírací doba, doprava, systém)
 - Rezervační systém se správou slotů a e-mailovým potvrzením
+- Průvodce velikostí: na stránce boty doporučení podle délky nožičky (vnitřní délka ≥ nožička + rezerva, výchozí 12 mm v nastavení katalogu `rezervaMm`), filtr `?noha=` v katalogu (rezerva až +10 mm); rozměry velikostí se zadávají v adminu v detailu produktu (PUT /api/modely/:id/rozmery)
 
 ## Testy
 
@@ -56,5 +57,5 @@ Web a e-shop pro obchod s barefoot obuví pro děti (majitelka: Monika Škarpich
 
 ## Co dál (typické priority)
 
-- Průvodce výběrem velikosti (čeká na délky stélek v mm u modelů)
+- Doplnit rozměry (mm) u modelů, které je nemají – bez nich průvodce nabízí poradnu
 - GLS: až bude smluvní ceník a přístupy k MyGLS

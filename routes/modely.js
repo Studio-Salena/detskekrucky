@@ -8,7 +8,7 @@ const vyzadovatAdmina = require('../middleware/adminAuth');
 const {
   VOLBY, KATEGORIE_BEZ_VLASTNOSTI, VYCHOZI_NASTAVENI_KATALOGU,
   klicModelu, migrovatModely, overitUpravuModelu, jeVyplneno, overitNastaveniKatalogu,
-  overitHromadnouZmenu
+  overitHromadnouZmenu, overitRozmery
 } = require('../lib/modely');
 
 async function initModely() {
@@ -23,7 +23,8 @@ pripravit(initModely());
 
 async function nacistNastaveniKatalogu() {
   const r = await pool.query("SELECT hodnota FROM nastaveni WHERE klic = 'katalog'");
-  return r.rows.length && r.rows[0].hodnota ? r.rows[0].hodnota : VYCHOZI_NASTAVENI_KATALOGU;
+  // starší uložené nastavení nemá rezervu průvodce - doplní se výchozí
+  return r.rows.length && r.rows[0].hodnota ? { ...VYCHOZI_NASTAVENI_KATALOGU, ...r.rows[0].hodnota } : VYCHOZI_NASTAVENI_KATALOGU;
 }
 
 // Veřejné - e-shop z toho bude počítat věkové skupiny z velikostí
@@ -237,6 +238,39 @@ router.patch('/:id', async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     res.status(500).json({ chyba: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Rozměry (vnitřní délka a šířka v mm) u všech velikostí modelu najednou.
+// Všechno, nebo nic: velikost, která k modelu nepatří, zruší celé uložení.
+router.put('/:id/rozmery', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ chyba: 'Neplatné id modelu.' });
+  const { chyba, polozky } = overitRozmery(req.body);
+  if (chyba) return res.status(400).json({ chyba });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const p of polozky) {
+      const r = await client.query(
+        `UPDATE sklad s SET delka_mm = $1, sirka_mm = $2
+         FROM produkty pr
+         WHERE s.produkt_id = pr.id AND pr.model_id = $3 AND s.produkt_id = $4 AND s.velikost = $5`,
+        [p.delka_mm, p.sirka_mm, id, p.produkt_id, p.velikost]
+      );
+      if (r.rowCount !== 1) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ chyba: `Velikost ${p.velikost} k tomuto produktu nepatří.` });
+      }
+    }
+    await client.query('COMMIT');
+    res.json({ zprava: 'Rozměry uloženy', ulozeno: polozky.length });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Uložení rozměrů selhalo:', err.message);
+    res.status(500).json({ chyba: 'Rozměry se nepodařilo uložit.' });
   } finally {
     client.release();
   }

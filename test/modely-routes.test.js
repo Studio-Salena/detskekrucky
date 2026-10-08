@@ -175,7 +175,7 @@ test('nastavení katalogu: uloží platné, odmítne neplatné', async () => {
     assert.equal(stav.nastaveni, null);
     const ok = await volat('/nastaveni-katalogu', { method: 'PUT', body: { vekoveSkupiny: [{ nazev: ' Mimi ', od: 16, do: 20 }], pohlavi: true } });
     assert.equal(ok.status, 200);
-    assert.deepEqual(stav.nastaveni, { vekoveSkupiny: [{ nazev: 'Mimi', od: 16, do: 20 }], pohlavi: true });
+    assert.deepEqual(stav.nastaveni, { vekoveSkupiny: [{ nazev: 'Mimi', od: 16, do: 20 }], pohlavi: true, rezervaMm: 12 });
     assert.deepEqual((await volat('/nastaveni-katalogu', { admin: false })).body, stav.nastaveni);
   });
 });

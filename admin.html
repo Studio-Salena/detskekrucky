@@ -176,6 +176,8 @@ body{background:var(--app-bg)}
 .detail-fotky img{width:96px;height:96px;object-fit:contain;background:var(--app-bg);border:1px solid var(--app-line);border-radius:10px}
 .detail-fotky img.hlavni{border:2px solid var(--brown)}
 .detail-velikosti td,.detail-velikosti th{white-space:nowrap}
+.detail-velikosti .rozmer-mm{width:76px;padding:6px 8px}
+.detail-rozmery-ulozit{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;font-weight:700;font-size:0.85rem}
 #produktyTable tr[hidden]{display:none}
 .seznam-foto-bunka{width:64px}
 .seznam-foto{display:flex;align-items:center;justify-content:center;width:52px;height:52px;object-fit:contain;background:#fff;border:1px solid var(--app-line);border-radius:10px}
@@ -763,7 +765,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           <input type="text" class="search-input" id="modelyHledat" placeholder="🔍 Značka nebo název..." oninput="vykreslitModely()">
           <select id="modelyFiltrKategorie" class="search-input" style="width:auto" onchange="vykreslitModely()"><option value="">Všechny kategorie</option></select>
           <label style="font-size:0.82rem;display:flex;gap:5px;align-items:center"><input type="checkbox" id="modelyJenNevyplnene" onchange="vykreslitModely()"> Jen nevyplněné</label>
-          <button class="btn btn-outline btn-sm" onclick="otevritNastaveniKatalogu()">⚙️ Věk a pohlaví</button>
+          <button class="btn btn-outline btn-sm" onclick="otevritNastaveniKatalogu()">⚙️ Věk, pohlaví a velikosti</button>
           
         </div>
       <div class="table-wrap">
@@ -1583,12 +1585,17 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
 
 <div class="modal-overlay" id="modalNastaveniKatalogu">
   <div class="modal" style="max-width:480px">
-    <h3>⚙️ Věk a pohlaví</h3>
+    <h3>⚙️ Věk, pohlaví a průvodce velikostí</h3>
     <div id="nastaveniKataloguMsg"></div>
     <p style="font-size:0.83rem;color:var(--text-light);margin-bottom:12px">Věkové skupiny v menu e-shopu se počítají z velikostí, které bota má. Nastavte rozsah velikostí pro každou skupinu.</p>
     <div id="vekoveSkupinyRadky" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px"></div>
     <button class="btn btn-outline btn-sm" id="pridatVekovouSkupinuBtn" onclick="pridatVekovouSkupinu()">+ Přidat skupinu</button>
     <label style="display:flex;gap:8px;align-items:center;margin-top:16px;font-size:0.88rem"><input type="checkbox" id="nkPohlavi"> Rozlišovat holčička / chlapeček (přidá sloupec „Pro koho“)</label>
+    <div class="form-group" style="margin-top:16px">
+      <label for="nkRezerva">Průvodce velikostí: rezerva (mm)</label>
+      <input id="nkRezerva" class="form-input" type="number" min="0" max="30" step="1" style="max-width:120px">
+      <p style="font-size:0.8rem;color:var(--text-light);margin:4px 0 0">O kolik má být vnitřní délka boty delší než nožička. U barefoot bot se běžně doporučuje 10–15 mm.</p>
+    </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modalNastaveniKatalogu')">Zrušit</button>
       <button class="btn btn-primary" onclick="ulozitNastaveniKatalogu()">💾 Uložit</button>
@@ -3223,13 +3230,15 @@ function vykreslitDetailModelu() {
         </div></div>
       <div style="overflow-x:auto">
       <table class="detail-velikosti" onchange="oznacitVyberVelikosti()"><thead><tr>
-        <th><input type="checkbox" data-vyber-vse-velikosti aria-label="Vybrat všechny velikosti"></th><th>Velikost</th><th>Cena</th><th>E-shop</th><th>Akce</th>
+        <th><input type="checkbox" data-vyber-vse-velikosti aria-label="Vybrat všechny velikosti"></th><th>Velikost</th><th>Cena</th><th title="Vnitřní délka boty (stélka) v mm – podle ní e-shop doporučuje velikost">Délka mm</th><th title="Vnitřní šířka boty v mm">Šířka mm</th><th>E-shop</th><th>Akce</th>
       </tr></thead><tbody>
       ${varianty.map((v, i) => {
         return `<tr>
           <td><input type="checkbox" data-vyber-velikost="${i}" aria-label="Vybrat velikost ${escAttr(v.velikost ?? '')}"></td>
           <td><strong>${escH(v.velikost ?? '—')}</strong></td>
           <td style="white-space:nowrap">${Number(v.cena).toLocaleString('cs-CZ')} Kč${v.cena_puvodni ? `<br><small style="color:var(--text-light);text-decoration:line-through">${Number(v.cena_puvodni).toLocaleString('cs-CZ')} Kč</small>` : ''}</td>
+          ${v.velikost == null ? '<td></td><td></td>' : `<td><input class="form-input rozmer-mm" type="number" min="50" max="400" step="1" inputmode="numeric" data-rozmer="delka_mm" data-i="${i}" value="${v.delka_mm ?? ''}" aria-label="Vnitřní délka velikosti ${escAttr(v.velikost)} v mm" oninput="oznacitZmenuRozmeru()"></td>
+          <td><input class="form-input rozmer-mm" type="number" min="20" max="200" step="1" inputmode="numeric" data-rozmer="sirka_mm" data-i="${i}" value="${v.sirka_mm ?? ''}" aria-label="Vnitřní šířka velikosti ${escAttr(v.velikost)} v mm" oninput="oznacitZmenuRozmeru()"></td>`}
           <td><button type="button" class="btn btn-sm ${v.na_eshopu ? 'btn-outline' : 'btn-green'}" onclick="akceVelikosti('eshop', ${i})" title="${v.na_eshopu ? 'Zobrazeno na e-shopu - kliknutím skrýt' : 'Skryto - kliknutím zobrazit'}">${v.na_eshopu ? '👁️ Zobrazeno' : '🙈 Skryto'}</button></td>
           <td style="white-space:nowrap">
             <button type="button" class="btn btn-outline btn-sm" onclick="akceVelikosti('produkt', ${i})" title="Cena, popis, fotky">✏️</button>
@@ -3238,7 +3247,11 @@ function vykreslitDetailModelu() {
         </tr>`;
       }).join('')}
       </tbody></table></div>
-      <p class="detail-pozn">EAN, počty kusů, minimální stav a naskladnění jsou ve Skladu (tlačítko „📦 Otevřít ve skladu“).</p>
+      <div class="detail-rozmery-ulozit">
+        <button type="button" class="btn btn-primary btn-sm" id="detailUlozitRozmery" disabled onclick="ulozitRozmeryDetailu()">💾 Uložit rozměry</button>
+        <span id="detailRozmeryMsg" role="status"></span>
+      </div>
+      <p class="detail-pozn">Délka a šířka = vnitřní rozměry boty v mm. Podle délky e-shop zákazníkům doporučuje velikost (nožička + rezerva ${Number(nastaveniKatalogu.rezervaMm ?? 12)} mm). EAN, počty kusů, minimální stav a naskladnění jsou ve Skladu (tlačítko „📦 Otevřít ve skladu“).</p>
     </section>`;
 }
 
@@ -3270,6 +3283,39 @@ async function ulozitVlastnostiDetailu() {
   } catch (e) {
     btn.disabled = false;
     msg.innerHTML = `<span style="color:var(--red);font-weight:700">❌ ${escH(e.message)}</span>`;
+  }
+}
+
+// Rozměry všech velikostí najednou (průvodce velikostí na e-shopu)
+function oznacitZmenuRozmeru() {
+  document.getElementById('detailUlozitRozmery').disabled = false;
+  document.getElementById('detailRozmeryMsg').textContent = '';
+}
+async function ulozitRozmeryDetailu() {
+  const btn = document.getElementById('detailUlozitRozmery');
+  const msg = document.getElementById('detailRozmeryMsg');
+  const radky = {};
+  for (const inp of document.querySelectorAll('#detailModeluObsah .rozmer-mm')) {
+    const v = detailModeluData.varianty[Number(inp.dataset.i)];
+    const k = inp.dataset.i;
+    if (!radky[k]) radky[k] = { produkt_id: v.produkt_id, velikost: String(v.velikost), delka_mm: null, sirka_mm: null };
+    const t = inp.value.trim();
+    radky[k][inp.dataset.rozmer] = t === '' ? null : Number(t);
+  }
+  const rozmery = Object.values(radky);
+  if (!rozmery.length) return;
+  btn.disabled = true;
+  msg.textContent = 'Ukládám…'; msg.style.color = '';
+  try {
+    const r = await adminFetch(API + '/modely/' + detailModeluId + '/rozmery', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rozmery }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.chyba || 'Rozměry se nepodařilo uložit.');
+    rozmery.forEach((x, j) => { const v = detailModeluData.varianty[Number(Object.keys(radky)[j])]; v.delka_mm = x.delka_mm; v.sirka_mm = x.sirka_mm; });
+    document.getElementById('modalDetailModelu')._zmeneno = false;
+    msg.textContent = '✅ Rozměry uloženy'; msg.style.color = 'var(--sage-tmava)';
+  } catch (e) {
+    btn.disabled = false;
+    msg.textContent = '❌ ' + e.message; msg.style.color = 'var(--red)';
   }
 }
 
@@ -6631,6 +6677,7 @@ function otevritNastaveniKatalogu() {
   document.getElementById('nastaveniKataloguMsg').innerHTML = '';
   document.getElementById('vekoveSkupinyRadky').innerHTML = (nastaveniKatalogu.vekoveSkupiny || []).map(radekVekoveSkupiny).join('');
   document.getElementById('nkPohlavi').checked = !!nastaveniKatalogu.pohlavi;
+  document.getElementById('nkRezerva').value = nastaveniKatalogu.rezervaMm ?? 12;
   aktualizovatPridatVekovou();
   openModal('modalNastaveniKatalogu');
 }
@@ -6649,7 +6696,8 @@ async function ulozitNastaveniKatalogu() {
       od: parseInt(r.querySelector('[data-vs="od"]').value, 10),
       do: parseInt(r.querySelector('[data-vs="do"]').value, 10)
     })),
-    pohlavi: document.getElementById('nkPohlavi').checked
+    pohlavi: document.getElementById('nkPohlavi').checked,
+    rezervaMm: parseInt(document.getElementById('nkRezerva').value, 10)
   };
   try {
     const res = await adminFetch(API + '/modely/nastaveni-katalogu', {

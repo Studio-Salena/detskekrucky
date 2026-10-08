@@ -249,6 +249,32 @@ test('Produkty v adminu proti PostgreSQL: seznam s cenou od-do a skrytými, deta
     const r3 = res();
     await najit('get', '/:id')({ params: { id: '999999' } }, r3);
     assert.equal(r3.statusCode, 404);
+
+    // Rozměry všech velikostí najednou (průvodce velikostí)
+    const ulozit = najit('put', '/:id/rozmery');
+    const r4 = res();
+    await ulozit({ params: { id: String(froddo.id) }, body: { rozmery: [
+      { produkt_id: p24, velikost: '24', delka_mm: 156, sirka_mm: 64 },
+      { produkt_id: p25, velikost: 25, delka_mm: 163, sirka_mm: null }
+    ] } }, r4);
+    assert.equal(r4.statusCode, 200, JSON.stringify(r4.body));
+    const ulozene = (await pool.query('SELECT velikost, delka_mm, sirka_mm FROM sklad WHERE produkt_id IN ($1, $2) ORDER BY velikost', [p24, p25])).rows;
+    assert.deepEqual(ulozene.map(x => [x.velikost, x.delka_mm, x.sirka_mm]), [[24, 156, 64], [25, 163, null]]);
+    // velikost cizího modelu: nic se neuloží (ani ta platná)
+    const beda = r1.body.modely.find(m => m.znacka === 'Beda');
+    const r5 = res();
+    await ulozit({ params: { id: String(beda.id) }, body: { rozmery: [{ produkt_id: p24, velikost: '24', delka_mm: 200, sirka_mm: null }] } }, r5);
+    assert.equal(r5.statusCode, 400);
+    const r6 = res();
+    await ulozit({ params: { id: String(froddo.id) }, body: { rozmery: [
+      { produkt_id: p24, velikost: '24', delka_mm: 170, sirka_mm: null },
+      { produkt_id: p25, velikost: '99', delka_mm: 180, sirka_mm: null }
+    ] } }, r6);
+    assert.equal(r6.statusCode, 400);
+    assert.equal((await pool.query('SELECT delka_mm FROM sklad WHERE produkt_id = $1', [p24])).rows[0].delka_mm, 156, 'všechno, nebo nic');
+    const r7 = res();
+    await ulozit({ params: { id: String(froddo.id) }, body: { rozmery: [{ produkt_id: p24, velikost: '24', delka_mm: 5000 }] } }, r7);
+    assert.equal(r7.statusCode, 400);
   } finally {
     delete require.cache[poolPath];
     delete require.cache[routePath];

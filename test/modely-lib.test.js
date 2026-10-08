@@ -135,3 +135,23 @@ test('zajistitModel: existující klíč vrátí model, nový založí s volným
   assert.equal(modely[1].kategorie, 'celorocky');
   assert.equal(modely[1].nazev, 'Á');
 });
+
+test('nastavení katalogu: rezerva průvodce velikostí (výchozí 12 mm, 0–30)', () => {
+  assert.equal(VYCHOZI_NASTAVENI_KATALOGU.rezervaMm, 12);
+  const zaklad = { vekoveSkupiny: [{ nazev: 'A', od: 20, do: 25 }], pohlavi: false };
+  assert.equal(overitNastaveniKatalogu(zaklad).hodnoty.rezervaMm, 12, 'bez rezervy = výchozí');
+  assert.equal(overitNastaveniKatalogu({ ...zaklad, rezervaMm: 15 }).hodnoty.rezervaMm, 15);
+  for (const r of [-1, 31, 12.5, '12', null]) assert.ok(overitNastaveniKatalogu({ ...zaklad, rezervaMm: r }).chyba, String(r));
+});
+
+test('rozměry velikostí: celá čísla v rozumném rozsahu nebo prázdné', () => {
+  const { overitRozmery } = require('../lib/modely');
+  assert.deepEqual(overitRozmery({ rozmery: [{ produkt_id: 3, velikost: 24, delka_mm: 156, sirka_mm: '' }] }).polozky,
+    [{ produkt_id: 3, velikost: '24', delka_mm: 156, sirka_mm: null }]);
+  for (const telo of [null, {}, { rozmery: [] }, { rozmery: [{ produkt_id: 0, velikost: '24' }] }, { rozmery: [{ produkt_id: 1, velikost: '' }] },
+    { rozmery: [{ produkt_id: 1, velikost: '24', delka_mm: 40 }] }, { rozmery: [{ produkt_id: 1, velikost: '24', delka_mm: 401 }] },
+    { rozmery: [{ produkt_id: 1, velikost: '24', sirka_mm: 15.5 }] }, { rozmery: [{ produkt_id: 1, velikost: '24', delka_mm: '150' }] },
+    { rozmery: Array.from({ length: 81 }, () => ({ produkt_id: 1, velikost: '24' })) }]) {
+    assert.ok(overitRozmery(telo).chyba, JSON.stringify(telo).slice(0, 80));
+  }
+});
