@@ -176,7 +176,11 @@ footer.paticka .footer-copy{text-align:center;border-top:1px solid rgba(255,255,
   .hledani-navrhy{left:0;width:auto}
   .hledani-btn{display:block}
   .hlavicka-akce{margin-left:auto}
-  .horni-lista{font-size:0.72rem;gap:2px 14px}
+  /* mobil: jeden řádek, posouvá se prstem do strany (5 výhod by jinak zabralo 4 řádky) */
+  .horni-lista{font-size:0.72rem;gap:18px;flex-wrap:nowrap;justify-content:flex-start;overflow-x:auto;white-space:nowrap;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .horni-lista::-webkit-scrollbar{display:none}
+  .horni-lista>*{flex-shrink:0}
+  .horni-lista button{min-height:0}
 }
 @media(max-width:480px){.paticka-sloupce{grid-template-columns:1fr}}
 
@@ -963,8 +967,10 @@ body:has(.katalog-filtry.open) #back-to-top{display:none}
 
 <!-- HORNÍ LIŠTA (krok 3) -->
 <div class="horni-lista">
+  <button type="button" onclick="otevritPoradnu()">&#128099; Poradíme s výběrem velikosti</button>
+  <a href="index.html#prodejna">&#127978; Česká kamenná prodejna v Hulíně</a>
   <span>&#128666; Doprava zdarma od 2 000 Kč</span>
-  <a href="index.html#prodejna">&#127978; Prodejna Hulín</a>
+  <a href="index.html#rezervace">&#128095; Možnost osobního vyzkoušení</a>
   <a href="odstoupeni-od-smlouvy.html">&#8617;&#65039; Vrácení do 14 dnů</a>
 </div>
 <!-- Pruh nad hlavičkou - text se mění v adminu (Texty webu), prázdný = skrytý -->
