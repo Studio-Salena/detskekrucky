@@ -3618,6 +3618,24 @@ async function ulozitOteviracku() {
     document.getElementById('banner-msg').textContent = '❌ Chyba při ukládání';
   }
 }
+// MESICE_NAZVY je definované u měsíčních uzávěrek prodejny
+function ucetniMesice(objednavky, prodeje, vratky, jizZapocitano) {
+  const m = {};
+  const pridat = (datum, pole, castka) => {
+    const d = new Date(datum);
+    if (Number.isNaN(d.getTime())) return null;
+    const k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    if (!m[k]) m[k] = { nazev: MESICE_NAZVY[d.getMonth()] + ' ' + d.getFullYear(), eshop: 0, prodejna: 0, vratky: 0, objednavek: 0, prodeju: 0 };
+    m[k][pole] += Number(castka) || 0;
+    return m[k];
+  };
+  objednavky.forEach(o => { const x = pridat(o.vytvoreno, 'eshop', o.celkem); if (x) x.objednavek++; });
+  prodeje.filter(p => !jizZapocitano.has(p.id)).forEach(p => { const x = pridat(p.datum, 'prodejna', p.celkem); if (x) x.prodeju++; });
+  vratky.forEach(v => pridat(v.vytvoreno, 'vratky', v.castka));
+  return Object.entries(m).sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([klic, x]) => ({ klic, ...x, celkem: x.eshop + x.prodejna - x.vratky }));
+}
+
 async function loadUcetnictvi() {
   const rokPole = document.getElementById('rocniPrehledRok');
   if (rokPole && !rokPole.value) rokPole.value = new Date().getFullYear() - 1;
@@ -3626,10 +3644,17 @@ async function loadUcetnictvi() {
     const obj = Array.isArray(data) ? data.filter(o=>o.stav!=='zrusena') : [];
     const trzby = obj.reduce((s,o)=>s+o.celkem,0);
 
-    let vratkyCelkem = 0;
+    let vratkyCelkem = 0, vratkySeznam = [];
     try {
       const v = await adminFetch(API+'/prodejna/vratky/vse').then(r=>r.json());
-      vratkyCelkem = Array.isArray(v) ? v.reduce((s,x)=>s+Number(x.castka),0) : 0;
+      vratkySeznam = Array.isArray(v) ? v : [];
+      vratkyCelkem = vratkySeznam.reduce((s,x)=>s+Number(x.castka),0);
+    } catch(e) {}
+    // Prodeje v prodejně vždy načíst (ne z paměti stránky Prodejna)
+    let prodejeUcet = [];
+    try {
+      const p = await adminFetch(API+'/prodejna').then(r=>r.json());
+      prodejeUcet = Array.isArray(p) ? p : [];
     } catch(e) {}
 
     // Poukazy: peníze se počítají do tržby jednou – buď při prodeji poukazu (má vydano_prodej_id),
@@ -3648,7 +3673,7 @@ async function loadUcetnictvi() {
       poukazyPrijatoZaProdej = Array.isArray(pk) ? pk.filter(p=>p.vydano_prodej_id).reduce((s,p)=>s+Number(p.hodnota),0) : 0;
     } catch(e) {}
 
-    const prodejnaTrzbyUcet = prodejnaData.filter(p=>!jizZapocitanoProdejId.has(p.id)).reduce((s,p)=>s+Number(p.celkem),0);
+    const prodejnaTrzbyUcet = prodejeUcet.filter(p=>!jizZapocitanoProdejId.has(p.id)).reduce((s,p)=>s+Number(p.celkem),0);
     const celkoveTrzby = trzby + prodejnaTrzbyUcet - vratkyCelkem;
     document.getElementById('ucetTrzby').textContent = celkoveTrzby.toLocaleString('cs-CZ')+' Kč';
     document.getElementById('ucetVratky').textContent = '−'+vratkyCelkem.toLocaleString('cs-CZ')+' Kč';
@@ -3658,20 +3683,16 @@ async function loadUcetnictvi() {
     if (elPoukazyProdej) elPoukazyProdej.textContent = poukazyPrijatoZaProdej.toLocaleString('cs-CZ')+' Kč';
     document.getElementById('ucetPrumer').textContent = obj.length ? Math.round(trzby/obj.length).toLocaleString('cs-CZ')+' Kč' : '—';
     document.getElementById('ucetPocet').textContent = obj.length;
-    const mn = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
-    const mesice = {};
-    obj.forEach(o=>{
-      const d=new Date(o.vytvoreno);
-      const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-      if (!mesice[k]) mesice[k]={nazev:mn[d.getMonth()]+' '+d.getFullYear(),trzby:0,pocet:0};
-      mesice[k].trzby+=o.celkem; mesice[k].pocet++;
-    });
-    const ml = Object.entries(mesice).sort((a,b)=>b[0].localeCompare(a[0]));
+    const ml = ucetniMesice(obj, prodejeUcet, vratkySeznam, jizZapocitanoProdejId);
+    const kcU = n => Number(n).toLocaleString('cs-CZ') + ' Kč';
     document.getElementById('ucetMesice').innerHTML = ml.length===0 ? '<div class="empty">Žádné tržby</div>'
-      : `<table><thead><tr><th>Měsíc</th><th>Tržby</th><th>Objednávky</th><th>Průměr</th></tr></thead>
-        <tbody>${ml.map(([,m])=>`<tr><td><strong>${m.nazev}</strong></td>
-          <td><strong style="color:var(--brown)">${m.trzby.toLocaleString('cs-CZ')} Kč</strong></td>
-          <td>${m.pocet}</td><td>${Math.round(m.trzby/m.pocet).toLocaleString('cs-CZ')} Kč</td>
+      : `<table><thead><tr><th>Měsíc</th><th style="text-align:right">Prodejna</th><th style="text-align:right">E-shop</th><th style="text-align:right">Vratky</th><th style="text-align:right">Tržby celkem</th><th style="text-align:right">Prodejů / objednávek</th></tr></thead>
+        <tbody>${ml.map(m=>`<tr><td><strong>${m.nazev}</strong></td>
+          <td style="text-align:right">${kcU(m.prodejna)}</td>
+          <td style="text-align:right">${kcU(m.eshop)}</td>
+          <td style="text-align:right">${m.vratky ? '−' + kcU(m.vratky) : '—'}</td>
+          <td style="text-align:right"><strong style="color:var(--brown)">${kcU(m.celkem)}</strong></td>
+          <td style="text-align:right">${m.prodeju} / ${m.objednavek}</td>
         </tr>`).join('')}</tbody></table>`;
     document.getElementById('ucetObjednavky').innerHTML = `
       <table><thead><tr><th>ID</th><th>Datum</th><th>Zákazník</th><th>Celkem</th><th>Platba</th><th>Stav</th></tr></thead>
@@ -3688,10 +3709,11 @@ async function exportUcetnictviPDF() {
     const obj = await adminFetch(API+'/objednavky').then(r=>r.json());
     const objAktivni = obj.filter(o=>o.stav!=='zrusena');
 
-    let vratkyCelkemPdf = 0;
+    let vratkyCelkemPdf = 0, vratkySeznamPdf = [];
     try {
       const v = await adminFetch(API+'/prodejna/vratky/vse').then(r=>r.json());
-      vratkyCelkemPdf = Array.isArray(v) ? v.reduce((s,x)=>s+Number(x.castka),0) : 0;
+      vratkySeznamPdf = Array.isArray(v) ? v : [];
+      vratkyCelkemPdf = vratkySeznamPdf.reduce((s,x)=>s+Number(x.castka),0);
     } catch(e) {}
 
     // Poukazy: peníze se počítají do tržby jednou – při prodeji poukazu, nebo (u starších
@@ -3710,26 +3732,19 @@ async function exportUcetnictviPDF() {
       poukazyPrijatoPdf = Array.isArray(pk) ? pk.filter(p=>p.vydano_prodej_id).reduce((s,p)=>s+Number(p.hodnota),0) : 0;
     } catch(e) {}
 
-    let prodejnaTrzbyPdf = 0;
+    let prodejnaTrzbyPdf = 0, prodejePdf = [];
     try {
       const p = await adminFetch(API+'/prodejna').then(r=>r.json());
-      prodejnaTrzbyPdf = Array.isArray(p) ? p.filter(x=>!jizZapocitanoProdejIdPdf.has(x.id)).reduce((s,x)=>s+Number(x.celkem),0) : 0;
+      prodejePdf = Array.isArray(p) ? p : [];
+      prodejnaTrzbyPdf = prodejePdf.filter(x=>!jizZapocitanoProdejIdPdf.has(x.id)).reduce((s,x)=>s+Number(x.celkem),0);
     } catch(e) {}
 
     const trzbyEshop = objAktivni.reduce((s,o)=>s+Number(o.celkem),0);
     const celkoveTrzby = trzbyEshop + prodejnaTrzbyPdf - vratkyCelkemPdf;
     const prumer = objAktivni.length ? Math.round(trzbyEshop/objAktivni.length) : 0;
 
-    // Měsíční přehled (e-shop objednávky)
-    const mn = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
-    const mesice = {};
-    objAktivni.forEach(o=>{
-      const d=new Date(o.vytvoreno);
-      const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-      if (!mesice[k]) mesice[k]={nazev:mn[d.getMonth()]+' '+d.getFullYear(),trzby:0,pocet:0};
-      mesice[k].trzby+=Number(o.celkem); mesice[k].pocet++;
-    });
-    const ml = Object.entries(mesice).sort((a,b)=>b[0].localeCompare(a[0]));
+    // Měsíční přehled: prodejna + e-shop − vratky (stejně jako stránka Účetnictví)
+    const ml = ucetniMesice(objAktivni, prodejePdf, vratkySeznamPdf, jizZapocitanoProdejIdPdf);
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
@@ -3776,8 +3791,8 @@ async function exportUcetnictviPDF() {
     // Měsíční přehled
     doc.autoTable({
       startY: doc.lastAutoTable.finalY + 10,
-      head: [['Měsíc', 'Tržby', 'Objednávky', 'Průměr']],
-      body: ml.map(([,m]) => [m.nazev, m.trzby.toLocaleString('cs-CZ')+' Kč', String(m.pocet), Math.round(m.trzby/m.pocet).toLocaleString('cs-CZ')+' Kč']),
+      head: [['Měsíc', 'Prodejna', 'E-shop', 'Vratky', 'Tržby celkem']],
+      body: ml.map(m => [m.nazev, m.prodejna.toLocaleString('cs-CZ')+' Kč', m.eshop.toLocaleString('cs-CZ')+' Kč', m.vratky ? '−'+m.vratky.toLocaleString('cs-CZ')+' Kč' : '—', m.celkem.toLocaleString('cs-CZ')+' Kč']),
       theme: 'grid',
       headStyles: { fillColor: [122,129,108] },
       styles: { fontSize: 9, font: 'DejaVuSans' },
