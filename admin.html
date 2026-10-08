@@ -1107,6 +1107,10 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           </table>
           <div id="zasilkovnaStav" class="info-box" style="margin-top:12px;font-size:0.85rem"></div>
           <div id="glsApiStav" class="info-box" style="margin-top:12px;font-size:0.85rem"></div>
+          <div class="gls-test" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px">
+            <button type="button" class="btn btn-outline btn-sm" id="glsTestBtn" onclick="vyzkousetGls()" hidden>🔌 Vyzkoušet spojení s GLS</button>
+            <span id="glsTestMsg" role="status" style="font-size:0.85rem;font-weight:600"></span>
+          </div>
           <button class="btn btn-primary" style="margin-top:16px" onclick="ulozitDopravu()">💾 Uložit dopravu</button>
           <div id="doprava-msg" style="margin-top:12px;font-weight:600"></div>
         </div>
@@ -2416,9 +2420,7 @@ function vydejniMistoDetailHtml(d) {
       <button type="button" class="btn btn-outline btn-sm" data-id="${escAttr(d.vydejni_misto_id)}" onclick="kopirovatIdMista(this)">📋 Kopírovat ID</button></div>`;
   }
   if (d.dopravce === 'zasilkovna' && d.vydejni_misto_id) html += zasilkovnaDetailHtml(d);
-  if (d.dopravce === 'gls') {
-    html += `<div class="info-box" style="font-size:0.85rem">ℹ️ Napojení na GLS API zatím není aktivní – zásilku založte ručně v MyGLS${d.vydejni_misto_id?' (doručení do výdejního místa, ID výše)':''}.</div>`;
-  }
+  if (d.dopravce === 'gls') html += glsDetailHtml(d);
   return html;
 }
 // Zásilkovna: podání zásilky a štítek (jen na klik; bez API hesla na Renderu jen informace)
@@ -2467,6 +2469,62 @@ async function stahnoutStitekZasilkovny(id, btn) {
     const url = URL.createObjectURL(await r.blob());
     const a = document.createElement('a');
     a.href = url; a.download = 'stitek-zasilkovna-' + id + '.pdf';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  } catch (e) {
+    alert('❌ Chyba spojení se serverem.');
+  } finally {
+    btn.disabled = false;
+  }
+}
+// GLS: podání zásilky a štítek (jen na klik; bez nastavení na Renderu jen informace)
+function glsDetailHtml(d) {
+  const z = (d.zasilky || []).find(x => x.dopravce === 'gls' && x.cislo_zasilky);
+  const test = x => x === 'test' ? ' <span class="badge" style="background:var(--tan-light);color:var(--text)">TEST</span>' : '';
+  if (z) {
+    return `<div class="info-box">📦 <strong>Zásilka GLS:</strong> <code>${escH(z.cislo_zasilky)}</code>${test(z.prostredi)} (podáno ${escH(new Date(z.vytvoreno).toLocaleString('cs-CZ'))})<br>
+      ${z.prostredi === 'test' ? '<span style="font-size:0.8rem;color:var(--text-light)">Zkušební zásilka v testovacím prostředí GLS – nic se skutečně neodesílá.</span><br>' : ''}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button type="button" class="btn btn-primary btn-sm" onclick="stahnoutStitekGls(${Number(d.id)}, this)">🏷️ Stáhnout štítek (PDF)</button>
+        ${z.prostredi !== 'test' && z.tracking_url && /^https:\/\/gls-group\.com\//.test(z.tracking_url) ? `<a class="btn btn-outline btn-sm" href="${escAttr(z.tracking_url)}" target="_blank" rel="noopener">🔎 Sledování zásilky</a>` : ''}
+      </div></div>`;
+  }
+  if (!d.gls_podani) {
+    return `<div class="info-box" style="font-size:0.85rem">ℹ️ Podání do GLS z administrace zatím není zapnuté – zásilku založte ručně v MyGLS${d.vydejni_misto_id ? ' (doručení do výdejního místa, ID výše)' : ''}.</div>`;
+  }
+  if (d.stav === 'zrusena') return '';
+  return `<div class="info-box">📦 <strong>Podat do GLS</strong>${test(d.gls_prostredi)}<br>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+      <label for="glsPocet" style="font-size:0.85rem">Počet balíků</label>
+      <input id="glsPocet" class="form-input" type="number" min="1" max="10" step="1" value="1" style="width:80px">
+      <button type="button" class="btn btn-primary btn-sm" onclick="podatDoGls(${Number(d.id)}, this)">📦 Podat do GLS</button>
+    </div>
+    <div style="font-size:0.8rem;color:var(--text-light);margin-top:6px">${d.gls_prostredi === 'test' ? 'Testovací prostředí GLS: zásilka se jen vyzkouší, nic se skutečně neodešle. ' : ''}Zásilka se založí v MyGLS (adresa, kontakt${d.vydejni_misto_id ? ', výdejní místo' : ''}${d.platba === 'dobirka' ? ', dobírka' : ''} z objednávky) a hned vznikne štítek.</div>
+    <div id="glsPodaniMsg" role="alert" style="margin-top:6px;font-weight:600"></div></div>`;
+}
+async function podatDoGls(id, btn) {
+  const pocet = Number(document.getElementById('glsPocet').value);
+  const msg = document.getElementById('glsPodaniMsg');
+  if (!(Number.isInteger(pocet) && pocet >= 1 && pocet <= 10)) { msg.textContent = 'Zadejte počet balíků 1–10.'; msg.style.color = 'var(--red)'; return; }
+  if (!confirm(`Opravdu podat objednávku do GLS (${pocet} ${pocet === 1 ? 'balík' : 'balíky'})?`)) return;
+  btn.disabled = true; msg.textContent = 'Podávám…'; msg.style.color = '';
+  try {
+    const r = await adminFetch(API + '/objednavky/' + id + '/gls', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pocet }) });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) { msg.textContent = '❌ ' + (data.chyba || 'Zásilku se nepodařilo podat.'); msg.style.color = 'var(--red)'; btn.disabled = false; return; }
+    detailObjednavky(id);
+  } catch (e) {
+    msg.textContent = '❌ Chyba spojení se serverem.'; msg.style.color = 'var(--red)'; btn.disabled = false;
+  }
+}
+async function stahnoutStitekGls(id, btn) {
+  btn.disabled = true;
+  try {
+    const r = await adminFetch(API + '/objednavky/' + id + '/gls/stitek');
+    if (!r.ok) { const d = await r.json().catch(() => ({})); alert('❌ ' + (d.chyba || 'Štítek se nepodařilo stáhnout.')); return; }
+    const url = URL.createObjectURL(await r.blob());
+    const a = document.createElement('a');
+    a.href = url; a.download = 'stitek-gls-' + id + '.pdf';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   } catch (e) {
@@ -3656,10 +3714,15 @@ async function loadDopravu() {
       + (za.podani
         ? ' Podání zásilek a štítky: zapnuto – v detailu objednávky tlačítko „Podat do Zásilkovny“.'
         : ' Podání zásilek z administrace: vypnuto (' + (za.problem || 'chybí API heslo.') + ') – zásilky se podávají ručně v klientské sekci Zásilkovny.');
-    const g = d.glsApi;
-    document.getElementById('glsApiStav').textContent = g.nakonfigurovano
-      ? 'GLS API: přístupové údaje jsou na serveru nastavené, napojení ale zatím není aktivní. Zásilky GLS se zakládají ručně v MyGLS.'
-      : 'GLS API: zatím není nastavené (chybí na Renderu: ' + g.chybejiciPromenne.join(', ') + '). Zásilky GLS se zakládají ručně v MyGLS.';
+    const g = d.glsApi || {};
+    const prostredi = g.prostredi === 'test' ? 'TESTOVACÍ prostředí (api.test.mygls.cz – nic se skutečně neodesílá)' : g.prostredi === 'ostre' ? 'OSTRÉ prostředí (api.mygls.cz)' : '';
+    document.getElementById('glsApiStav').textContent = !g.nakonfigurovano
+      ? 'GLS API: zatím není nastavené (chybí na Renderu: ' + (g.chybejiciPromenne || []).join(', ') + '). Zásilky GLS se zakládají ručně v MyGLS.'
+      : g.podani
+        ? 'GLS API: přístupové údaje jsou na serveru nastavené – ' + prostredi + '. Zásilku a štítek založíte v detailu objednávky tlačítkem „Podat do GLS“.'
+        : 'GLS API: přístupové údaje jsou na serveru nastavené' + (prostredi ? ' – ' + prostredi : '') + '. ' + (g.problem || '') + ' Zásilky GLS se zatím zakládají ručně v MyGLS.';
+    document.getElementById('glsTestBtn').hidden = !g.spojeni;
+    document.getElementById('glsTestMsg').textContent = '';
   } catch(e) {
     box.innerHTML = '<div class="error-msg">Nastavení dopravy se nepodařilo načíst.</div>';
   }
@@ -3668,6 +3731,23 @@ async function loadDopravu() {
 function cisloNeboNull(hodnota) {
   const t = String(hodnota).trim();
   return t === '' ? null : Number(t);
+}
+
+// Zkouška spojení s MyGLS - na serveru jen čtecí dotaz (nic nezakládá)
+async function vyzkousetGls() {
+  const btn = document.getElementById('glsTestBtn');
+  const msg = document.getElementById('glsTestMsg');
+  btn.disabled = true; msg.textContent = 'Zkouším spojení s GLS…'; msg.style.color = '';
+  try {
+    const r = await adminFetch(API + '/doprava/gls-test', { method: 'POST' });
+    const d = await r.json().catch(() => ({}));
+    msg.textContent = r.ok ? '✅ ' + d.zprava : '❌ ' + (d.chyba || 'Spojení s GLS se nepodařilo.');
+    msg.style.color = r.ok ? 'var(--sage-tmava)' : 'var(--red)';
+  } catch (e) {
+    msg.textContent = '❌ Chyba spojení se serverem.'; msg.style.color = 'var(--red)';
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function ulozitDopravu() {

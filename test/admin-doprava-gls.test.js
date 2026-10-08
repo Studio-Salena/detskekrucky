@@ -19,7 +19,7 @@ function vytahnout(nazev) {
 }
 const sandbox = {};
 vm.createContext(sandbox);
-vm.runInContext(['escH', 'escAttr', 'vydejniMistoAdresa', 'vydejniMistoDetailHtml'].map(vytahnout).join('\n'), sandbox);
+vm.runInContext(['escH', 'escAttr', 'vydejniMistoAdresa', 'vydejniMistoDetailHtml', 'glsDetailHtml', 'zasilkovnaDetailHtml'].map(vytahnout).join('\n'), sandbox);
 const detail = d => vm.runInContext(`vydejniMistoDetailHtml(${JSON.stringify(d)})`, sandbox);
 
 test('detail: výdejní místo GLS s adresou a ID, vše escapované (i v data-id)', () => {
@@ -28,7 +28,7 @@ test('detail: výdejní místo GLS s adresou a ID, vše escapované (i v data-id
   assert.equal(h.includes('<img'), false);
   assert.match(h, /data-id="X1&quot;&gt;&lt;img src=x&gt;"/);
   assert.match(h, /U 1, 60200 Brno/);
-  assert.match(h, /Napojení na GLS API zatím není aktivní/);
+  assert.match(h, /Podání do GLS z administrace zatím není zapnuté – zásilku založte ručně v MyGLS/);
 });
 
 test('detail: objednávka bez výdejního místa a mimo GLS nic navíc neukáže', () => {
@@ -51,4 +51,21 @@ test('Nastavení -> Doprava: ukládá přes PUT /doprava, stav GLS jen jako text
   const nacist = vytahnout('loadDopravu');
   assert.match(nacist, /getElementById\('glsApiStav'\)\.textContent = /);
   assert.equal(/GLS_PASSWORD|GLS_USERNAME|GLS_CLIENT_NUMBER/.test(ADMIN), false);
+});
+
+test('detail GLS: s nastaveným API tlačítko Podat do GLS (testovací prostředí označené), po podání číslo, štítek a sledování', () => {
+  const zaklad = { id: 7, dopravce: 'gls', doprava: 'gls_adresa', stav: 'nova', platba: 'dobirka', vydejni_misto_id: null };
+  const h = detail({ ...zaklad, gls_podani: true, gls_prostredi: 'test' });
+  assert.match(h, /podatDoGls\(7, this\)/);
+  assert.match(h, /TEST/);
+  assert.match(h, /nic se skutečně neodešle/);
+  assert.match(h, /dobírka/);
+  assert.equal(detail({ ...zaklad, gls_podani: true, gls_prostredi: 'ostre' }).includes('TEST'), false);
+  assert.equal(detail({ ...zaklad, gls_podani: true, stav: 'zrusena' }), '', 'zrušenou nejde podat');
+  const podano = detail({ ...zaklad, gls_podani: true, zasilky: [{ dopravce: 'gls', cislo_zasilky: '12345678<b>', prostredi: 'ostre', vytvoreno: '2026-10-08T10:00:00Z', tracking_url: 'https://gls-group.com/CZ/cs/sledovani-zasilek?match=12345678' }] });
+  assert.match(podano, /12345678&lt;b&gt;/);
+  assert.match(podano, /stahnoutStitekGls\(7, this\)/);
+  assert.match(podano, /Sledování zásilky/);
+  assert.equal(podano.includes('podatDoGls'), false, 'podruhé už se nepodává');
+  assert.equal(detail({ ...zaklad, zasilky: [{ dopravce: 'gls', cislo_zasilky: '1', prostredi: 'ostre', vytvoreno: '2026-10-08', tracking_url: 'javascript:alert(1)' }] }).includes('javascript:'), false);
 });

@@ -197,14 +197,59 @@ test('PostgreSQL: migrace, nastavení dopravy, objednávka GLS do výdejního m�
       if (puvodniKlic === undefined) delete process.env.ZASILKOVNA_API_KLIC; else process.env.ZASILKOVNA_API_KLIC = puvodniKlic;
     }
 
+    // Podání do GLS přes POST /:id/gls (MyGLS podstrčené, testovací adresa)
+    {
+      const podatGls = najitHandler(router, 'post', '/:id/gls');
+      const puvodniFetch = global.fetch;
+      const puvodniEnv = { ...process.env };
+      const volani = [];
+      res = vytvoritRes();
+      for (const k of ['GLS_CLIENT_NUMBER', 'GLS_USERNAME', 'GLS_PASSWORD', 'GLS_API_URL', 'GLS_ENABLED']) delete process.env[k];
+      await podatGls({ params: { id: String(nova.id) }, body: {} }, res);
+      assert.equal(res.statusCode, 503, 'bez údajů na Renderu je podání vypnuté');
+      Object.assign(process.env, { GLS_CLIENT_NUMBER: '53018135', GLS_USERNAME: 'test@example.com', GLS_PASSWORD: 'x', GLS_API_URL: 'https://api.test.mygls.cz/' });
+      global.fetch = async (url, o) => {
+        volani.push({ url, body: o.body });
+        return { status: 200, ok: true, json: async () => ({ Labels: [...Buffer.from('%PDF-1.4 gls')], PrintLabelsErrorList: [], PrintLabelsInfoList: [{ ParcelId: 777, ParcelNumber: 98765432101 }] }) };
+      };
+      try {
+        res = vytvoritRes();
+        await podatGls({ params: { id: String(nova.id) }, body: { pocet: 1 } }, res);
+        assert.equal(res.statusCode, 200, JSON.stringify(res.body));
+        assert.equal(res.body.zasilka.cislo_zasilky, '98765432101');
+        assert.equal(res.body.zasilka.prostredi, 'test');
+        assert.match(volani[0].url, /^https:\/\/api\.test\.mygls\.cz\/ParcelService\.svc\/json\/PrintLabels$/);
+        assert.match(volani[0].body, /"StringValue":"39301-ELPESRO"/);
+        const z = (await pool.query("SELECT stav, data, stitek_pdf FROM zasilky WHERE objednavka_id = $1 AND dopravce = 'gls'", [nova.id])).rows[0];
+        assert.equal(z.stav, 'podana');
+        assert.equal(z.data.parcelId, 777);
+        assert.equal(z.stitek_pdf.toString(), '%PDF-1.4 gls');
+        res = vytvoritRes();
+        await podatGls({ params: { id: String(nova.id) }, body: {} }, res);
+        assert.equal(res.statusCode, 409, 'podruhé už ne');
+        assert.equal(volani.length, 1);
+        // štítek z uloženého PDF, bez dalšího volání GLS
+        res = vytvoritRes();
+        res.setHeader = () => {}; res.send = b => { res.body = b; return res; };
+        await najitHandler(router, 'get', '/:id/gls/stitek')({ params: { id: String(nova.id) } }, res);
+        assert.equal(res.body.toString(), '%PDF-1.4 gls');
+        assert.equal(volani.length, 1);
+      } finally {
+        global.fetch = puvodniFetch;
+        for (const k of ['GLS_CLIENT_NUMBER', 'GLS_USERNAME', 'GLS_PASSWORD', 'GLS_API_URL', 'GLS_ENABLED']) {
+          if (puvodniEnv[k] === undefined) delete process.env[k]; else process.env[k] = puvodniEnv[k];
+        }
+      }
+    }
+
     // Převod objednávky na zásilku a uložení do tabulky zasilky (bez volání API)
-    const data = gls.sestavitZasilku(nova);
-    assert.deepEqual(data.sluzby, [{ kod: 'PSD', vydejniMistoId: '39301-ELPESRO' }]);
+    const data = gls.sestavitZasilku(nova, 53018135);
+    assert.deepEqual(data.ServiceList, [{ Code: 'PSD', PSDParameter: { StringValue: '39301-ELPESRO' } }]);
     await pool.query('INSERT INTO zasilky (objednavka_id, dopravce, data) VALUES ($1, $2, $3)', [nova.id, 'gls', JSON.stringify(data)]);
-    const zasilka = (await pool.query('SELECT stav, cislo_zasilky, data FROM zasilky WHERE objednavka_id = $1', [nova.id])).rows[0];
+    const zasilka = (await pool.query("SELECT stav, cislo_zasilky, data FROM zasilky WHERE objednavka_id = $1 AND stav = 'pripravena'", [nova.id])).rows[0];
     assert.equal(zasilka.stav, 'pripravena');
     assert.equal(zasilka.cislo_zasilky, null);
-    assert.equal(zasilka.data.reference, nova.cislo);
+    assert.equal(zasilka.data.ClientReference, nova.cislo);
     // smazání objednávky smaže i její zásilky
     await pool.query('DELETE FROM objednavky_polozky WHERE objednavka_id = $1', [nova.id]);
     await pool.query('DELETE FROM objednavky WHERE id = $1', [nova.id]);

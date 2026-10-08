@@ -14,6 +14,7 @@ const { METODY, nacistNastaveniDopravy, jeDostupna, vypocitatCenuDopravy, typVyd
 const { overitVydejniMisto } = require('../lib/glsVydejniMista');
 const zasilkovna = require('../lib/zasilkovna');
 const zasilkovnaApi = require('../lib/zasilkovnaApi');
+const gls = require('../lib/gls');
 
 // Idempotentní migrace - vazba objednávky na uplatněný dárkový poukaz, číslo
 // objednávky a číslo/datum vystavení faktury.
@@ -82,6 +83,8 @@ async function initObjednavkySloupce() {
         aktualizovano TIMESTAMPTZ
       );
       CREATE INDEX IF NOT EXISTS zasilky_objednavka_idx ON zasilky (objednavka_id);
+      -- štítek PDF, který GLS vrátí při založení zásilky
+      ALTER TABLE zasilky ADD COLUMN IF NOT EXISTS stitek_pdf BYTEA;
     `);
     console.log('Zasilky OK');
   } catch (e) {
@@ -521,11 +524,11 @@ router.get('/:id', vyzadovatAdmina, async (req, res) => {
     let zasilky = [];
     try {
       zasilky = (await pool.query(
-        'SELECT id, dopravce, stav, cislo_zasilky, tracking_url, vytvoreno FROM zasilky WHERE objednavka_id = $1 ORDER BY id', [req.params.id]
+        "SELECT id, dopravce, stav, cislo_zasilky, tracking_url, vytvoreno, data->>'prostredi' AS prostredi FROM zasilky WHERE objednavka_id = $1 ORDER BY id", [req.params.id]
       )).rows;
     } catch (e) { /* tabulka zásilek není povinná pro zobrazení objednávky */ }
 
-    res.json({ ...objednavka.rows[0], polozky: polozky.rows, zasilky, zasilkovna_podani: zasilkovnaApi.stav().podani });
+    res.json({ ...objednavka.rows[0], polozky: polozky.rows, zasilky, zasilkovna_podani: zasilkovnaApi.stav().podani, gls_podani: gls.stav().podani, gls_prostredi: gls.stav().prostredi });
   } catch (err) {
     res.status(500).json({ chyba: err.message });
   }
@@ -571,6 +574,67 @@ router.post('/:id/zasilkovna', vyzadovatAdmina, async (req, res) => {
     res.status(500).json({ chyba: 'Zásilku se nepodařilo uložit.' });
   } finally {
     client.release();
+  }
+});
+
+// Podání zásilky do GLS (jen admin, jen na výslovný klik). Testovací prostředí
+// MyGLS jde zkoušet hned, ostré jen s GLS_ENABLED (viz lib/gls.js).
+router.post('/:id/gls', vyzadovatAdmina, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ chyba: 'Neplatná objednávka.' });
+  const stavGls = gls.stav();
+  if (!stavGls.podani) return res.status(503).json({ chyba: 'Podání do GLS není zapnuté. ' + (stavGls.problem || '') });
+  const pocetBaliku = req.body && req.body.pocet !== undefined ? Number(req.body.pocet) : 1;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const o = (await client.query(`SELECT o.*, ${SQL_UDAJE_OBJEDNAVKY} FROM objednavky o JOIN zakaznici z ON o.zakaznik_id = z.id WHERE o.id = $1 FOR UPDATE OF o`, [id])).rows[0];
+    if (!o) { await client.query('ROLLBACK'); return res.status(404).json({ chyba: 'Objednávka nenalezena.' }); }
+    if (o.stav === 'zrusena') { await client.query('ROLLBACK'); return res.status(400).json({ chyba: 'Zrušenou objednávku nejde podat.' }); }
+    const existujici = (await client.query("SELECT cislo_zasilky FROM zasilky WHERE objednavka_id = $1 AND dopravce = 'gls' AND cislo_zasilky IS NOT NULL AND stav = 'podana'", [id])).rows[0];
+    if (existujici) { await client.query('ROLLBACK'); return res.status(409).json({ chyba: `Zásilka už je podaná (${existujici.cislo_zasilky}).` }); }
+    try { gls.sestavitZasilku(o, 1, pocetBaliku); }
+    catch (e) { await client.query('ROLLBACK'); return res.status(400).json({ chyba: e.message }); }
+    let vysledek;
+    try {
+      vysledek = await gls.vytvoritZasilku(o, { pocetBaliku });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      console.error('Podání do GLS selhalo (objednávka ' + id + '):', e.message);
+      return res.status(502).json({ chyba: 'GLS zásilku nepřijalo: ' + e.message });
+    }
+    const zasilka = (await client.query(
+      `INSERT INTO zasilky (objednavka_id, dopravce, stav, cislo_zasilky, tracking_url, data, stitek_pdf)
+       VALUES ($1, 'gls', 'podana', $2, $3, $4, $5) RETURNING id, dopravce, stav, cislo_zasilky, tracking_url, vytvoreno, data`,
+      [id, vysledek.parcelNumber, gls.sledovaniUrl(vysledek.parcelNumber),
+        JSON.stringify({ parcelId: vysledek.parcelId, prostredi: vysledek.prostredi, pocetBaliku, vydejniMisto: o.vydejni_misto_id || null }), vysledek.pdf]
+    )).rows[0];
+    await client.query('COMMIT');
+    const { data, ...bezDat } = zasilka;
+    res.json({ zprava: 'Zásilka podána do GLS', zasilka: { ...bezDat, prostredi: data.prostredi } });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Podání do GLS - chyba:', err.message);
+    res.status(500).json({ chyba: 'Zásilku se nepodařilo uložit.' });
+  } finally {
+    client.release();
+  }
+});
+
+// Štítek PDF k zásilce GLS: uložený při podání, jinak se stáhne z MyGLS
+router.get('/:id/gls/stitek', vyzadovatAdmina, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ chyba: 'Neplatná objednávka.' });
+  try {
+    const z = (await pool.query("SELECT data, cislo_zasilky, stitek_pdf FROM zasilky WHERE objednavka_id = $1 AND dopravce = 'gls' AND cislo_zasilky IS NOT NULL ORDER BY id DESC LIMIT 1", [id])).rows[0];
+    if (!z || !z.data || !z.data.parcelId) return res.status(404).json({ chyba: 'Objednávka nemá podanou zásilku GLS.' });
+    const pdf = z.stitek_pdf || await gls.stitekPdf(z.data.parcelId);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="stitek-gls-${String(z.cislo_zasilky).replace(/[^0-9]/g, '')}.pdf"`);
+    res.send(pdf);
+  } catch (e) {
+    console.error('Štítek GLS selhal (objednávka ' + id + '):', e.message);
+    res.status(502).json({ chyba: 'Štítek se nepodařilo stáhnout: ' + e.message });
   }
 });
 

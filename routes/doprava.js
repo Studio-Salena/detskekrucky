@@ -40,6 +40,17 @@ router.get('/admin', vyzadovatAdmina, async (req, res) => {
   });
 });
 
+// Admin: zkouška spojení s MyGLS (čtecí dotaz, nic nezakládá) - tlačítko v Nastavení -> Doprava
+router.post('/gls-test', vyzadovatAdmina, async (req, res) => {
+  try {
+    const v = await gls.overitSpojeni();
+    res.json({ ok: true, prostredi: v.prostredi, zprava: `Spojení s GLS funguje (${v.prostredi === 'test' ? 'testovací' : 'ostré'} prostředí, zásilek za poslední den: ${v.pocetZasilek}).` });
+  } catch (e) {
+    console.error('Zkouška spojení s GLS selhala:', e.message);
+    res.status(502).json({ ok: false, chyba: e.message });
+  }
+});
+
 router.put('/', vyzadovatAdmina, async (req, res) => {
   const { chyba, hodnoty } = overitNastaveniDopravy(req.body);
   if (chyba) return res.status(400).json({ chyba });

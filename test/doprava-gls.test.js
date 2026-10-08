@@ -137,43 +137,127 @@ test('seznam GLS se stahuje jen z pevné adresy GLS', () => {
 
 const ENV_PLNE = { GLS_CLIENT_NUMBER: '123456', GLS_USERNAME: 'uzivatel@example.com', GLS_PASSWORD: 'tajne-heslo', GLS_API_URL: 'https://api.test.mygls.cz' };
 
-test('GLS API bez údajů: nenakonfigurované, vypnuté, vytvoření zásilky odmítne', async () => {
+const ENV_TEST = { ...ENV_PLNE, GLS_CLIENT_NUMBER: '53018135', GLS_API_URL: 'https://api.test.mygls.cz/' };
+const ENV_OSTRE = { ...ENV_TEST, GLS_API_URL: 'https://api.mygls.cz' };
+const OBJ_GLS = { id: 7, cislo: '261012', dopravce: 'gls', doprava: 'gls_vydejni_misto', platba: 'prevod', celkem: '1079',
+  obj_jmeno: 'Jana Nováková', obj_email: 'jana@example.com', obj_telefon: '777 123 456', obj_ulice: 'Hlavní 12/3a', obj_mesto: 'Hulín', obj_psc: '768 24',
+  vydejni_misto_id: '39301-ELPESRO' };
+const PDF = Buffer.from('%PDF-1.4 gls');
+function falesnyFetch(odpoved, status = 200) {
+  const volani = [];
+  const fetchFn = async (url, o) => { volani.push({ url, ...o }); return { status, ok: status >= 200 && status < 300, json: async () => odpoved }; };
+  return { fetchFn, volani };
+}
+
+test('GLS API bez údajů: nenakonfigurované, podání ani spojení nejde, nic se nevolá', async () => {
   const s = gls.stav({});
-  assert.deepEqual(s, { nakonfigurovano: false, zapnuto: false, chybejiciPromenne: ['GLS_CLIENT_NUMBER', 'GLS_USERNAME', 'GLS_PASSWORD', 'GLS_API_URL'], apiImplementovano: false });
-  await assert.rejects(gls.vytvoritZasilku({ dopravce: 'gls' }, {}), /vypnuté/);
-  await assert.rejects(gls.vytvoritZasilku({ dopravce: 'gls' }, { GLS_ENABLED: 'true' }), /není nastavené/);
+  assert.equal(s.nakonfigurovano, false);
+  assert.equal(s.podani, false);
+  assert.deepEqual(s.chybejiciPromenne, ['GLS_CLIENT_NUMBER', 'GLS_USERNAME', 'GLS_PASSWORD', 'GLS_API_URL']);
+  const { fetchFn, volani } = falesnyFetch({});
+  await assert.rejects(gls.vytvoritZasilku(OBJ_GLS, { env: {}, fetchFn }), /není nastavené/);
+  await assert.rejects(gls.overitSpojeni({ env: {}, fetchFn }), /není nastavené/);
+  assert.equal(volani.length, 0);
 });
 
-test('GLS API ani s údaji a GLS_ENABLED=true zatím nic nevolá (není implementované)', async () => {
-  let volano = false;
-  const puvodniFetch = global.fetch;
-  global.fetch = async () => { volano = true; throw new Error('nesmí se volat'); };
-  try {
-    await assert.rejects(gls.vytvoritZasilku({ dopravce: 'gls', doprava: 'gls_adresa', id: 1 }, { ...ENV_PLNE, GLS_ENABLED: 'true' }), /není implementované/);
-  } finally { global.fetch = puvodniFetch; }
-  assert.equal(volano, false);
+test('GLS adresa API: jen testovací nebo ostrá MyGLS pro Česko, jinam heslo nejde', async () => {
+  assert.equal(gls.stav(ENV_TEST).prostredi, 'test');
+  assert.equal(gls.stav(ENV_OSTRE).prostredi, 'ostre');
+  for (const url of ['https://api.mygls.hu', 'https://utocnik.example/api.mygls.cz', 'http://api.mygls.cz', 'https://api.mygls.cz.evil.com']) {
+    const s = gls.stav({ ...ENV_TEST, GLS_API_URL: url });
+    assert.equal(s.spojeni, false, url);
+    assert.match(s.problem, /GLS_API_URL musí být/);
+    const { fetchFn, volani } = falesnyFetch({});
+    await assert.rejects(gls.overitSpojeni({ env: { ...ENV_TEST, GLS_API_URL: url }, fetchFn }));
+    assert.equal(volani.length, 0, url);
+  }
+});
+
+test('GLS ostrý provoz: bez GLS_ENABLED=true se zásilky nezakládají (test prostředí ano)', async () => {
+  assert.equal(gls.stav(ENV_TEST).podani, true);
+  assert.equal(gls.stav(ENV_OSTRE).podani, false);
+  assert.match(gls.stav(ENV_OSTRE).problem, /GLS_ENABLED/);
+  assert.equal(gls.stav({ ...ENV_OSTRE, GLS_ENABLED: 'true' }).podani, true);
+  const { fetchFn, volani } = falesnyFetch({});
+  await assert.rejects(gls.vytvoritZasilku(OBJ_GLS, { env: ENV_OSTRE, fetchFn }), /GLS_ENABLED/);
+  assert.equal(volani.length, 0);
 });
 
 test('stav GLS API nikdy neobsahuje hodnoty přístupových údajů', () => {
-  const text = JSON.stringify(gls.stav({ ...ENV_PLNE, GLS_ENABLED: 'true' }));
-  for (const hodnota of Object.values(ENV_PLNE)) assert.equal(text.includes(hodnota), false, hodnota);
-  assert.deepEqual(gls.stav({ ...ENV_PLNE }).chybejiciPromenne, []);
+  const text = JSON.stringify(gls.stav({ ...ENV_TEST, GLS_ENABLED: 'true' }));
+  for (const hodnota of ['53018135', 'uzivatel@example.com', 'tajne-heslo']) assert.equal(text.includes(hodnota), false, hodnota);
 });
 
-test('převod objednávky na zásilku: výdejní místo jako služba PSD, reference = číslo objednávky, bez dobírky', () => {
-  const objednavka = { id: 7, cislo: '261012', dopravce: 'gls', doprava: 'gls_vydejni_misto', platba: 'prevod', celkem: '1079',
-    obj_jmeno: 'Jana Nováková', obj_email: 'jana@example.com', obj_telefon: '777 123 456', obj_ulice: 'Hlavní 1', obj_mesto: 'Hulín', obj_psc: '768 24',
-    vydejni_misto_id: '39301-ELPESRO' };
-  const z = gls.sestavitZasilku(objednavka);
-  assert.equal(z.reference, '261012');
-  assert.deepEqual(z.sluzby, [{ kod: 'PSD', vydejniMistoId: '39301-ELPESRO' }]);
-  assert.deepEqual(z.dobirka, { castka: 0, variabilniSymbol: '' });
-  assert.equal(z.prijemce.jmeno, 'Jana Nováková');
-  assert.deepEqual(gls.sestavitZasilku({ ...objednavka, platba: 'dobirka' }).dobirka, { castka: 1079, variabilniSymbol: '261012' });
-  assert.deepEqual(gls.sestavitZasilku({ ...objednavka, doprava: 'gls_adresa', vydejni_misto_id: null }).sluzby, []);
-  assert.throws(() => gls.sestavitZasilku({ ...objednavka, vydejni_misto_id: null }), /nemá výdejní místo/);
-  assert.throws(() => gls.sestavitZasilku({ ...objednavka, dopravce: 'zasilkovna' }), /není doprava GLS/);
-  assert.equal(JSON.stringify(z).includes('heslo'), false);
+test('převod objednávky na zásilku MyGLS: adresa, kontakt, výdejní místo jako PSD, dobírka jen u dobírky', () => {
+  const z = gls.sestavitZasilku(OBJ_GLS, 53018135);
+  assert.equal(z.ClientNumber, 53018135);
+  assert.equal(z.ClientReference, '261012');
+  assert.equal(z.Count, 1);
+  assert.deepEqual(z.ServiceList, [{ Code: 'PSD', PSDParameter: { StringValue: '39301-ELPESRO' } }]);
+  assert.deepEqual(z.DeliveryAddress, { Name: 'Jana Nováková', Street: 'Hlavní', HouseNumber: '12', HouseNumberInfo: '/3a', City: 'Hulín', ZipCode: '76824', CountryIsoCode: 'CZ',
+    ContactName: 'Jana Nováková', ContactPhone: '+420777123456', ContactEmail: 'jana@example.com' });
+  assert.equal(z.PickupAddress.City, 'Hulín');
+  assert.equal('CODAmount' in z, false);
+  const d = gls.sestavitZasilku({ ...OBJ_GLS, platba: 'dobirka' }, 1);
+  assert.deepEqual([d.CODAmount, d.CODReference, d.CODCurrency], [1079, '261012', 'CZK']);
+  assert.deepEqual(gls.sestavitZasilku({ ...OBJ_GLS, doprava: 'gls_adresa', vydejni_misto_id: null }, 1).ServiceList, []);
+  assert.equal(gls.sestavitZasilku(OBJ_GLS, 1, 3).Count, 3);
+  assert.throws(() => gls.sestavitZasilku(OBJ_GLS, 1, 0), /Počet balíků/);
+  assert.throws(() => gls.sestavitZasilku({ ...OBJ_GLS, vydejni_misto_id: null }, 1), /nemá výdejní místo/);
+  assert.throws(() => gls.sestavitZasilku({ ...OBJ_GLS, dopravce: 'zasilkovna' }, 1), /není doprava GLS/);
+  assert.throws(() => gls.sestavitZasilku({ ...OBJ_GLS, obj_email: '' }, 1), /e-mail/);
+  assert.deepEqual(gls.rozdelitUlici('Holešovská 752'), { Street: 'Holešovská', HouseNumber: '752', HouseNumberInfo: '' });
+  assert.deepEqual(gls.rozdelitUlici('Náměstí Míru'), { Street: 'Náměstí Míru', HouseNumber: '', HouseNumberInfo: '' });
+  assert.equal(gls.telefonMezinarodni('00421 905 123 456'), '+421905123456');
+});
+
+test('MyGLS požadavek: heslo jen jako SHA-512 bajty, datum ve formátu \\/Date()\\/, správná adresa metody', async () => {
+  const { fetchFn, volani } = falesnyFetch({ GetParcelListErrors: [], PrintDataInfoList: [{}, {}] });
+  const v = await gls.overitSpojeni({ env: ENV_TEST, fetchFn, ted: 1700000000000 });
+  assert.deepEqual(v, { prostredi: 'test', pocetZasilek: 2 });
+  assert.equal(volani[0].url, 'https://api.test.mygls.cz/ParcelService.svc/json/GetParcelList');
+  assert.equal(volani[0].method, 'POST');
+  const telo = volani[0].body;
+  assert.equal(telo.includes('tajne-heslo'), false, 'heslo se neposílá čitelně');
+  const json = JSON.parse(telo);
+  assert.deepEqual(json.Password, [...require('crypto').createHash('sha512').update('tajne-heslo').digest()]);
+  assert.equal(json.Password.length, 64);
+  assert.equal(json.Username, 'uzivatel@example.com');
+  assert.deepEqual(json.ClientNumberList, [53018135]);
+  assert.match(telo, /"PrintDateTo":"\\\/Date\(1700000000000\)\\\/"/);
+  assert.equal(json.PrintDateFrom, '/Date(1699913600000)/');
+});
+
+test('MyGLS chyby: přihlášení, chybový seznam, výpadek - srozumitelně a bez hesla', async () => {
+  await assert.rejects(gls.overitSpojeni({ env: ENV_TEST, fetchFn: falesnyFetch({}, 401).fetchFn }), /Přihlášení do MyGLS se nepovedlo/);
+  await assert.rejects(gls.overitSpojeni({ env: ENV_TEST, fetchFn: falesnyFetch({ GetParcelListErrors: [{ ErrorCode: 27, ErrorDescription: 'User is not authorized' }] }).fetchFn }),
+    e => /zkontrolujte GLS_CLIENT_NUMBER/.test(e.message) && /kód 27/.test(e.message) && !e.message.includes('tajne-heslo'));
+  await assert.rejects(gls.overitSpojeni({ env: ENV_TEST, fetchFn: async () => { throw new Error('ECONNRESET tajne-heslo'); } }), e => /GLS neodpovídá/.test(e.message) && !e.message.includes('tajne-heslo'));
+  await assert.rejects(gls.overitSpojeni({ env: ENV_TEST, fetchFn: falesnyFetch({}, 500).fetchFn }), /HTTP 500/);
+});
+
+test('podání zásilky: PrintLabels, číslo zásilky a štítek PDF (bajty i base64)', async () => {
+  const { fetchFn, volani } = falesnyFetch({ Labels: [...PDF], PrintLabelsErrorList: [], PrintLabelsInfoList: [{ ClientReference: '261012', ParcelId: 555, ParcelNumber: 12345678901 }] });
+  const v = await gls.vytvoritZasilku({ ...OBJ_GLS, platba: 'dobirka' }, { env: ENV_TEST, fetchFn, pocetBaliku: 2 });
+  assert.deepEqual({ ...v, pdf: v.pdf.toString() }, { parcelId: 555, parcelNumber: '12345678901', pdf: '%PDF-1.4 gls', prostredi: 'test' });
+  assert.equal(volani[0].url, 'https://api.test.mygls.cz/ParcelService.svc/json/PrintLabels');
+  const json = JSON.parse(volani[0].body);
+  assert.equal(json.WebshopEngine, 'Custom');
+  assert.equal(json.TypeOfPrinter, 'A4_2x2');
+  assert.equal(json.ParcelList[0].Count, 2);
+  assert.equal(json.ParcelList[0].CODAmount, 1079);
+  const b64 = await gls.vytvoritZasilku(OBJ_GLS, { env: ENV_TEST, fetchFn: falesnyFetch({ Labels: PDF.toString('base64'), PrintLabelsInfoList: [{ ParcelId: 1, ParcelNumber: 2 }] }).fetchFn });
+  assert.equal(b64.pdf.toString(), '%PDF-1.4 gls');
+  await assert.rejects(gls.vytvoritZasilku(OBJ_GLS, { env: ENV_TEST, fetchFn: falesnyFetch({ PrintLabelsErrorList: [{ ErrorCode: 13, ErrorDescription: 'Invalid zip' }] }).fetchFn }), /GLS odmítlo údaje zásilky: Invalid zip \(kód 13\)/);
+  await assert.rejects(gls.vytvoritZasilku(OBJ_GLS, { env: ENV_TEST, fetchFn: falesnyFetch({ PrintLabelsInfoList: [] }).fetchFn }), /nevrátilo číslo zásilky/);
+});
+
+test('štítek k založené zásilce: GetPrintedLabels', async () => {
+  const { fetchFn, volani } = falesnyFetch({ Labels: [...PDF], GetPrintedLabelsErrorList: [] });
+  assert.equal((await gls.stitekPdf(555, { env: ENV_TEST, fetchFn })).toString(), '%PDF-1.4 gls');
+  assert.deepEqual(JSON.parse(volani[0].body).ParcelIdList, [555]);
+  await assert.rejects(gls.stitekPdf('x', { env: ENV_TEST, fetchFn }), /Neplatné číslo/);
+  await assert.rejects(gls.stitekPdf(1, { env: ENV_TEST, fetchFn: falesnyFetch({ Labels: [1, 2, 3] }).fetchFn }), /nevrátilo PDF/);
 });
 
 test('přístupové údaje GLS nejsou v kódu, frontendu ani v migraci objednávek', () => {
@@ -241,7 +325,7 @@ test('API dopravy: úprava a admin přehled jen s heslem admina; přehled bez ho
     const text = JSON.stringify(res.body);
     for (const hodnota of Object.values(ENV_PLNE)) assert.equal(text.includes(hodnota), false);
     assert.equal(res.body.glsApi.nakonfigurovano, true);
-    assert.equal(res.body.glsApi.apiImplementovano, false);
+    assert.equal(res.body.glsApi.apiImplementovano, true);
   } finally {
     for (const k of Object.keys(ENV_PLNE)) if (!(k in puvodniEnv)) delete process.env[k]; else process.env[k] = puvodniEnv[k];
   }
