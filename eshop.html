@@ -1250,15 +1250,17 @@ body:has(.katalog-filtry.open) #back-to-top{display:none}
         <button type="button" class="vydejni-misto-btn" id="zasVybratBtn" onclick="otevritMapuZasilkovny()">Vybrat výdejní místo Zásilkovny</button>
         <div class="vydejni-misto-chyba" id="zasMistoChyba" role="alert" hidden></div>
       </div>
-      <p class="dodaci-lhuta" id="dodaciLhuta">Zboží skladem odešleme do 2&nbsp;pracovních dnů od připsání platby, doručení pak obvykle trvá 2–5 pracovních dnů. Zboží označené „U&nbsp;dodavatele“ odešleme do 7–14 dnů.</p>
+      <p class="dodaci-lhuta" id="dodaciLhuta">Zboží skladem odešleme do 2&nbsp;pracovních dnů od připsání platby (u dobírky od objednání), doručení pak obvykle trvá 2–5 pracovních dnů. Zboží označené „U&nbsp;dodavatele“ odešleme do 7–14 dnů.</p>
       <div class="vyzkouseni-info" id="vyzkouseniInfo" style="display:none">
         &#128094; Při osobním odběru si boty rovnou vyzkoušíte přímo na prodejně: <strong>Holešovská 752, Hulín 768 24</strong>. Ozveme se, jakmile bude objednávka připravená k vyzvednutí.
       </div>
       <div class="section-divider">Jak chcete zaplatit?</div>
-      <div class="volby" id="chPlatba" role="radiogroup" aria-label="Způsob platby" onchange="aktualizovatPlatbuInfo()">
+      <div class="volby" id="chPlatba" role="radiogroup" aria-label="Způsob platby" onchange="vykreslitSouhrnObjednavky()">
         <label class="volba"><input type="radio" name="chPlatba" value="prevod" checked><span class="volba-nazev">Bankovní převod (QR kód)</span></label>
+        <label class="volba" id="volbaDobirka" hidden><input type="radio" name="chPlatba" value="dobirka"><span class="volba-nazev">Dobírka (platba při převzetí)</span><span class="volba-cena" id="dobirkaCena"></span></label>
         <label class="volba" id="volbaNaProdejne" hidden><input type="radio" name="chPlatba" value="na_prodejne"><span class="volba-nazev">Na prodejně při vyzvednutí</span><span class="volba-cena">hotově, kartou nebo QR</span></label>
       </div>
+      <p class="volba-pozn" id="chDobirkaInfo" hidden>Zaplatíte při převzetí zásilky. K ceně se připočítá příplatek za dobírku.</p>
       <p class="volba-pozn" id="chPrevodInfo">Číslo účtu, variabilní symbol a QR kód pro platbu uvidíte hned po odeslání objednávky a pošleme je i e-mailem.</p>
       <div class="kroky-tlacitka">
         <button type="button" class="cancel-btn" onclick="closeCheckout()">Zpět do košíku</button>
@@ -3177,7 +3179,7 @@ async function pripravitCheckoutProUcet() {
 
 // Objednávka ve 3 krocích (krok 4b): 1 doprava a platba, 2 údaje, 3 shrnutí, 4 potvrzení
 const DOPRAVA_NAZVY = { zasilkovna: 'Zásilkovna', ceska_posta: 'Česká pošta', osobni_odber: 'Osobní odběr – prodejna Hulín', gls_adresa: 'GLS – doručení na adresu', gls_vydejni_misto: 'GLS – doručení do výdejního místa' };
-const PLATBA_NAZVY = { dobirka: 'Dobírka', prevod: 'Bankovní převod', na_prodejne: 'Na prodejně při vyzvednutí (hotově, kartou nebo QR)' };
+const PLATBA_NAZVY = { dobirka: 'Dobírka (platba při převzetí)', prevod: 'Bankovní převod', na_prodejne: 'Na prodejně při vyzvednutí (hotově, kartou nebo QR)' };
 function zvolenaDoprava() {
   const el = document.querySelector('#chDoprava input:checked');
   return el ? el.value : (nastaveniDopravy.metody[0] || {}).kod;
@@ -3196,6 +3198,7 @@ function vykreslitVolbyDopravy() {
 function platneNastaveniDopravy(d) {
   return !!(d && (d.zdarmaOd === null || Number.isInteger(d.zdarmaOd)) && Array.isArray(d.metody) && d.metody.length > 0
     && (d.zasilkovnaKlic === undefined || d.zasilkovnaKlic === null || typeof d.zasilkovnaKlic === 'string')
+    && (d.dobirka === undefined || d.dobirka === null || (Number.isInteger(d.dobirka) && d.dobirka >= 0))
     && d.metody.every(m => m && typeof m.kod === 'string' && typeof m.nazev === 'string' && Number.isInteger(m.cena)));
 }
 async function nacistNastaveniDopravy() {
@@ -3417,20 +3420,29 @@ function zvolenaPlatba() {
   return el ? el.value : 'prevod';
 }
 
-// Součty objednávky - stejné pravidlo jako server (doprava zdarma od 2 000 Kč po slevě)
-function spocitatObjednavku(polozky, poukaz, doprava) {
+// Dobírka: jen s příplatkem z nastavení a ne u osobního odběru (stejně jako server)
+function dobirkaMozna(doprava) {
+  const m = nastaveniDopravy.metody.find(m => m.kod === doprava);
+  return Number.isInteger(nastaveniDopravy.dobirka) && !!m && !m.vzdyZdarma;
+}
+
+// Součty objednávky - stejné pravidlo jako server (doprava zdarma od 2 000 Kč po slevě,
+// příplatek za dobírku vždy)
+function spocitatObjednavku(polozky, poukaz, doprava, platba) {
   const mezisoucet = polozky.reduce((s, i) => s + i.cena * i.pocet, 0);
   const sleva = poukaz ? Math.min(poukaz.zustatek, mezisoucet) : 0;
   const dopravaCena = vypocitatDopravu(doprava, mezisoucet - sleva);
-  return { mezisoucet, sleva, dopravaCena, celkem: mezisoucet - sleva + dopravaCena };
+  const priplatek = platba === 'dobirka' && dobirkaMozna(doprava) ? nastaveniDopravy.dobirka : 0;
+  return { mezisoucet, sleva, dopravaCena, priplatek, celkem: mezisoucet - sleva + dopravaCena + priplatek };
 }
 
-function souhrnObjednavkyHtml(polozky, poukaz, doprava) {
-  const s = spocitatObjednavku(polozky, poukaz, doprava);
+function souhrnObjednavkyHtml(polozky, poukaz, doprava, platba) {
+  const s = spocitatObjednavku(polozky, poukaz, doprava, platba);
   return `
     ${polozky.map(i => `<div class="order-summary-item"><span>${escHtml(i.nazev)} vel. ${escHtml(i.velikost)} × ${Number(i.pocet)}</span><span>${i.cena * i.pocet} Kč</span></div>`).join('')}
     ${s.sleva > 0 ? `<div class="order-summary-item" style="color:var(--sage);font-weight:700"><span>Dárkový poukaz ${escHtml(poukaz.kod)}</span><span>−${s.sleva} Kč</span></div>` : ''}
     <div class="order-summary-item"><span>Doprava (${escHtml(DOPRAVA_NAZVY[doprava] || doprava)})</span><span>${s.dopravaCena === 0 ? 'Zdarma' : s.dopravaCena + ' Kč'}</span></div>
+    ${s.priplatek > 0 ? `<div class="order-summary-item"><span>Dobírka (příplatek)</span><span>${s.priplatek} Kč</span></div>` : ''}
     <div class="order-summary-total"><span>Celkem</span><span>${s.celkem} Kč</span></div>`;
 }
 
@@ -3442,7 +3454,12 @@ function vykreslitSouhrnObjednavky() {
     const cena = vypocitatDopravu(el.dataset.dopravaCena, mezisoucet - sleva);
     el.textContent = cena === 0 ? 'zdarma' : cena + ' Kč';
   });
-  document.getElementById('orderSummary').innerHTML = souhrnObjednavkyHtml(kosik, uplatnenyPoukaz, doprava);
+  // Dobírka jen u zasílaných zásilek s příplatkem - jinak zpět na převod
+  const dobirka = document.getElementById('volbaDobirka');
+  dobirka.hidden = !dobirkaMozna(doprava);
+  document.getElementById('dobirkaCena').textContent = dobirka.hidden ? '' : '+' + nastaveniDopravy.dobirka + ' Kč';
+  if (dobirka.hidden && zvolenaPlatba() === 'dobirka') document.querySelector('#chPlatba input[value="prevod"]').checked = true;
+  document.getElementById('orderSummary').innerHTML = souhrnObjednavkyHtml(kosik, uplatnenyPoukaz, doprava, zvolenaPlatba());
   document.getElementById('vyzkouseniInfo').style.display = doprava === 'osobni_odber' ? 'block' : 'none';
   document.getElementById('dodaciLhuta').hidden = doprava === 'osobni_odber';
   document.getElementById('glsVydejniMistoBox').hidden = !jeVydejniMistoGls(doprava);
@@ -3466,6 +3483,7 @@ function qrPlatbaUrl(castka, zprava, variabilniSymbol) {
 // převodem "na základě výzvy prodávajícího"
 function aktualizovatPlatbuInfo() {
   document.getElementById('chPrevodInfo').hidden = zvolenaPlatba() !== 'prevod';
+  document.getElementById('chDobirkaInfo').hidden = zvolenaPlatba() !== 'dobirka';
 }
 
 // Rekapitulace údajů ve shrnutí, s odkazy zpět k úpravě
@@ -3537,6 +3555,7 @@ function potvrzeniObjednavkyHtml({ cislo, celkem, email, platba }) {
     <p>Potvrzení jsme poslali na <strong>${escHtml(email)}</strong>.</p>
     ${prevod}
     ${platba === 'na_prodejne' ? '<p>Zaplatíte při vyzvednutí na prodejně (hotově, kartou nebo QR kódem). Ozveme se, až bude objednávka připravená.</p>' : ''}
+    ${platba === 'dobirka' ? `<p>Platba na dobírku: částku <strong>${Number(celkem)} Kč</strong> zaplatíte při převzetí zásilky.</p>` : ''}
     <div id="potvrzeniUcet"></div>
     <button type="button" class="submit-btn" onclick="closeModal('modalCheckout')">Zpět do e-shopu</button>`;
 }

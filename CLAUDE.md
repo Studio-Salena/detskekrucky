@@ -31,7 +31,8 @@ Web a e-shop pro obchod s barefoot obuví pro děti (majitelka: Monika Škarpich
 ## Hotové funkce
 
 - E-shop: katalog podle modelů s filtry, detail produktu, košík, objednávka ve 3 krocích, platba převodem s QR (VS = číslo objednávky), osobní odběr s platbou na prodejně, dárkové poukazy
-- Doprava: Zásilkovna s výběrem výdejního místa (79 Kč), Česká pošta (89 Kč, nechat, i když se nepoužívá), osobní odběr; zdarma od 2 000 Kč
+- Doprava: Zásilkovna s výběrem výdejního místa (79 Kč), GLS výdejní místo 69 Kč / na adresu 119 Kč (zapíná majitelka v adminu), Česká pošta (89 Kč, nechat, i když se nepoužívá), osobní odběr; zdarma od 2 000 Kč
+- Platba: převod s QR, dobírka s příplatkem z nastavení dopravy (40 Kč, ne u osobního odběru, sloupec `objednavky.platba_priplatek`), na prodejně jen u osobního odběru
 - Administrace (hnědá, barvy webu): Přehled, E-shop (objednávky, zákazníci, vrácení, poukazy), Prodejna (pokladna/POS), Sklad, Sortiment (katalog), Rezervace, Reporty a Účetnictví, Web (texty), Nastavení (otevírací doba, doprava, systém)
 - Rezervační systém se správou slotů a e-mailovým potvrzením
 - Průvodce velikostí: na stránce boty doporučení podle délky nožičky (vnitřní délka ≥ nožička + rezerva, výchozí 12 mm v nastavení katalogu `rezervaMm`), filtr `?noha=` v katalogu (rezerva až +10 mm); rozměry velikostí se zadávají v adminu v detailu produktu (PUT /api/modely/:id/rozmery)

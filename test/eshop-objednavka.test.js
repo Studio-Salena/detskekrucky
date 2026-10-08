@@ -28,7 +28,7 @@ vm.runInContext([
   ...['DOPRAVA_VYCHOZI', 'DOPRAVA_NAZVY', 'PLATBA_NAZVY', 'UCET_IBAN', 'CHYBA_BEZ_VYDEJNIHO_MISTA', 'CHYBA_BEZ_MISTA_ZASILKOVNY'].map(konstanta),
   'var nastaveniDopravy = DOPRAVA_VYCHOZI; var glsVydejniMisto = null; var zasVydejniMisto = null;',
   ...['vypocitatDopravu', 'escHtml', 'escAttr', 'spocitatObjednavku', 'souhrnObjednavkyHtml', 'qrPlatbaUrl', 'potvrzeniObjednavkyHtml', 'shrnutiUdajuHtml',
-    'jeVydejniMistoGls', 'jeVydejniMistoZasilkovny', 'chybaVydejnihoMista', 'vybraneVydejniMisto', 'adresaVydejnihoMista', 'platneNastaveniDopravy'].map(vytahnout)
+    'dobirkaMozna', 'jeVydejniMistoGls', 'jeVydejniMistoZasilkovny', 'chybaVydejnihoMista', 'vybraneVydejniMisto', 'adresaVydejnihoMista', 'platneNastaveniDopravy'].map(vytahnout)
 ].join('\n'), sandbox);
 const zavolat = (fn, ...args) => {
   const v = vm.runInContext(`${fn}(...${JSON.stringify(args)})`, sandbox);
@@ -38,10 +38,24 @@ const zavolat = (fn, ...args) => {
 const POLOZKY = [{ nazev: 'Bota A', velikost: 24, pocet: 2, cena: 800 }, { nazev: 'Bota B', velikost: 25, pocet: 1, cena: 500 }];
 
 test('součty: doprava zdarma od 2 000 Kč počítáno po slevě poukazu (stejně jako server)', () => {
-  assert.deepEqual(zavolat('spocitatObjednavku', POLOZKY, null, 'zasilkovna'), { mezisoucet: 2100, sleva: 0, dopravaCena: 0, celkem: 2100 });
-  assert.deepEqual(zavolat('spocitatObjednavku', POLOZKY, { zustatek: 500 }, 'ceska_posta'), { mezisoucet: 2100, sleva: 500, dopravaCena: 89, celkem: 1689 });
-  assert.deepEqual(zavolat('spocitatObjednavku', POLOZKY, { zustatek: 5000 }, 'zasilkovna'), { mezisoucet: 2100, sleva: 2100, dopravaCena: 79, celkem: 79 });
+  assert.deepEqual(zavolat('spocitatObjednavku', POLOZKY, null, 'zasilkovna'), { mezisoucet: 2100, sleva: 0, dopravaCena: 0, priplatek: 0, celkem: 2100 });
+  assert.deepEqual(zavolat('spocitatObjednavku', POLOZKY, { zustatek: 500 }, 'ceska_posta'), { mezisoucet: 2100, sleva: 500, dopravaCena: 89, priplatek: 0, celkem: 1689 });
+  assert.deepEqual(zavolat('spocitatObjednavku', POLOZKY, { zustatek: 5000 }, 'zasilkovna'), { mezisoucet: 2100, sleva: 2100, dopravaCena: 79, priplatek: 0, celkem: 79 });
   assert.equal(zavolat('spocitatObjednavku', [POLOZKY[1]], null, 'osobni_odber').celkem, 500);
+});
+
+test('dobírka: příplatek z nastavení (i při dopravě zdarma), ne u osobního odběru, bez příplatku se nenabízí', () => {
+  vm.runInContext('nastaveniDopravy = { ...DOPRAVA_VYCHOZI, dobirka: 40 };', sandbox);
+  assert.deepEqual(zavolat('spocitatObjednavku', POLOZKY, null, 'zasilkovna', 'dobirka'), { mezisoucet: 2100, sleva: 0, dopravaCena: 0, priplatek: 40, celkem: 2140 });
+  assert.equal(zavolat('spocitatObjednavku', [POLOZKY[1]], null, 'zasilkovna', 'dobirka').celkem, 619);
+  assert.equal(zavolat('spocitatObjednavku', [POLOZKY[1]], null, 'zasilkovna', 'prevod').celkem, 579);
+  assert.equal(zavolat('dobirkaMozna', 'osobni_odber'), false);
+  assert.equal(zavolat('dobirkaMozna', 'ceska_posta'), true);
+  assert.match(zavolat('souhrnObjednavkyHtml', [POLOZKY[1]], null, 'zasilkovna', 'dobirka'), /Dobírka \(příplatek\)<\/span><span>40 Kč/);
+  assert.equal(zavolat('platneNastaveniDopravy', { ...zavolat('platneNastaveniDopravy', null) || {}, zdarmaOd: 2000, metody: [{ kod: 'zasilkovna', nazev: 'Z', cena: 79 }], dobirka: 'x' }), false);
+  vm.runInContext('nastaveniDopravy = DOPRAVA_VYCHOZI;', sandbox);
+  assert.equal(zavolat('dobirkaMozna', 'zasilkovna'), false, 'bez příplatku se dobírka nenabízí');
+  assert.equal(zavolat('spocitatObjednavku', [POLOZKY[1]], null, 'zasilkovna', 'dobirka').priplatek, 0);
 });
 
 test('souhrn: položky, poukaz, doprava, celkem; názvy a kód poukazu escapované', () => {
@@ -90,7 +104,7 @@ test('právní texty formuláře: souhlas jen s VOP (varianta A), informace o os
   assert.match(ESHOP_HTML, /Seznámil\(a\) jsem se s <a href="obchodni-podminky.html" target="_blank" style="color:var\(--brown\);font-weight:700">obchodními podmínkami<\/a> a souhlasím s nimi\./);
   assert.match(ESHOP_HTML, /<p class="osobni-udaje-info">Osobní údaje zpracováváme za účelem vyřízení objednávky\. Podrobnosti najdete v bodě 7 <a href="obchodni-podminky.html#gdpr" target="_blank">obchodních podmínek<\/a> \(Ochrana osobních údajů\)\.<\/p>/);
   assert.doesNotMatch(ESHOP_HTML, /zpracováním osobních údajů pro účely vyřízení objednávky/);
-  assert.match(ESHOP_HTML, /Zboží skladem odešleme do 2&nbsp;pracovních dnů od připsání platby/);
+  assert.match(ESHOP_HTML, /Zboží skladem odešleme do 2&nbsp;pracovních dnů od připsání platby \(u dobírky od objednání\)/);
   const krok3 = ESHOP_HTML.slice(ESHOP_HTML.indexOf('data-krok="3" aria-label="Shrnutí"'), ESHOP_HTML.indexOf('data-krok="4"'));
   assert.match(krok3, /id="submitBtn"/);
   assert.match(krok3, /id="chSouhlas"/);

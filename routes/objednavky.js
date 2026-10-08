@@ -10,7 +10,7 @@ const { pripravit } = require('../lib/startServeru');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const { jeZablokovana, zaznamenatObjednavku } = require('../middleware/objednavkyLimiter');
 const { migrovatSnapshoty, SQL_UDAJE_OBJEDNAVKY } = require('../lib/objednavkySnapshot');
-const { METODY, nacistNastaveniDopravy, jeDostupna, vypocitatCenuDopravy, typVydejnihoMista } = require('../lib/doprava');
+const { METODY, nacistNastaveniDopravy, jeDostupna, vypocitatCenuDopravy, typVydejnihoMista, dobirkaDostupna, priplatekPlatby } = require('../lib/doprava');
 const { overitVydejniMisto } = require('../lib/glsVydejniMista');
 const zasilkovna = require('../lib/zasilkovna');
 const zasilkovnaApi = require('../lib/zasilkovnaApi');
@@ -48,6 +48,8 @@ async function initObjednavkySloupce() {
       ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS vydejni_misto_mesto TEXT;
       ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS vydejni_misto_psc TEXT;
       ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS vydejni_misto_stat TEXT;
+      -- Příplatek za způsob platby (dobírka) v době objednávky; jinak 0 / NULL
+      ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS platba_priplatek NUMERIC;
       CREATE TABLE IF NOT EXISTS objednavky_cislovani (
         rok INTEGER PRIMARY KEY,
         posledni_cislo INTEGER NOT NULL DEFAULT 0
@@ -163,12 +165,14 @@ const PSC_RE = /^\d{3}\s?\d{2}$/;
 // (do adminu i e-mailu) a neznámá doprava se účtovala jako Zásilkovna.
 // Nabízené způsoby a ceny jsou v nastavení dopravy (admin -> Nastavení -> Doprava).
 // Na e-shopu převod (QR kód); při osobním odběru i platba na prodejně (hotově,
-// kartou, QR) - majitelka 2026-10-07. Dobírka zůstává jen u starších objednávek.
-const POVOLENE_PLATBY = ['prevod', 'na_prodejne'];
+// kartou, QR) - majitelka 2026-10-07. Dobírka znovu od 2026-10-08 s příplatkem
+// z nastavení dopravy (ne u osobního odběru).
+const POVOLENE_PLATBY = ['prevod', 'na_prodejne', 'dobirka'];
 function validovatDopravuAPlatbu({ doprava, platba }, nastaveniDopravy) {
   if (typeof doprava !== 'string' || !jeDostupna(nastaveniDopravy, doprava)) return 'Vyberte prosím způsob dopravy.';
   if (!POVOLENE_PLATBY.includes(platba)) return 'Vyberte prosím způsob platby.';
   if (platba === 'na_prodejne' && doprava !== 'osobni_odber') return 'Platba na prodejně je možná jen při osobním odběru.';
+  if (platba === 'dobirka' && !dobirkaDostupna(nastaveniDopravy, doprava)) return 'Dobírka u tohoto způsobu dopravy není možná.';
   return null;
 }
 
@@ -373,20 +377,22 @@ router.post('/', async (req, res) => {
 
     // Doprava - podle zvoleného způsobu (po odečtení poukazu), osobní odběr je vždy zdarma
     const dopravaCena = vypocitatCenuDopravy(nastaveniDopravy, doprava, mezisoucet - sleva);
-    celkem = mezisoucet - sleva + dopravaCena;
+    // Příplatek za dobírku se platí vždy (i při dopravě zdarma)
+    const platbaPriplatek = priplatekPlatby(nastaveniDopravy, doprava, platba);
+    celkem = mezisoucet - sleva + dopravaCena + platbaPriplatek;
 
     // Vytvorit objednavku
     const objednavka = await client.query(
       `INSERT INTO objednavky (zakaznik_id, doprava, platba, celkem, poznamka, poukaz_id, sleva,
                                obj_jmeno, obj_email, obj_telefon, obj_ulice, obj_mesto, obj_psc,
                                doprava_cena, dopravce, vydejni_misto_id, vydejni_misto_nazev,
-                               vydejni_misto_ulice, vydejni_misto_mesto, vydejni_misto_psc, vydejni_misto_stat)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING id, vytvoreno`,
+                               vydejni_misto_ulice, vydejni_misto_mesto, vydejni_misto_psc, vydejni_misto_stat, platba_priplatek)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING id, vytvoreno`,
       [zakaznik_id, doprava, platba, celkem, poznamka, poukaz_id, sleva, jmeno, email, telefon, ulice, mesto, psc,
         dopravaCena, METODY[doprava].dopravce,
         vydejniMisto ? vydejniMisto.id : null, vydejniMisto ? vydejniMisto.nazev : null,
         vydejniMisto ? vydejniMisto.ulice : null, vydejniMisto ? vydejniMisto.mesto : null,
-        vydejniMisto ? vydejniMisto.psc : null, vydejniMisto ? vydejniMisto.stat : null]
+        vydejniMisto ? vydejniMisto.psc : null, vydejniMisto ? vydejniMisto.stat : null, platbaPriplatek]
     );
     const objednavka_id = objednavka.rows[0].id;
     const cislo = await pridelitCisloObjednavky(client, objednavka_id);
@@ -451,6 +457,7 @@ try {
     polozky: polozkySkutecne,
     sleva,
     doprava_cena: dopravaCena,
+    platba_priplatek: platbaPriplatek,
     vydejni_misto: vydejniMisto,
     // Datum a čas objednávky do potvrzení (ne datum uzavření smlouvy)
     vytvoreno: objednavka.rows[0].vytvoreno
@@ -465,7 +472,7 @@ res.json({ zprava: 'Objednavka uspesne vytvorena', objednavka_id, cislo, celkem 
 // s odesláním objednávku nezablokuje (stejný vzor jako u rezervací).
 odeslat_upozorneni_objednavky({
   objednavka_id, cislo, celkem, jmeno, email, telefon, ulice, mesto, psc, doprava, platba, polozky: polozkySkutecne, sleva,
-  doprava_cena: dopravaCena, vydejni_misto: vydejniMisto
+  doprava_cena: dopravaCena, platba_priplatek: platbaPriplatek, vydejni_misto: vydejniMisto
 }).catch(e => console.error('Upozorneni majitelce o objednavce se nepodarilo odeslat:', e.message));
 
   } catch (err) {

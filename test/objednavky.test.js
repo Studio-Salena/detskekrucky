@@ -227,7 +227,7 @@ test('produkt skrytý v adminu (na_eshopu = false) nejde objednat a sklad zůsta
   assert.equal(stav.sklad.find(r => r.produkt_id === 3).pocet_kusu, 10); // sklad nedotčen
 });
 
-test('krok 4a: doprava a platba jen z nabídky e-shopu (platba jen převodem) - jiná hodnota je odmítnuta a nic se nezapíše', async () => {
+test('krok 4a: doprava a platba jen z nabídky e-shopu - jiná hodnota je odmítnuta a nic se nezapíše', async () => {
   // Každé volání z jiné IP - limiter počtu objednávek z jednoho místa tu nehraje roli
   let ip = 0;
   const zavolat = async (handler, body) => { const res = vytvoritRes(); await handler({ body, ip: '10.40.0.' + (++ip) }, res); return res; };
@@ -235,7 +235,7 @@ test('krok 4a: doprava a platba jen z nabídky e-shopu (platba jen převodem) - 
     [{ doprava: 'drak' }, /způsob dopravy/],
     [{ doprava: undefined }, /způsob dopravy/],
     [{ platba: 'karta' }, /způsob platby/],
-    [{ platba: 'dobirka' }, /způsob platby/],
+    [{ platba: 'dobirka' }, /Dobírka u tohoto způsobu dopravy není možná/],
     [{ platba: { x: 1 } }, /způsob platby/]
   ]) {
     const stav = zakladniStav();
@@ -251,6 +251,31 @@ test('krok 4a: doprava a platba jen z nabídky e-shopu (platba jen převodem) - 
       assert.equal(res.statusCode, 200, `${doprava}/${platba}`);
     }
   }
+});
+
+test('dobírka (2026-10-08): jen s příplatkem z nastavení, ne u osobního odběru; příplatek v celkové ceně i při dopravě zdarma', async () => {
+  let ip = 0;
+  const zavolat = async (handler, body) => { const res = vytvoritRes(); await handler({ body, ip: '10.42.0.' + (++ip) }, res); return res; };
+  const sDobirkou = () => {
+    const stav = zakladniStav();
+    stav.nastaveniDopravy = { zdarmaOd: 2000, metody: {}, priplatky: { dobirka: 40 } };
+    return stav;
+  };
+  const stav = sDobirkou();
+  const ok = await zavolat(pripravitHandler(stav), objednavkovyPozadavek({ doprava: 'zasilkovna', platba: 'dobirka' }));
+  assert.equal(ok.statusCode, 200, JSON.stringify(ok.body));
+  const ulozena = stav.objednavky[0];
+  assert.equal(ulozena.platba, 'dobirka');
+  assert.equal(Number(ulozena.platba_priplatek ?? 40), 40);
+  const odber = sDobirkou();
+  const ne = await zavolat(pripravitHandler(odber), objednavkovyPozadavek({ doprava: 'osobni_odber', platba: 'dobirka' }));
+  assert.equal(ne.statusCode, 400);
+  assert.match(ne.body.chyba, /Dobírka u tohoto způsobu dopravy není možná/);
+  assert.equal(odber.objednavky.length, 0);
+  // převod bez příplatku
+  const prevod = sDobirkou();
+  await zavolat(pripravitHandler(prevod), objednavkovyPozadavek({ doprava: 'zasilkovna', platba: 'prevod' }));
+  assert.equal(Number(prevod.objednavky[0].celkem), Number(ulozena.celkem) - 40);
 });
 
 test('platba na prodejně jen při osobním odběru (majitelka 2026-10-07)', async () => {

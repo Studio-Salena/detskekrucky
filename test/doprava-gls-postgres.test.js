@@ -56,10 +56,10 @@ test('PostgreSQL: migrace, nastavení dopravy, objednávka GLS do výdejního m�
     const router = nacistObjednavky(pool);
     assert.equal(await vsePripraveno(20000), true);
 
-    const sloupce = (await pool.query(`SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'objednavky' AND (column_name LIKE 'vydejni_misto%' OR column_name IN ('doprava_cena', 'dopravce'))`, [schema])).rows;
+    const sloupce = (await pool.query(`SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'objednavky' AND (column_name LIKE 'vydejni_misto%' OR column_name IN ('doprava_cena', 'dopravce', 'platba_priplatek'))`, [schema])).rows;
     assert.deepEqual(Object.fromEntries(sloupce.map(s => [s.column_name, s.data_type])), {
       doprava_cena: 'numeric', dopravce: 'text', vydejni_misto_id: 'text', vydejni_misto_nazev: 'text', vydejni_misto_ulice: 'text',
-      vydejni_misto_mesto: 'text', vydejni_misto_psc: 'text', vydejni_misto_stat: 'text'
+      vydejni_misto_mesto: 'text', vydejni_misto_psc: 'text', vydejni_misto_stat: 'text', platba_priplatek: 'numeric'
     });
     const stara = (await pool.query('SELECT doprava, doprava_cena, dopravce, vydejni_misto_id FROM objednavky WHERE id = 1')).rows[0];
     assert.deepEqual(stara, { doprava: 'zasilkovna', doprava_cena: null, dopravce: null, vydejni_misto_id: null }, 'stará objednávka beze změny');

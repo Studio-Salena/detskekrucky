@@ -230,13 +230,24 @@ test('platba na prodejně: e-mail ukáže způsob platby a žádné pokyny k př
   assert.equal(html.includes('X-VS'), false);
 });
 
-test('VOP 10/2026: platba bez dobírky a Stripe, odeslání do 2 pracovních dnů, Fio banka u terminálu', () => {
+test('VOP 10/2026: převod nebo dobírka (40 Kč), GLS, odeslání do 2 pracovních dnů, bez Stripe, Fio banka u terminálu', () => {
   const t = textStranky(fs.readFileSync(path.join(KOREN, 'obchodni-podminky.html'), 'utf8'));
-  assert.doesNotMatch(t, /Dobírkou|dobírky|Stripe|na základě výzvy prodávajícího/);
-  assert.match(t, /Zboží skladem odešleme do 2 pracovních dnů od připsání platby, zboží „u dodavatele“ do 7–14 dnů\./);
-  assert.match(t, /výdejní místo Zásilkovny \(79 Kč\) nebo prostřednictvím České pošty \(89 Kč\)/);
+  assert.doesNotMatch(t, /Stripe|na základě výzvy prodávajícího/);
+  assert.match(t, /bankovním převodem, nebo na dobírku při převzetí zásilky/);
+  assert.match(t, /příplatek 40 Kč; dobírku nelze zvolit u osobního odběru/);
+  assert.match(t, /Zboží skladem odešleme do 2 pracovních dnů od připsání platby \(u dobírky od přijetí objednávky\), zboží „u dodavatele“ do 7–14 dnů\./);
+  assert.match(t, /výdejní místo Zásilkovny \(79 Kč\), přepravní službou GLS na vybrané výdejní místo \(69 Kč\) nebo na adresu \(119 Kč\), případně prostřednictvím České pošty \(89 Kč\)/);
+  assert.match(t, /přepravce \(Zásilkovna, GLS, Česká pošta\)/);
   assert.match(t, /poskytovatele platebního terminálu na prodejně \(Fio banka, a\.s\.\)/);
   assert.match(t, /platné od 8\. 10\. 2026/);
+});
+
+test('potvrzovací e-mail s dobírkou: řádek příplatku, bez pokynů k převodu, „zaplatíte při převzetí“', async () => {
+  const { html } = await vyrenderovatPotvrzeni({ ...OBJEDNAVKA, platba: 'dobirka', platba_priplatek: 40, celkem: OBJEDNAVKA.celkem + 40 });
+  const t = text(html);
+  assert.match(t, /Dobírka \(příplatek\) 40 Kč/);
+  assert.match(t, /Zaplatíte při převzetí zásilky\./);
+  assert.doesNotMatch(t, /Pokyny k platbě|Variabilní symbol/);
 });
 
 test('potvrzovací e-mail: kdy zboží odešleme / u osobního odběru, že se ozveme', async () => {

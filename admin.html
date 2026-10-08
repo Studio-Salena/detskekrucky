@@ -1103,7 +1103,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           <div id="dopravaMetody"><div class="loading">Načítám...</div></div>
           <table style="width:100%;border-collapse:collapse;margin-top:8px">
             <tr><td style="padding:8px;font-weight:600">Doprava zdarma od (Kč)</td><td><input id="doprava-zdarma-od" class="form-input" type="number" min="0" step="1" placeholder="prázdné = nikdy zdarma"></td></tr>
-            <tr><td style="padding:8px;font-weight:600">Příplatek za dobírku (Kč)<br><small style="font-weight:400;color:var(--text-light)">Připraveno pro ceník GLS, dobírka na e-shopu zatím není.</small></td><td><input id="doprava-dobirka" class="form-input" type="number" min="0" step="1" placeholder="nevyplněno"></td></tr>
+            <tr><td style="padding:8px;font-weight:600">Příplatek za dobírku (Kč)<br><small style="font-weight:400;color:var(--text-light)">Vyplněno = zákazník může platit na dobírku (ne u osobního odběru). Prázdné = dobírka se nenabízí.</small></td><td><input id="doprava-dobirka" class="form-input" type="number" min="0" step="1" placeholder="nevyplněno"></td></tr>
           </table>
           <div id="zasilkovnaStav" class="info-box" style="margin-top:12px;font-size:0.85rem"></div>
           <div id="glsApiStav" class="info-box" style="margin-top:12px;font-size:0.85rem"></div>
@@ -2380,7 +2380,7 @@ async function detailObjednavky(id) {
       <div class="info-box"><strong>${escH(data.jmeno)||'—'}</strong><br>
         📧 ${escH(data.email)||'—'} &nbsp;|&nbsp; 📞 ${escH(data.telefon)||'—'}<br>
         📍 ${escH(data.ulice)||'—'}, ${escH(data.mesto)||'—'} ${escH(data.psc)}</div>
-      <div class="info-box">🚚 <strong>${escH(DOPRAVA_LABELY[data.doprava]||data.doprava)||'—'}</strong>${data.doprava_cena!=null?` (${Number(data.doprava_cena)===0?'zdarma':Number(data.doprava_cena).toLocaleString('cs-CZ')+' Kč'})`:''} &nbsp;|&nbsp; 💳 <strong>${escH(PLATBA_LABELY[data.platba]||data.platba)||'—'}</strong> &nbsp;|&nbsp; ${stavBadge(data.stav)}</div>
+      <div class="info-box">🚚 <strong>${escH(DOPRAVA_LABELY[data.doprava]||data.doprava)||'—'}</strong>${data.doprava_cena!=null?` (${Number(data.doprava_cena)===0?'zdarma':Number(data.doprava_cena).toLocaleString('cs-CZ')+' Kč'})`:''} &nbsp;|&nbsp; 💳 <strong>${escH(PLATBA_LABELY[data.platba]||data.platba)||'—'}</strong>${Number(data.platba_priplatek) > 0 ? ` (+${Number(data.platba_priplatek)} Kč)` : ''} &nbsp;|&nbsp; ${stavBadge(data.stav)}</div>
       ${vydejniMistoDetailHtml(data)}
       <div class="section-divider">Položky</div>
       <table><thead><tr><th>Produkt</th><th>Vel.</th><th>Ks</th><th>Cena/ks</th><th>Celkem</th></tr></thead>
@@ -2494,7 +2494,8 @@ async function tiskObjednavkyId(id) {
     // Cena dopravy uložená při objednávce; u starších objednávek (bez doprava_cena)
     // se dopočítá z celkem (celkem = mezisoucet - sleva + doprava).
     const mezisoucet = polozky.reduce((s,p) => s + p.cena*p.pocet, 0);
-    const dopravaCena = data.doprava_cena != null ? Number(data.doprava_cena) : data.celkem - mezisoucet + Number(data.sleva||0);
+    const priplatek = Number(data.platba_priplatek) || 0;
+    const dopravaCena = data.doprava_cena != null ? Number(data.doprava_cena) : data.celkem - mezisoucet + Number(data.sleva||0) - priplatek;
     const datumVystaveni = faktura.faktura_datum ? new Date(faktura.faktura_datum).toLocaleDateString('cs-CZ') : new Date().toLocaleDateString('cs-CZ');
 
     const printWin = window.open('','_blank');
@@ -2559,6 +2560,7 @@ async function tiskObjednavkyId(id) {
           ${polozky.map(p=>`<tr><td>${escH(p.nazev)||'Produkt'}</td><td class="text-right">${escH(p.velikost)}</td><td class="text-right">${escH(p.pocet)}</td><td class="text-right">${p.cena} Kč</td><td class="text-right">${p.cena*p.pocet} Kč</td></tr>`).join('')}
           ${Number(data.sleva)>0?`<tr><td colspan="4">Poukaz${data.poukaz_kod?' '+escH(data.poukaz_kod):''}</td><td class="text-right">−${Number(data.sleva)} Kč</td></tr>`:''}
           <tr><td colspan="4">${escH(dopravaLabel)} (doprava)</td><td class="text-right">${dopravaCena===0?'Zdarma':dopravaCena+' Kč'}</td></tr>
+          ${priplatek > 0 ? `<tr><td colspan="4">Dobírka (příplatek)</td><td class="text-right">${priplatek} Kč</td></tr>` : ''}
           <tr class="total-row"><td colspan="4">CELKEM K ÚHRADĚ</td><td class="text-right">${data.celkem} Kč</td></tr>
         </tbody>
       </table>

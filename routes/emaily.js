@@ -93,6 +93,22 @@ function obalitBrandovanyEmail({ nadpis, obsahHtml }) {
     </div>`;
 }
 
+// Společné styly obsahu e-mailů (všechny e-maily v barvách Dětských krůčků)
+const STYL_ODSTAVEC = 'margin:0 0 12px 0;font-size:14px;line-height:1.5';
+const STYL_PODNADPIS = `margin:20px 0 8px 0;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY}`;
+const STYL_TH = `text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:${BARVA_TEXT_TLUMENY};border-bottom:2px solid ${BARVA_RAMECEK};padding:8px`;
+const STYL_TD = `padding:8px;border-bottom:1px solid ${BARVA_RAMECEK};font-size:14px`;
+const STYL_BOX = `background:${BARVA_POZADI_BOX};border:1px solid ${BARVA_RAMECEK};border-radius:8px;padding:16px;margin:0 0 16px 0`;
+function tlacitkoHtml(href, text) {
+  return `<a href="${escH(href)}" style="display:inline-block;background:${BARVA_ZNACKA};color:#fff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 20px;border-radius:999px">${escH(text)}</a>`;
+}
+function boxTerminuHtml(datum, cas) {
+  return `<div style="${STYL_BOX}">
+          <p style="margin:0 0 6px 0;font-size:14px"><strong>Termín:</strong> ${escH(datum)}, ${escH(cas)}</p>
+          <p style="margin:0;font-size:14px">Prodejna: Holešovská 752, Hulín 768 24</p>
+        </div>`;
+}
+
 // Datum a čas objednávky (o.vytvoreno) v českém čase - server na Renderu běží v UTC.
 function formatovatDatumCasObjednavky(hodnota) {
   if (!hodnota) return null;
@@ -170,9 +186,10 @@ async function odeslat_potvrzeni(objednavka) {
   // Cena dopravy uložená při objednávce; u starších volání se dopočítá z celkem,
   // ať jde zobrazit doprava jako vlastní řádek v tabulce se správným součtem.
   const mezisoucet = objednavka.polozky.reduce((s, p) => s + p.cena * p.pocet, 0);
+  const priplatek = Number(objednavka.platba_priplatek) || 0;
   const dopravaCena = objednavka.doprava_cena != null
     ? Number(objednavka.doprava_cena)
-    : objednavka.celkem - mezisoucet + Number(objednavka.sleva || 0);
+    : objednavka.celkem - mezisoucet + Number(objednavka.sleva || 0) - priplatek;
   const dopravaLabel = DOPRAVA_LABELY[objednavka.doprava] || objednavka.doprava || '—';
   const platbaLabel = PLATBA_LABELY[objednavka.platba] || objednavka.platba || '—';
 
@@ -223,7 +240,9 @@ async function odeslat_potvrzeni(objednavka) {
           <p style="margin:0;font-size:14px"><strong>Platba:</strong> ${escH(platbaLabel)}</p>
           <p style="margin:8px 0 0 0;font-size:13px;color:${BARVA_TEXT_TLUMENY}">${objednavka.doprava === 'osobni_odber'
             ? 'Ozveme se, jakmile bude objednávka připravená k vyzvednutí.'
-            : 'Zboží skladem odešleme do 2 pracovních dnů od připsání platby, zboží „u dodavatele“ do 7–14 dnů.'}</p>
+            : objednavka.platba === 'dobirka'
+              ? 'Zboží skladem odešleme do 2 pracovních dnů, zboží „u dodavatele“ do 7–14 dnů. Zaplatíte při převzetí zásilky.'
+              : 'Zboží skladem odešleme do 2 pracovních dnů od připsání platby, zboží „u dodavatele“ do 7–14 dnů.'}</p>
         </td>
       </tr>
     </table>
@@ -243,6 +262,7 @@ async function odeslat_potvrzeni(objednavka) {
         ${polozky_html}
         ${objednavka.sleva > 0 ? `<tr><td colspan="3" style="padding:10px 8px;font-size:14px">Poukaz (sleva)</td><td style="padding:10px 8px;font-size:14px;text-align:right;color:#5a8a5a">−${objednavka.sleva} Kč</td></tr>` : ''}
         <tr><td colspan="3" style="padding:10px 8px;font-size:14px">${escH(dopravaLabel)} (doprava)</td><td style="padding:10px 8px;font-size:14px;text-align:right">${dopravaCena === 0 ? 'Zdarma' : dopravaCena + ' Kč'}</td></tr>
+        ${priplatek > 0 ? `<tr><td colspan="3" style="padding:10px 8px;font-size:14px">Dobírka (příplatek)</td><td style="padding:10px 8px;font-size:14px;text-align:right">${priplatek} Kč</td></tr>` : ''}
         <tr><td colspan="3" style="padding:14px 8px 0 8px;font-size:15px;font-weight:bold;color:${BARVA_ZNACKA};border-top:2px solid ${BARVA_ZNACKA_TMAVA}">CELKEM K ÚHRADĚ</td><td style="padding:14px 8px 0 8px;font-size:15px;font-weight:bold;color:${BARVA_ZNACKA};text-align:right;border-top:2px solid ${BARVA_ZNACKA_TMAVA}">${objednavka.celkem} Kč</td></tr>
       </tbody>
     </table>
@@ -261,9 +281,9 @@ async function odeslat_upozorneni_objednavky(objednavka) {
   const cisloZobrazit = objednavka.cislo || objednavka.objednavka_id;
   const polozky_html = objednavka.polozky.map(p => `
     <tr>
-      <td style="padding:8px;border-bottom:1px solid #eee">${p.nazev ? escH(p.nazev) : ('produkt #' + p.produkt_id)} - vel. ${escH(p.velikost)}</td>
-      <td style="padding:8px;border-bottom:1px solid #eee">${p.pocet} ks</td>
-      <td style="padding:8px;border-bottom:1px solid #eee">${p.cena * p.pocet} Kč</td>
+      <td style="${STYL_TD}">${p.nazev ? escH(p.nazev) : ('produkt #' + p.produkt_id)} - vel. ${escH(p.velikost)}</td>
+      <td style="${STYL_TD}">${p.pocet} ks</td>
+      <td style="${STYL_TD}">${p.cena * p.pocet} Kč</td>
     </tr>
   `).join('');
 
@@ -282,7 +302,7 @@ async function odeslat_upozorneni_objednavky(objednavka) {
     <p style="margin:0 0 16px 0;font-size:18px;font-weight:bold;color:${BARVA_ZNACKA}">Celkem: ${objednavka.celkem} Kč</p>
     <table role="presentation" style="width:100%;background:${BARVA_POZADI_BOX};border:1px solid ${BARVA_RAMECEK};border-radius:8px">
       <tr><td style="padding:16px 20px">
-        <p style="margin:0 0 6px 0;font-size:14px"><strong>Doprava:</strong> ${escH(DOPRAVA_LABELY[objednavka.doprava] || objednavka.doprava)} &nbsp; <strong>Platba:</strong> ${escH(PLATBA_LABELY[objednavka.platba] || objednavka.platba)}</p>
+        <p style="margin:0 0 6px 0;font-size:14px"><strong>Doprava:</strong> ${escH(DOPRAVA_LABELY[objednavka.doprava] || objednavka.doprava)} &nbsp; <strong>Platba:</strong> ${escH(PLATBA_LABELY[objednavka.platba] || objednavka.platba)}${Number(objednavka.platba_priplatek) > 0 ? ` (+${Number(objednavka.platba_priplatek)} Kč)` : ''}</p>
         ${vydejniMistoHtml(objednavka.vydejni_misto, 'margin:0 0 6px 0;font-size:14px')}
         <p style="margin:0 0 6px 0;font-size:14px"><strong>Zákazník:</strong> ${escH(objednavka.jmeno)}</p>
         <p style="margin:0 0 6px 0;font-size:14px"><strong>E-mail:</strong> ${escH(objednavka.email)}</p>
@@ -308,23 +328,12 @@ async function odeslat_potvrzeni_rezervace(rezervace, slot) {
   await odeslatEmail({
     to: rezervace.email,
     subject: 'Rezervace přijata – čeká na potvrzení – Dětské krůčky',
-    html: `
-      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-        <h1 style="color:#FF6B35">Rezervace přijata!</h1>
-        <p>Ahoj ${escH(rezervace.jmeno)},</p>
-        <p>Vaši rezervaci na vyzkoušení bot jsme přijali a zapsali. Vyčkejte prosím na e-mail s potvrzením termínu, ozveme se vám co nejdřív.</p>
-        <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-top:12px">
-          <p style="margin:0 0 6px 0"><strong>Termín:</strong> ${datum}, ${cas}</p>
-          <p style="margin:0">Prodejna: Holešovská 752, Hulín 768 24</p>
-        </div>
-        <p style="margin-top:16px">V případě zrušení rezervace, klikněte na odkaz a rezervace se zruší.</p>
-        <p><a href="${zrusitUrl}" style="color:#FF6B35">Zrušit rezervaci</a></p>
-        <hr>
-        <p style="color:#666;font-size:13px">
-          Dětské krůčky | 773 517 733 | info@detskekrucky.cz
-        </p>
-      </div>
-    `
+    html: obalitBrandovanyEmail({ nadpis: 'Rezervace přijata!', obsahHtml: `
+        <p style="${STYL_ODSTAVEC}">Ahoj ${escH(rezervace.jmeno)},</p>
+        <p style="${STYL_ODSTAVEC}">Vaši rezervaci na vyzkoušení bot jsme přijali a zapsali. Vyčkejte prosím na e-mail s potvrzením termínu, ozveme se vám co nejdřív.</p>
+        ${boxTerminuHtml(datum, cas)}
+        <p style="${STYL_ODSTAVEC}">V případě zrušení rezervace, klikněte na odkaz a rezervace se zruší.</p>
+        <p style="margin:0">${tlacitkoHtml(zrusitUrl, 'Zrušit rezervaci')}</p>` })
   });
   console.log('Email o rezervaci odeslan na:', rezervace.email);
 }
@@ -337,23 +346,12 @@ async function odeslat_potvrzeni_terminu(rezervace, slot) {
   await odeslatEmail({
     to: rezervace.email,
     subject: 'Rezervace potvrzena – Dětské krůčky',
-    html: `
-      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-        <h1 style="color:#FF6B35">✅ Rezervace potvrzena!</h1>
-        <p>Ahoj ${escH(rezervace.jmeno)},</p>
-        <p>Váš termín je potvrzený. Těšíme se na vás!</p>
-        <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-top:12px">
-          <p style="margin:0 0 6px 0"><strong>Termín:</strong> ${datum}, ${cas}</p>
-          <p style="margin:0">Prodejna: Holešovská 752, Hulín 768 24</p>
-        </div>
-        <p style="margin-top:16px">V případě zrušení rezervace, klikněte na odkaz a rezervace se zruší.</p>
-        <p><a href="${zrusitUrl}" style="color:#FF6B35">Zrušit rezervaci</a></p>
-        <hr>
-        <p style="color:#666;font-size:13px">
-          Dětské krůčky | 773 517 733 | info@detskekrucky.cz
-        </p>
-      </div>
-    `
+    html: obalitBrandovanyEmail({ nadpis: '✅ Rezervace potvrzena!', obsahHtml: `
+        <p style="${STYL_ODSTAVEC}">Ahoj ${escH(rezervace.jmeno)},</p>
+        <p style="${STYL_ODSTAVEC}">Váš termín je potvrzený. Těšíme se na vás!</p>
+        ${boxTerminuHtml(datum, cas)}
+        <p style="${STYL_ODSTAVEC}">V případě zrušení rezervace, klikněte na odkaz a rezervace se zruší.</p>
+        <p style="margin:0">${tlacitkoHtml(zrusitUrl, 'Zrušit rezervaci')}</p>` })
   });
   console.log('Email o potvrzeni terminu odeslan na:', rezervace.email);
 }
@@ -449,8 +447,8 @@ async function odeslat_potvrzeni_vratky(zadost) {
   const cisloZobrazit = zadost.cislo || zadost.objednavka_id;
   const polozky_html = zadost.polozky.map(p => `
     <tr>
-      <td style="padding:8px;border-bottom:1px solid #eee">${p.nazev ? escH(p.nazev) : ('produkt #' + p.produkt_id)} - vel. ${escH(p.velikost)}</td>
-      <td style="padding:8px;border-bottom:1px solid #eee">${p.pocet} ks</td>
+      <td style="${STYL_TD}">${p.nazev ? escH(p.nazev) : ('produkt #' + p.produkt_id)} - vel. ${escH(p.velikost)}</td>
+      <td style="${STYL_TD}">${p.pocet} ks</td>
     </tr>
   `).join('');
   // B3.3: čas přijetí a přesně uložený text prohlášení (vratky_zadosti) - jen pokud jsou k dispozici
@@ -460,27 +458,19 @@ async function odeslat_potvrzeni_vratky(zadost) {
   await odeslatEmail({
     to: zadost.email,
     subject: `Přijali jsme vaši žádost o vrácení – objednávka #${cisloZobrazit}`,
-    html: `
-      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-        <h1 style="color:#FF6B35">Žádost o vrácení přijata</h1>
-        <p>Ahoj${zadost.jmeno ? ' ' + escH(zadost.jmeno) : ''},</p>
-        <p>potvrzujeme, že jsme přijali vaši žádost o vrácení zboží / odstoupení od smlouvy k objednávce <strong>#${escH(cisloZobrazit)}</strong>. Ozveme se vám co nejdřív s dalším postupem.</p>
-        ${prijato ? `<p><strong>Datum a čas přijetí:</strong> ${escH(prijato)}</p>` : ''}
-        <h3>Položky k vrácení</h3>
-        <table style="width:100%;border-collapse:collapse">
-          <thead><tr style="background:#f5f5f5"><th style="padding:8px;text-align:left">Produkt</th><th style="padding:8px;text-align:left">Počet</th></tr></thead>
+    html: obalitBrandovanyEmail({ nadpis: 'Žádost o vrácení přijata', obsahHtml: `
+        <p style="${STYL_ODSTAVEC}">Ahoj${zadost.jmeno ? ' ' + escH(zadost.jmeno) : ''},</p>
+        <p style="${STYL_ODSTAVEC}">potvrzujeme, že jsme přijali vaši žádost o vrácení zboží / odstoupení od smlouvy k objednávce <strong>#${escH(cisloZobrazit)}</strong>. Ozveme se vám co nejdřív s dalším postupem.</p>
+        ${prijato ? `<p style="${STYL_ODSTAVEC}"><strong>Datum a čas přijetí:</strong> ${escH(prijato)}</p>` : ''}
+        <h3 style="${STYL_PODNADPIS}">Položky k vrácení</h3>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
+          <thead><tr><th style="${STYL_TH}">Produkt</th><th style="${STYL_TH}">Počet</th></tr></thead>
           <tbody>${polozky_html}</tbody>
         </table>
-        ${zadost.duvod ? `<p style="margin-top:12px"><strong>Uvedený důvod:</strong> ${escH(zadost.duvod)}</p>` : ''}
-        ${prohlaseni ? `<h3>Text vašeho prohlášení</h3>
-        <div style="white-space:pre-line;background:#f5f5f5;border-radius:6px;padding:12px">${escH(prohlaseni)}</div>` : ''}
-        <p style="margin-top:16px">Zboží prosím zašlete na adresu prodejny (Holešovská 752, 768 24 Hulín). Odpovídáte pouze za snížení hodnoty zboží, které vzniklo v důsledku nakládání s tímto zbožím jinak, než je nutné k obeznámení se s povahou, vlastnostmi a funkčností zboží.</p>
-        <hr>
-        <p style="color:#666;font-size:13px">
-          Dětské krůčky | 773 517 733 | info@detskekrucky.cz
-        </p>
-      </div>
-    `
+        ${zadost.duvod ? `<p style="${STYL_ODSTAVEC}"><strong>Uvedený důvod:</strong> ${escH(zadost.duvod)}</p>` : ''}
+        ${prohlaseni ? `<h3 style="${STYL_PODNADPIS}">Text vašeho prohlášení</h3>
+        <div style="white-space:pre-line;background:${BARVA_POZADI_BOX};border:1px solid ${BARVA_RAMECEK};border-radius:8px;padding:12px;margin-bottom:16px;font-size:14px">${escH(prohlaseni)}</div>` : ''}
+        <p style="margin:0;font-size:14px">Zboží prosím zašlete na adresu prodejny (Holešovská 752, 768 24 Hulín). Odpovídáte pouze za snížení hodnoty zboží, které vzniklo v důsledku nakládání s tímto zbožím jinak, než je nutné k obeznámení se s povahou, vlastnostmi a funkčností zboží.</p>` })
   });
   console.log('Potvrzeni zadosti o vratku odeslano na:', zadost.email);
 }
@@ -491,8 +481,8 @@ async function odeslat_upozorneni_vratky(zadost) {
   const cisloZobrazit = zadost.cislo || zadost.objednavka_id;
   const polozky_html = zadost.polozky.map(p => `
     <tr>
-      <td style="padding:8px;border-bottom:1px solid #eee">${p.nazev ? escH(p.nazev) : ('produkt #' + p.produkt_id)} - vel. ${escH(p.velikost)}</td>
-      <td style="padding:8px;border-bottom:1px solid #eee">${p.pocet} ks</td>
+      <td style="${STYL_TD}">${p.nazev ? escH(p.nazev) : ('produkt #' + p.produkt_id)} - vel. ${escH(p.velikost)}</td>
+      <td style="${STYL_TD}">${p.pocet} ks</td>
     </tr>
   `).join('');
 
@@ -528,23 +518,15 @@ async function odeslat_potvrzeni_poradna(zadost) {
   await odeslatEmail({
     to: zadost.email,
     subject: 'Přijali jsme váš dotaz na velikost – Dětské krůčky',
-    html: `
-      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-        <h1 style="color:#FF6B35">Děkujeme za dotaz! 👣</h1>
-        <p>Ahoj,</p>
-        <p>přijali jsme váš dotaz z poradny velikostí a brzy se vám ozveme s doporučením.</p>
-        <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin-top:12px">
-          ${zadost.vek_dite ? `<p style="margin:0 0 6px 0"><strong>Věk dítěte:</strong> ${escH(zadost.vek_dite)}</p>` : ''}
-          ${zadost.delka_mm ? `<p style="margin:0 0 6px 0"><strong>Naměřená délka nožičky:</strong> ${escH(zadost.delka_mm)} mm</p>` : ''}
-          ${zadost.sirka_mm ? `<p style="margin:0 0 6px 0"><strong>Naměřená šířka nožičky:</strong> ${escH(zadost.sirka_mm)} mm</p>` : ''}
-          ${zadost.poznamka ? `<p style="margin:0"><strong>Poznámka:</strong> ${escH(zadost.poznamka)}</p>` : ''}
-        </div>
-        <hr>
-        <p style="color:#666;font-size:13px">
-          Dětské krůčky | 773 517 733 | info@detskekrucky.cz
-        </p>
-      </div>
-    `
+    html: obalitBrandovanyEmail({ nadpis: 'Děkujeme za dotaz! 👣', obsahHtml: `
+        <p style="${STYL_ODSTAVEC}">Ahoj,</p>
+        <p style="${STYL_ODSTAVEC}">přijali jsme váš dotaz z poradny velikostí a brzy se vám ozveme s doporučením.</p>
+        <div style="${STYL_BOX}">
+          ${zadost.vek_dite ? `<p style="margin:0 0 6px 0;font-size:14px"><strong>Věk dítěte:</strong> ${escH(zadost.vek_dite)}</p>` : ''}
+          ${zadost.delka_mm ? `<p style="margin:0 0 6px 0;font-size:14px"><strong>Naměřená délka nožičky:</strong> ${escH(zadost.delka_mm)} mm</p>` : ''}
+          ${zadost.sirka_mm ? `<p style="margin:0 0 6px 0;font-size:14px"><strong>Naměřená šířka nožičky:</strong> ${escH(zadost.sirka_mm)} mm</p>` : ''}
+          ${zadost.poznamka ? `<p style="margin:0;font-size:14px"><strong>Poznámka:</strong> ${escH(zadost.poznamka)}</p>` : ''}
+        </div>` })
   });
   console.log('Potvrzeni dotazu na poradnu odeslano na:', zadost.email);
 }
@@ -643,15 +625,9 @@ async function odeslat_test(komu) {
   await odeslatEmail({
     to: komu,
     subject: 'Zkušební e-mail z webu Dětské krůčky',
-    html: `
-      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-        <h2 style="color:#7A816C">✅ Odesílání e-mailů funguje!</h2>
-        <p>Toto je zkušební e-mail z administrace Dětských krůčků.</p>
-        <p>Pokud jsi ho dostala, server je správně nastavený a umí odesílat e-maily.</p>
-        <hr>
-        <p style="color:#666;font-size:13px">Dětské krůčky | www.detskekrucky.cz</p>
-      </div>
-    `
+    html: obalitBrandovanyEmail({ nadpis: '✅ Odesílání e-mailů funguje!', obsahHtml: `
+        <p style="${STYL_ODSTAVEC}">Toto je zkušební e-mail z administrace Dětských krůčků.</p>
+        <p style="margin:0;font-size:14px">Pokud jsi ho dostala, server je správně nastavený a umí odesílat e-maily.</p>` })
   });
 }
 
