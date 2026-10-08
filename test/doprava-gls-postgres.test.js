@@ -105,6 +105,43 @@ test('PostgreSQL: migrace, nastavení dopravy, objednávka GLS do výdejního m�
     await najitHandler(router, 'get', '/')({}, res);
     assert.equal(res.body.find(o => o.id === nova.id).vydejni_misto_nazev, 'Elpe s.r.o.');
 
+    // Zásilkovna bez API klíče: jako dřív, bez výdejního místa
+    const objednavkaZas = (ip, extra = {}) => ({ ip, body: { jmeno: 'Petr Malý', email: 'petr@example.com', telefon: '777 000 111', ulice: 'Dlouhá 2', mesto: 'Zlín', psc: '760 01',
+      doprava: 'zasilkovna', platba: 'prevod', polozky: [{ produkt_id: 1, velikost: 24, pocet: 1 }], ...extra } });
+    const puvodniKlic = process.env.ZASILKOVNA_API_KLIC;
+    delete process.env.ZASILKOVNA_API_KLIC;
+    try {
+      res = vytvoritRes();
+      await post(objednavkaZas('10.9.9.7'), res);
+      assert.equal(res.statusCode, 200, JSON.stringify(res.body));
+      const bezMista = (await pool.query('SELECT dopravce, vydejni_misto_id FROM objednavky WHERE id = $1', [res.body.objednavka_id])).rows[0];
+      assert.deepEqual(bezMista, { dopravce: 'zasilkovna', vydejni_misto_id: null });
+
+      // S API klíčem: e-shop dostane klíč a výdejní místo je povinné
+      process.env.ZASILKOVNA_API_KLIC = 'abcdef0123456789';
+      res = vytvoritRes();
+      await najitHandler(dopravaRouter, 'get', '/')({}, res);
+      assert.equal(res.body.zasilkovnaKlic, 'abcdef0123456789');
+      assert.equal(res.body.metody.find(m => m.kod === 'zasilkovna').vydejniMisto, 'zasilkovna');
+      res = vytvoritRes();
+      await post(objednavkaZas('10.9.9.6'), res);
+      assert.equal(res.statusCode, 400);
+      res = vytvoritRes();
+      await post(objednavkaZas('10.9.9.5', { vydejni_misto_zasilkovna: { id: '12345', nazev: 'Zlín, Kvítková 1 <b>', ulice: 'Kvítková 1', mesto: 'Zlín', psc: '76001', stat: 'cz', typ: 'internal', zlo: 'x' } }), res);
+      assert.equal(res.statusCode, 200, JSON.stringify(res.body));
+      const sMistem = (await pool.query('SELECT dopravce, vydejni_misto_id, vydejni_misto_nazev, vydejni_misto_mesto, vydejni_misto_stat FROM objednavky WHERE id = $1', [res.body.objednavka_id])).rows[0];
+      assert.deepEqual(sMistem, { dopravce: 'zasilkovna', vydejni_misto_id: '12345', vydejni_misto_nazev: 'Zlín, Kvítková 1 b', vydejni_misto_mesto: 'Zlín', vydejni_misto_stat: 'CZ' });
+      // GLS ID místo Zásilkovny ani místo jiného dopravce neprojde
+      res = vytvoritRes();
+      await post(objednavkaZas('10.9.9.4', { vydejni_misto_id: '12345' }), res);
+      assert.equal(res.statusCode, 400);
+      res = vytvoritRes();
+      await post(objednavkaZas('10.9.9.3', { vydejni_misto_zasilkovna: { id: '999', nazev: 'Cizí', mesto: 'Wien', stat: 'at', typ: 'internal' } }), res);
+      assert.equal(res.statusCode, 400);
+    } finally {
+      if (puvodniKlic === undefined) delete process.env.ZASILKOVNA_API_KLIC; else process.env.ZASILKOVNA_API_KLIC = puvodniKlic;
+    }
+
     // Převod objednávky na zásilku a uložení do tabulky zasilky (bez volání API)
     const data = gls.sestavitZasilku(nova);
     assert.deepEqual(data.sluzby, [{ kod: 'PSD', vydejniMistoId: '39301-ELPESRO' }]);

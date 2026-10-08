@@ -25,10 +25,10 @@ const konstanta = nazev => ESHOP_HTML.match(new RegExp(`const ${nazev} = [^;]+;`
 const sandbox = {};
 vm.createContext(sandbox);
 vm.runInContext([
-  ...['DOPRAVA_VYCHOZI', 'DOPRAVA_NAZVY', 'PLATBA_NAZVY', 'UCET_IBAN', 'CHYBA_BEZ_VYDEJNIHO_MISTA'].map(konstanta),
-  'var nastaveniDopravy = DOPRAVA_VYCHOZI; var glsVydejniMisto = null;',
+  ...['DOPRAVA_VYCHOZI', 'DOPRAVA_NAZVY', 'PLATBA_NAZVY', 'UCET_IBAN', 'CHYBA_BEZ_VYDEJNIHO_MISTA', 'CHYBA_BEZ_MISTA_ZASILKOVNY'].map(konstanta),
+  'var nastaveniDopravy = DOPRAVA_VYCHOZI; var glsVydejniMisto = null; var zasVydejniMisto = null;',
   ...['vypocitatDopravu', 'escHtml', 'escAttr', 'spocitatObjednavku', 'souhrnObjednavkyHtml', 'qrPlatbaUrl', 'potvrzeniObjednavkyHtml', 'shrnutiUdajuHtml',
-    'jeVydejniMistoGls', 'chybaVydejnihoMista', 'adresaVydejnihoMista', 'platneNastaveniDopravy'].map(vytahnout)
+    'jeVydejniMistoGls', 'jeVydejniMistoZasilkovny', 'chybaVydejnihoMista', 'vybraneVydejniMisto', 'adresaVydejnihoMista', 'platneNastaveniDopravy'].map(vytahnout)
 ].join('\n'), sandbox);
 const zavolat = (fn, ...args) => {
   const v = vm.runInContext(`${fn}(...${JSON.stringify(args)})`, sandbox);
@@ -103,7 +103,7 @@ test('potvrzení: platba na prodejně bez platebních údajů, s informací o pl
 });
 
 // --- Doprava z nastavení a výdejní místo GLS (2026-10) ---
-const nastavitDopravu = d => vm.runInContext(`nastaveniDopravy = ${JSON.stringify(d)}; glsVydejniMisto = null;`, sandbox);
+const nastavitDopravu = d => vm.runInContext(`nastaveniDopravy = ${JSON.stringify(d)}; glsVydejniMisto = null; zasVydejniMisto = null;`, sandbox);
 const SE_GLS = {
   zdarmaOd: 2000,
   metody: [
@@ -145,6 +145,32 @@ test('výdejní místo GLS: bez vybraného místa přesná chybová hláška, u 
   assert.equal(zavolat('chybaVydejnihoMista', 'zasilkovna'), null);
   vm.runInContext(`glsVydejniMisto = { id: '39301-ELPESRO', nazev: 'Elpe', ulice: 'Myslotínská 2449', mesto: 'Pelhřimov', psc: '39301' };`, sandbox);
   assert.equal(zavolat('chybaVydejnihoMista', 'gls_vydejni_misto'), null);
+});
+
+test('výdejní místo Zásilkovny: povinné jen s mapou (klíč ze serveru), jinak Zásilkovna jako dřív', () => {
+  nastavitDopravu(SE_GLS);
+  assert.equal(zavolat('chybaVydejnihoMista', 'zasilkovna'), null);
+  const sMapou = { ...SE_GLS, zasilkovnaKlic: 'abcdef0123456789', metody: SE_GLS.metody.map(m => m.kod === 'zasilkovna' ? { ...m, vydejniMisto: 'zasilkovna' } : m) };
+  nastavitDopravu(sMapou);
+  assert.equal(zavolat('platneNastaveniDopravy', sMapou), true);
+  assert.equal(zavolat('chybaVydejnihoMista', 'zasilkovna'), 'Pro doručení Zásilkovnou nejprve vyberte výdejní místo.');
+  assert.equal(zavolat('chybaVydejnihoMista', 'gls_vydejni_misto'), 'Pro doručení do výdejního místa GLS nejprve vyberte výdejní místo.');
+  vm.runInContext(`zasVydejniMisto = { id: '12345', nazev: 'Zlín, Kvítková 1', ulice: 'Kvítková 1', mesto: 'Zlín', psc: '76001' };`, sandbox);
+  assert.equal(zavolat('chybaVydejnihoMista', 'zasilkovna'), null);
+  assert.equal(zavolat('vybraneVydejniMisto', 'zasilkovna').id, '12345');
+  assert.equal(zavolat('vybraneVydejniMisto', 'ceska_posta'), null);
+  // bez klíče (např. špatné nastavení) se mapa nevyžaduje
+  nastavitDopravu({ ...sMapou, zasilkovnaKlic: null });
+  assert.equal(zavolat('chybaVydejnihoMista', 'zasilkovna'), null);
+  assert.equal(zavolat('platneNastaveniDopravy', { ...sMapou, zasilkovnaKlic: 5 }), false);
+});
+
+test('widget Zásilkovny: knihovna z widget.packeta.com, místo jen jako text, jen ČR a místa Zásilkovny', () => {
+  assert.match(ESHOP_HTML, /const ZASILKOVNA_KNIHOVNA = 'https:\/\/widget\.packeta\.com\/v6\/www\/js\/library\.js';/);
+  const prevzit = vytahnout('prevzitMistoZasilkovny');
+  assert.match(prevzit, /misto\.stat !== 'cz'/);
+  assert.match(prevzit, /misto\.typ !== 'internal'/);
+  assert.doesNotMatch(vytahnout('vykreslitVydejniMistoZasilkovny'), /innerHTML/);
 });
 
 test('shrnutí: výdejní místo GLS místo doručovací adresy, adresa zákazníka zvlášť; vše escapované', () => {

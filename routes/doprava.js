@@ -5,6 +5,7 @@ const vyzadovatAdmina = require('../middleware/adminAuth');
 const { nacistNastaveniDopravy, overitNastaveniDopravy, verejneNastaveni, METODY, PORADI } = require('../lib/doprava');
 const { overitVydejniMisto } = require('../lib/glsVydejniMista');
 const gls = require('../lib/gls');
+const zasilkovna = require('../lib/zasilkovna');
 
 // Nabízené způsoby dopravy a ceny pro e-shop (jen zapnuté a s cenou)
 router.get('/', async (req, res) => {
@@ -32,7 +33,8 @@ router.get('/admin', vyzadovatAdmina, async (req, res) => {
   res.json({
     nastaveni,
     metody: PORADI.map(kod => ({ kod, nazev: METODY[kod].nazev, vzdyZdarma: !!METODY[kod].vzdyZdarma })),
-    glsApi: gls.stav()
+    glsApi: gls.stav(),
+    zasilkovna: zasilkovna.stav()
   });
 });
 

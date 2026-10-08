@@ -1101,6 +1101,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
             <tr><td style="padding:8px;font-weight:600">Doprava zdarma od (Kč)</td><td><input id="doprava-zdarma-od" class="form-input" type="number" min="0" step="1" placeholder="prázdné = nikdy zdarma"></td></tr>
             <tr><td style="padding:8px;font-weight:600">Příplatek za dobírku (Kč)<br><small style="font-weight:400;color:var(--text-light)">Připraveno pro ceník GLS, dobírka na e-shopu zatím není.</small></td><td><input id="doprava-dobirka" class="form-input" type="number" min="0" step="1" placeholder="nevyplněno"></td></tr>
           </table>
+          <div id="zasilkovnaStav" class="info-box" style="margin-top:12px;font-size:0.85rem"></div>
           <div id="glsApiStav" class="info-box" style="margin-top:12px;font-size:0.85rem"></div>
           <button class="btn btn-primary" style="margin-top:16px" onclick="ulozitDopravu()">💾 Uložit dopravu</button>
           <div id="doprava-msg" style="margin-top:12px;font-weight:600"></div>
@@ -2400,7 +2401,7 @@ function vydejniMistoAdresa(d) {
 function vydejniMistoDetailHtml(d) {
   let html = '';
   if (d.vydejni_misto_id) {
-    html += `<div class="info-box">📍 <strong>Výdejní místo${d.dopravce==='gls'?' GLS':''}:</strong> ${escH(d.vydejni_misto_nazev)||'—'}<br>
+    html += `<div class="info-box">📍 <strong>Výdejní místo${d.dopravce==='gls'?' GLS':d.dopravce==='zasilkovna'?' Zásilkovny':''}:</strong> ${escH(d.vydejni_misto_nazev)||'—'}<br>
       ${escH(vydejniMistoAdresa(d))||''}<br>
       ID místa: <code>${escH(d.vydejni_misto_id)}</code>
       <button type="button" class="btn btn-outline btn-sm" data-id="${escAttr(d.vydejni_misto_id)}" onclick="kopirovatIdMista(this)">📋 Kopírovat ID</button></div>`;
@@ -3542,6 +3543,10 @@ async function loadDopravu() {
       }).join('')}</tbody></table>`;
     document.getElementById('doprava-zdarma-od').value = d.nastaveni.zdarmaOd == null ? '' : d.nastaveni.zdarmaOd;
     document.getElementById('doprava-dobirka').value = d.nastaveni.priplatky.dobirka == null ? '' : d.nastaveni.priplatky.dobirka;
+    const z = d.zasilkovna || {};
+    document.getElementById('zasilkovnaStav').textContent = z.mapa
+      ? 'Zásilkovna: zákazník si v e-shopu vybírá výdejní místo na mapě Zásilkovny. Zásilky se zatím podávají ručně v klientské sekci Zásilkovny (ID místa je u objednávky).'
+      : 'Zásilkovna: mapa výdejních míst není zapnutá – ' + (z.problem || 'chybí API klíč.') + ' Zásilkovna se nabízí bez výběru místa.';
     const g = d.glsApi;
     document.getElementById('glsApiStav').textContent = g.nakonfigurovano
       ? 'GLS API: přístupové údaje jsou na serveru nastavené, napojení ale zatím není aktivní. Zásilky GLS se zakládají ručně v MyGLS.'

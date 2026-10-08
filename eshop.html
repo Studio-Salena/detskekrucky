@@ -1217,6 +1217,11 @@ body:has(.katalog-filtry.open) #back-to-top{display:none}
         <button type="button" class="vydejni-misto-btn" id="glsVybratBtn" onclick="otevritMapuGls()">Vybrat výdejní místo GLS</button>
         <div class="vydejni-misto-chyba" id="glsMistoChyba" role="alert" hidden></div>
       </div>
+      <div class="vydejni-misto" id="zasVydejniMistoBox" hidden>
+        <div class="vydejni-misto-vybrane" id="zasVybraneMisto" aria-live="polite" hidden></div>
+        <button type="button" class="vydejni-misto-btn" id="zasVybratBtn" onclick="otevritMapuZasilkovny()">Vybrat výdejní místo Zásilkovny</button>
+        <div class="vydejni-misto-chyba" id="zasMistoChyba" role="alert" hidden></div>
+      </div>
       <div class="vyzkouseni-info" id="vyzkouseniInfo" style="display:none">
         &#128094; Při osobním odběru si boty rovnou vyzkoušíte přímo na prodejně: <strong>Holešovská 752, Hulín 768 24</strong>. Ozveme se, jakmile bude objednávka připravená k vyzvednutí.
       </div>
@@ -3071,6 +3076,7 @@ function vykreslitVolbyDopravy() {
 
 function platneNastaveniDopravy(d) {
   return !!(d && (d.zdarmaOd === null || Number.isInteger(d.zdarmaOd)) && Array.isArray(d.metody) && d.metody.length > 0
+    && (d.zasilkovnaKlic === undefined || d.zasilkovnaKlic === null || typeof d.zasilkovnaKlic === 'string')
     && d.metody.every(m => m && typeof m.kod === 'string' && typeof m.nazev === 'string' && Number.isInteger(m.cena)));
 }
 async function nacistNastaveniDopravy() {
@@ -3102,7 +3108,19 @@ function jeVydejniMistoGls(doprava) {
   return !!(m && m.vydejniMisto === 'gls');
 }
 function chybaVydejnihoMista(doprava) {
-  return jeVydejniMistoGls(doprava) && !glsVydejniMisto ? CHYBA_BEZ_VYDEJNIHO_MISTA : null;
+  if (jeVydejniMistoGls(doprava) && !glsVydejniMisto) return CHYBA_BEZ_VYDEJNIHO_MISTA;
+  if (jeVydejniMistoZasilkovny(doprava) && !zasVydejniMisto) return CHYBA_BEZ_MISTA_ZASILKOVNY;
+  return null;
+}
+// Vybrané výdejní místo podle zvolené dopravy (GLS / Zásilkovna), jinak null
+function vybraneVydejniMisto(doprava) {
+  if (jeVydejniMistoGls(doprava)) return glsVydejniMisto;
+  if (jeVydejniMistoZasilkovny(doprava)) return zasVydejniMisto;
+  return null;
+}
+function zobrazitChybuMista(doprava, text) {
+  if (jeVydejniMistoZasilkovny(doprava)) zobrazitChybuMistaZasilkovny(text);
+  else zobrazitChybuMistaGls(text);
 }
 function adresaVydejnihoMista(m) {
   return [m.ulice, [m.psc, m.mesto].filter(Boolean).join(' ')].filter(Boolean).join(', ');
@@ -3185,6 +3203,96 @@ window.addEventListener('message', zpracovatZpravuMapyGls);
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && !document.getElementById('glsMapa').hidden) { e.stopPropagation(); zavritMapuGls(); }
 }, true);
+
+// --- Výdejní místo Zásilkovny ---
+// Oficiální widget Zásilkovny (knihovna z widget.packeta.com se načte až při
+// otevření mapy). Klíč posílá server v /api/doprava - je veřejný, slouží jen
+// k zobrazení mapy. Údaje místa server znovu zkontroluje; vše se vypisuje jako text.
+const ZASILKOVNA_KNIHOVNA = 'https://widget.packeta.com/v6/www/js/library.js';
+const CHYBA_BEZ_MISTA_ZASILKOVNY = 'Pro doručení Zásilkovnou nejprve vyberte výdejní místo.';
+let zasVydejniMisto = null;
+let zasKnihovna = null;
+let zasMapaOtevrena = false;
+
+function jeVydejniMistoZasilkovny(doprava) {
+  const m = nastaveniDopravy.metody.find(m => m.kod === doprava);
+  return !!(m && m.vydejniMisto === 'zasilkovna' && nastaveniDopravy.zasilkovnaKlic);
+}
+function zobrazitChybuMistaZasilkovny(text) {
+  const el = document.getElementById('zasMistoChyba');
+  el.textContent = text || '';
+  el.hidden = !text;
+}
+function vykreslitVydejniMistoZasilkovny() {
+  const box = document.getElementById('zasVybraneMisto');
+  box.textContent = '';
+  if (zasVydejniMisto) {
+    const nazev = document.createElement('strong');
+    nazev.textContent = zasVydejniMisto.nazev;
+    const adresa = document.createElement('span');
+    adresa.textContent = adresaVydejnihoMista(zasVydejniMisto);
+    box.append(nazev, adresa);
+  }
+  box.hidden = !zasVydejniMisto;
+  document.getElementById('zasVybratBtn').textContent = zasVydejniMisto ? 'Změnit výdejní místo' : 'Vybrat výdejní místo Zásilkovny';
+}
+function nacistKnihovnuZasilkovny() {
+  if (window.Packeta && window.Packeta.Widget) return Promise.resolve();
+  if (!zasKnihovna) {
+    zasKnihovna = new Promise((hotovo, chyba) => {
+      const s = document.createElement('script');
+      s.src = ZASILKOVNA_KNIHOVNA;
+      s.async = true;
+      s.onload = () => (window.Packeta && window.Packeta.Widget ? hotovo() : chyba(new Error('widget')));
+      s.onerror = () => chyba(new Error('widget'));
+      document.head.appendChild(s);
+    }).catch(e => { zasKnihovna = null; throw e; });
+  }
+  return zasKnihovna;
+}
+const textMista = (v, max) => (typeof v === 'string' || typeof v === 'number') ? String(v).trim().slice(0, max) : '';
+function prevzitMistoZasilkovny(bod) {
+  zasMapaOtevrena = false;
+  if (!bod) return; // zákazník mapu zavřel bez výběru
+  const misto = {
+    // place = název provozovny (např. Trafika), name = „Město, Ulice“ jako záloha
+    id: textMista(bod.id, 10), nazev: textMista(bod.place, 150) || textMista(bod.name, 150), ulice: textMista(bod.street, 120),
+    mesto: textMista(bod.city, 80), psc: textMista(bod.zip, 10), stat: textMista(bod.country, 2).toLowerCase(),
+    typ: textMista(bod.pickupPointType, 20).toLowerCase() || 'internal', box: !!bod.group
+  };
+  if (!/^\d{1,10}$/.test(misto.id) || misto.stat !== 'cz' || misto.typ !== 'internal' || !misto.nazev || !misto.mesto) {
+    zobrazitChybuMistaZasilkovny('Toto výdejní místo nejde použít. Vyberte prosím jiné výdejní místo Zásilkovny v Česku.');
+    return;
+  }
+  zasVydejniMisto = misto;
+  zobrazitChybuMistaZasilkovny('');
+  document.getElementById('checkoutMsg').innerHTML = '';
+  vykreslitVydejniMistoZasilkovny();
+}
+async function otevritMapuZasilkovny() {
+  zobrazitChybuMistaZasilkovny('');
+  const btn = document.getElementById('zasVybratBtn');
+  btn.disabled = true;
+  try {
+    await nacistKnihovnuZasilkovny();
+    zasMapaOtevrena = true;
+    window.Packeta.Widget.pick(nastaveniDopravy.zasilkovnaKlic, prevzitMistoZasilkovny, { language: 'cs', country: 'cz', appIdentity: 'detskekrucky-eshop' });
+  } catch (e) {
+    zasMapaOtevrena = false;
+    zobrazitChybuMistaZasilkovny('Mapu výdejních míst Zásilkovny se nepodařilo otevřít. Zkontrolujte připojení a zkuste to znovu.');
+  } finally {
+    btn.disabled = false;
+  }
+}
+// Esc zavře jen mapu Zásilkovny, ne celou objednávku
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && zasMapaOtevrena) {
+    e.stopPropagation();
+    zasMapaOtevrena = false;
+    if (window.Packeta && window.Packeta.Widget) window.Packeta.Widget.close();
+  }
+}, true);
+
 function zvolenaPlatba() {
   const el = document.querySelector('#chPlatba input:checked');
   return el ? el.value : 'prevod';
@@ -3218,6 +3326,7 @@ function vykreslitSouhrnObjednavky() {
   document.getElementById('orderSummary').innerHTML = souhrnObjednavkyHtml(kosik, uplatnenyPoukaz, doprava);
   document.getElementById('vyzkouseniInfo').style.display = doprava === 'osobni_odber' ? 'block' : 'none';
   document.getElementById('glsVydejniMistoBox').hidden = !jeVydejniMistoGls(doprava);
+  document.getElementById('zasVydejniMistoBox').hidden = !jeVydejniMistoZasilkovny(doprava);
   // Platit na prodejně jde jen při osobním odběru - jinak zpět na převod
   const naProdejne = document.getElementById('volbaNaProdejne');
   naProdejne.hidden = doprava !== 'osobni_odber';
@@ -3255,7 +3364,7 @@ function udajeZFormulare() {
     jmeno: hodnota('chJmeno'), email: hodnota('chEmail'), telefon: hodnota('chTelefon'),
     ulice: hodnota('chUlice'), mesto: hodnota('chMesto'), psc: hodnota('chPsc'),
     doprava: zvolenaDoprava(), platba: zvolenaPlatba(),
-    vydejniMisto: jeVydejniMistoGls(zvolenaDoprava()) ? glsVydejniMisto : null
+    vydejniMisto: vybraneVydejniMisto(zvolenaDoprava())
   };
 }
 
@@ -3264,7 +3373,7 @@ function prejitNaKrok(krok) {
     const chybaMista = chybaVydejnihoMista(zvolenaDoprava());
     if (chybaMista) {
       if (krok === 3) prejitNaKrok(1);
-      zobrazitChybuMistaGls(chybaMista);
+      zobrazitChybuMista(zvolenaDoprava(), chybaMista);
       zobrazitChybuCheckoutu(`<div class="msg msg-error">${escHtml(chybaMista)}</div>`);
       return;
     }
@@ -3373,7 +3482,7 @@ async function odeslatObjednavku() {
   const chybaMista = chybaVydejnihoMista(doprava);
   if (chybaMista) {
     prejitNaKrok(1);
-    zobrazitChybuMistaGls(chybaMista);
+    zobrazitChybuMista(doprava, chybaMista);
     zobrazitChybuCheckoutu(`<div class="msg msg-error">${escHtml(chybaMista)}</div>`);
     return;
   }
@@ -3403,7 +3512,8 @@ async function odeslatObjednavku() {
         doprava, platba, celkem: total, webova_stranka,
         polozky: kosik.map(i => ({produkt_id: i.id, velikost: i.velikost, pocet: i.pocet, cena: i.cena})),
         poukaz_kod: uplatnenyPoukaz ? uplatnenyPoukaz.kod : null,
-        vydejni_misto_id: jeVydejniMistoGls(doprava) && glsVydejniMisto ? glsVydejniMisto.id : undefined
+        vydejni_misto_id: jeVydejniMistoGls(doprava) && glsVydejniMisto ? glsVydejniMisto.id : undefined,
+        vydejni_misto_zasilkovna: jeVydejniMistoZasilkovny(doprava) && zasVydejniMisto ? zasVydejniMisto : undefined
       })
     });
     const data = await res.json();

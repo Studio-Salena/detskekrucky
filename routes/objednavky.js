@@ -10,8 +10,9 @@ const { pripravit } = require('../lib/startServeru');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const { jeZablokovana, zaznamenatObjednavku } = require('../middleware/objednavkyLimiter');
 const { migrovatSnapshoty, SQL_UDAJE_OBJEDNAVKY } = require('../lib/objednavkySnapshot');
-const { METODY, nacistNastaveniDopravy, jeDostupna, vypocitatCenuDopravy } = require('../lib/doprava');
+const { METODY, nacistNastaveniDopravy, jeDostupna, vypocitatCenuDopravy, typVydejnihoMista } = require('../lib/doprava');
 const { overitVydejniMisto } = require('../lib/glsVydejniMista');
+const zasilkovna = require('../lib/zasilkovna');
 
 // Idempotentní migrace - vazba objednávky na uplatněný dárkový poukaz, číslo
 // objednávky a číslo/datum vystavení faktury.
@@ -182,7 +183,7 @@ function validovatObjednavku({ jmeno, email, telefon, ulice, mesto, psc }) {
 
 // Vytvorit novou objednavku
 router.post('/', async (req, res) => {
-  const { jmeno, email, telefon, ulice, mesto, psc, doprava, platba, poznamka, polozky, webova_stranka, poukaz_kod, vydejni_misto_id } = req.body;
+  const { jmeno, email, telefon, ulice, mesto, psc, doprava, platba, poznamka, polozky, webova_stranka, poukaz_kod, vydejni_misto_id, vydejni_misto_zasilkovna } = req.body;
 
   // Honeypot - skryté pole, které reální uživatelé nikdy nevyplní, ale
   // formulářoví boti ano. Předstíráme úspěch, aby se bot nenaučil rozpoznat blokaci.
@@ -253,7 +254,14 @@ router.post('/', async (req, res) => {
   // seznamu dopravce; název a adresa se ukládají z ověřených dat. U ostatních
   // způsobů dopravy se případně poslané výdejní místo ignoruje.
   let vydejniMisto = null;
-  if (METODY[doprava].vydejniMisto === 'gls') {
+  const druhMista = typVydejnihoMista(doprava);
+  if (druhMista === 'zasilkovna') {
+    // Zásilkovna: údaje z jejího widgetu, přísně zkontrolované (viz lib/zasilkovna.js)
+    vydejniMisto = zasilkovna.overitVydejniMisto(vydejni_misto_zasilkovna);
+    if (!vydejniMisto) {
+      return res.status(400).json({ chyba: 'Pro doručení Zásilkovnou nejprve vyberte výdejní místo.' });
+    }
+  } else if (druhMista === 'gls') {
     if (!vydejni_misto_id || typeof vydejni_misto_id !== 'string') {
       return res.status(400).json({ chyba: 'Pro doručení do výdejního místa GLS nejprve vyberte výdejní místo.' });
     }
