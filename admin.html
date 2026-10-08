@@ -1025,6 +1025,20 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           </div>
         </div>
         <div id="poukazDlazdiceMsg" style="margin-top:8px"></div>
+        <h4 style="margin:22px 0 6px">🎄 Vánoční poukaz v dlaždici</h4>
+        <p style="color:var(--text-light);font-size:0.85rem;margin-bottom:10px">Ukáže se jako druhá karta, mírně natočená před klasickým poukazem. Po Vánocích ji tady vypnete.</p>
+        <label style="display:flex;gap:8px;align-items:center;margin-bottom:12px;font-weight:600"><input type="checkbox" id="poukazVanocniZobrazit" onchange="ulozitVanocniPoukaz()" style="width:18px;height:18px"> Ukazovat vánoční poukaz</label>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div style="width:120px;height:80px;border:1px dashed var(--tan-light);border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fff">
+            <img id="poukazVanocniNahled" src="vanocni-poukaz-dlazdice.jpg" alt="" style="max-width:100%;max-height:100%;object-fit:contain">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <input type="file" id="poukazVanocniSoubor" accept="image/*" style="display:none" onchange="nahratObrazekPoukazDlazdice('vanocni')">
+            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('poukazVanocniSoubor').click()">📷 Nahrát vlastní vánoční obrázek</button>
+            <button type="button" class="btn btn-red btn-sm" id="poukazVanocniOdebrat" style="display:none" onclick="odebratObrazekPoukazDlazdice('vanocni')">↩️ Vrátit výchozí vánoční poukaz</button>
+          </div>
+        </div>
+        <div id="poukazVanocniMsg" style="margin-top:8px"></div>
       </div>
     <p class="presun-pozn">Vydávání a správa poukazů je v E-shop → Dárkové poukazy, přehled čísel v Reporty → Poukazy.</p>
   </div>
@@ -5970,39 +5984,60 @@ function zobrazitPoukazDlazdici(url) {
   document.getElementById('poukazDlazdiceNahled').src = url || 'poukaz-dlazdice.png';
   document.getElementById('poukazDlazdiceOdebrat').style.display = url ? 'inline-flex' : 'none';
 }
+function zobrazitVanocniPoukaz(v) {
+  document.getElementById('poukazVanocniNahled').src = v.obrazek_url || 'vanocni-poukaz-dlazdice.jpg';
+  document.getElementById('poukazVanocniOdebrat').style.display = v.obrazek_url ? 'inline-flex' : 'none';
+  if (typeof v.zobrazit === 'boolean') document.getElementById('poukazVanocniZobrazit').checked = v.zobrazit;
+}
 
 async function nacistPoukazDlazdici() {
   try {
     const data = await fetch(API+'/poukaz-dlazdice').then(r=>r.json());
     zobrazitPoukazDlazdici(data.obrazek_url);
+    zobrazitVanocniPoukaz(data.vanocni || { zobrazit: true, obrazek_url: null });
   } catch(e) { /* necháme výchozí náhled */ }
 }
 
-async function nahratObrazekPoukazDlazdice() {
-  const input = document.getElementById('poukazDlazdiceSoubor');
+async function ulozitVanocniPoukaz() {
+  const box = document.getElementById('poukazVanocniZobrazit');
+  const msg = document.getElementById('poukazVanocniMsg');
+  try {
+    const res = await adminFetch(API+'/poukaz-dlazdice/vanocni', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ zobrazit: box.checked }) });
+    if (!res.ok) throw new Error();
+    msg.innerHTML = `<div class="success-msg">✅ ${box.checked ? 'Vánoční poukaz se v dlaždici ukazuje' : 'Vánoční poukaz je z dlaždice skrytý'}</div>`;
+  } catch(e) {
+    box.checked = !box.checked;
+    msg.innerHTML = '<div class="error-msg">Uložení se nepodařilo</div>';
+  }
+}
+
+async function nahratObrazekPoukazDlazdice(typ) {
+  const vanocni = typ === 'vanocni';
+  const input = document.getElementById(vanocni ? 'poukazVanocniSoubor' : 'poukazDlazdiceSoubor');
   const soubor = input.files[0];
   input.value = '';
   if (!soubor) return;
-  const msg = document.getElementById('poukazDlazdiceMsg');
+  const msg = document.getElementById(vanocni ? 'poukazVanocniMsg' : 'poukazDlazdiceMsg');
   msg.innerHTML = '<div class="loading" style="padding:4px">Nahrávám...</div>';
   const fd = new FormData();
   fd.append('obrazek', soubor);
   try {
-    const res = await adminFetch(API+'/poukaz-dlazdice/obrazek', { method:'POST', body: fd });
+    const res = await adminFetch(API+'/poukaz-dlazdice/obrazek' + (vanocni ? '?typ=vanocni' : ''), { method:'POST', body: fd });
     const data = await res.json();
     if (!res.ok) { msg.innerHTML = `<div class="error-msg">${escH(data.chyba||'Nahrání selhalo')}</div>`; return; }
-    zobrazitPoukazDlazdici(data.obrazek_url);
+    if (vanocni) zobrazitVanocniPoukaz({ obrazek_url: data.obrazek_url }); else zobrazitPoukazDlazdici(data.obrazek_url);
     msg.innerHTML = '<div class="success-msg">✅ Obrázek nahrán</div>';
   } catch(e) { msg.innerHTML = '<div class="error-msg">Chyba spojení</div>'; }
 }
 
-async function odebratObrazekPoukazDlazdice() {
-  if (!confirm('Odebrat vlastní obrázek? Dlaždice pak ukáže výchozí náhled poukazu.')) return;
-  const msg = document.getElementById('poukazDlazdiceMsg');
+async function odebratObrazekPoukazDlazdice(typ) {
+  const vanocni = typ === 'vanocni';
+  if (!confirm(vanocni ? 'Odebrat vlastní vánoční obrázek? Dlaždice pak ukáže výchozí vánoční poukaz.' : 'Odebrat vlastní obrázek? Dlaždice pak ukáže výchozí náhled poukazu.')) return;
+  const msg = document.getElementById(vanocni ? 'poukazVanocniMsg' : 'poukazDlazdiceMsg');
   try {
-    const res = await adminFetch(API+'/poukaz-dlazdice/obrazek', { method:'DELETE' });
+    const res = await adminFetch(API+'/poukaz-dlazdice/obrazek' + (vanocni ? '?typ=vanocni' : ''), { method:'DELETE' });
     if (!res.ok) { msg.innerHTML = '<div class="error-msg">Odebrání selhalo</div>'; return; }
-    zobrazitPoukazDlazdici(null);
+    if (vanocni) zobrazitVanocniPoukaz({ obrazek_url: null }); else zobrazitPoukazDlazdici(null);
     msg.innerHTML = '<div class="success-msg">✅ Vrácen výchozí náhled</div>';
   } catch(e) { msg.innerHTML = '<div class="error-msg">Chyba spojení</div>'; }
 }

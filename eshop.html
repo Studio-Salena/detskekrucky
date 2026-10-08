@@ -84,6 +84,13 @@ nav{display:flex;align-items:center;gap:8px}
 /* Obrázek místo emoji - stejná výška jako emoji, ať dlaždice nevyčnívá */
 .kategorie-dlazdice img.ikona{width:64px;height:44px;object-fit:contain;margin:0 auto 8px;border-radius:8px}
 .kategorie-dlazdice img.ikona.poukaz{width:100%;max-width:110px;border-radius:3px}
+/* Dva poukazy přes sebe: klasický vzadu, vánoční natočený vpředu */
+.poukaz-karty{position:relative;display:block;width:122px;height:68px;margin:0 auto 8px;flex-shrink:0}
+.poukaz-karta{position:absolute;border-radius:3px;box-shadow:0 2px 7px rgba(61,43,31,0.22);background:#fff;transition:transform 0.2s}
+.poukaz-karta.zadni{width:100px;height:43px;object-fit:cover;left:0;top:2px;transform:rotate(-7deg)}
+.poukaz-karta.predni{width:78px;height:52px;object-fit:cover;right:0;bottom:0;transform:rotate(6deg)}
+.kategorie-dlazdice:hover .poukaz-karta.zadni{transform:rotate(-10deg) translateX(-3px)}
+.kategorie-dlazdice:hover .poukaz-karta.predni{transform:rotate(9deg) translateX(3px)}
 .kategorie-dlazdice .nazev{font-weight:700;font-size:0.85rem;color:var(--brown)}
 .kategorie-skeleton{background:linear-gradient(90deg,#f0ebe3 25%,#f8f5f0 50%,#f0ebe3 75%);background-size:200% 100%;animation:kategorieSkeletonPulz 1.4s ease-in-out infinite;border-radius:18px;height:112px}
 @keyframes kategorieSkeletonPulz{0%{background-position:200% 0}100%{background-position:-200% 0}}
@@ -1522,14 +1529,27 @@ const KATEGORIE_CACHE_KEY = 'kategorie_cache_v1';
 const KATEGORIE_CACHE_TTL_MS = 3 * 60 * 1000;
 
 // Dlaždice "Dárkové poukazy": výchozí náhled poukazu, nebo obrázek nahraný
-// v adminu (Kategorie -> Dlaždice Dárkové poukazy).
+// v adminu (Web -> Dárkové poukazy). Vánoční poukaz jako druhá karta vpředu
+// (majitelka 2026-10-08, varianta A), v adminu jde vypnout.
 let poukazDlazdiceUrl = 'poukaz-dlazdice.png';
+let poukazVanocni = { zobrazit: true, url: 'vanocni-poukaz-dlazdice.jpg' };
 fetch(API + '/poukaz-dlazdice').then(r => r.json()).then(data => {
-  if (!jeBezpecnaHttpUrl(data.obrazek_url)) return;
-  poukazDlazdiceUrl = data.obrazek_url;
-  const img = document.getElementById('poukazDlazdiceObrazek');
-  if (img) img.src = poukazDlazdiceUrl;
+  if (jeBezpecnaHttpUrl(data.obrazek_url)) poukazDlazdiceUrl = data.obrazek_url;
+  const v = data.vanocni || {};
+  poukazVanocni = { zobrazit: v.zobrazit !== false, url: jeBezpecnaHttpUrl(v.obrazek_url) ? v.obrazek_url : 'vanocni-poukaz-dlazdice.jpg' };
+  const karty = document.getElementById('poukazKarty');
+  if (karty) karty.outerHTML = poukazKartyHtml();
 }).catch(() => {});
+
+function poukazKartyHtml() {
+  if (!poukazVanocni.zobrazit) {
+    return `<span id="poukazKarty"><img class="ikona poukaz" id="poukazDlazdiceObrazek" src="${escAttr(poukazDlazdiceUrl)}" alt="" loading="lazy" decoding="async"></span>`;
+  }
+  return `<span class="poukaz-karty" id="poukazKarty">
+        <img class="poukaz-karta zadni" id="poukazDlazdiceObrazek" src="${escAttr(poukazDlazdiceUrl)}" alt="" loading="lazy" decoding="async">
+        <img class="poukaz-karta predni" src="${escAttr(poukazVanocni.url)}" alt="" loading="lazy" decoding="async">
+      </span>`;
+}
 
 function vykreslitKategorieGrid(seznam) {
   const aktivni = katalogStav ? katalogStav.kategorie : '';
@@ -1543,7 +1563,7 @@ function vykreslitKategorieGrid(seznam) {
   // Dárkový poukaz není kategorie produktů, jen rychlá zkratka na konci rozcestníku.
   const poukazDlazdice = `
     <div class="kategorie-dlazdice" onclick="openModal('modalPoukazy')">
-      <img class="ikona poukaz" id="poukazDlazdiceObrazek" src="${escAttr(poukazDlazdiceUrl)}" alt="" loading="lazy" decoding="async">
+      ${poukazKartyHtml()}
       <div class="nazev">Dárkové poukazy</div>
     </div>`;
   document.getElementById('kategorieGrid').innerHTML = dlazdice + poukazDlazdice;

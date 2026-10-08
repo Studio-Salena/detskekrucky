@@ -47,7 +47,7 @@ test('bez nahraného obrázku vrací null (e-shop použije výchozí náhled)', 
   const handler = najitHandler(nacist({ nastaveni: {} }, vytvoritCloudinaryMock()), 'get', '/');
   const res = vytvoritRes();
   await handler({}, res);
-  assert.deepEqual(res.body, { obrazek_url: null });
+  assert.deepEqual(res.body, { obrazek_url: null, vanocni: { zobrazit: true, obrazek_url: null } });
 });
 
 test('nahrání uloží obrázek a starý smaže z úložiště', async () => {
@@ -85,4 +85,32 @@ test('odebrání vrátí dlaždici k výchozímu náhledu a smaže soubor', asyn
 
   assert.deepEqual(stav.nastaveni.poukazDlazdice, {});
   assert.deepEqual(cloudinary.volaniDelete, ['klic-a']);
+});
+
+test('vánoční poukaz: vlastní obrázek a vypínač bez vlivu na klasický poukaz', async () => {
+  const stav = { nastaveni: { poukazDlazdice: { url: 'https://res.cloudinary.com/x/klasik.jpg', key: 'klasik' } } };
+  const cloudinary = vytvoritCloudinaryMock();
+  const router = nacist(stav, cloudinary);
+  let res = vytvoritRes();
+  await najitHandler(router, 'post', '/obrazek')({ query: { typ: 'vanocni' }, file: { buffer: JPEG, size: JPEG.length, mimetype: 'image/jpeg' } }, res);
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(stav.nastaveni.poukazDlazdice, { url: 'https://res.cloudinary.com/x/klasik.jpg', key: 'klasik',
+    vanocni: { url: 'https://res.cloudinary.com/demo/image/upload/v1/detskekrucky/poukaz-dlazdice/novy.jpg', key: 'detskekrucky/poukaz-dlazdice/novy' } });
+  assert.deepEqual(cloudinary.volaniDelete, [], 'klasický obrázek zůstal');
+  res = vytvoritRes();
+  await najitHandler(router, 'put', '/vanocni')({ body: { zobrazit: false } }, res);
+  assert.equal(res.statusCode, 200);
+  res = vytvoritRes();
+  await najitHandler(router, 'put', '/vanocni')({ body: { zobrazit: 'ne' } }, res);
+  assert.equal(res.statusCode, 400);
+  res = vytvoritRes();
+  await najitHandler(router, 'get', '/')({}, res);
+  assert.equal(res.body.vanocni.zobrazit, false);
+  assert.match(res.body.vanocni.obrazek_url, /novy\.jpg\?w=400$/);
+  assert.match(res.body.obrazek_url, /klasik\.jpg/);
+  // odebrání vánočního obrázku nechá klasický i vypínač
+  res = vytvoritRes();
+  await najitHandler(router, 'delete', '/obrazek')({ query: { typ: 'vanocni' } }, res);
+  assert.deepEqual(stav.nastaveni.poukazDlazdice, { url: 'https://res.cloudinary.com/x/klasik.jpg', key: 'klasik', vanocni: { zobrazit: false } });
+  assert.deepEqual(cloudinary.volaniDelete, ['detskekrucky/poukaz-dlazdice/novy']);
 });
