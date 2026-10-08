@@ -131,6 +131,61 @@ test('PostgreSQL: migrace, nastavení dopravy, objednávka GLS do výdejního m�
       assert.equal(res.statusCode, 200, JSON.stringify(res.body));
       const sMistem = (await pool.query('SELECT dopravce, vydejni_misto_id, vydejni_misto_nazev, vydejni_misto_mesto, vydejni_misto_stat FROM objednavky WHERE id = $1', [res.body.objednavka_id])).rows[0];
       assert.deepEqual(sMistem, { dopravce: 'zasilkovna', vydejni_misto_id: '12345', vydejni_misto_nazev: 'Zlín, Kvítková 1 b', vydejni_misto_mesto: 'Zlín', vydejni_misto_stat: 'CZ' });
+      // Krok 2: podání do Zásilkovny a štítek (API Zásilkovny podstrčené, nic se neodesílá)
+      const zasObjId = res.body.objednavka_id;
+      const podat = najitHandler(router, 'post', '/:id/zasilkovna');
+      res = vytvoritRes();
+      await podat({ params: { id: String(zasObjId) }, body: { vaha: 1 } }, res);
+      assert.equal(res.statusCode, 503, 'bez API hesla je podání vypnuté');
+      const puvodniFetch = global.fetch, puvodniHeslo = process.env.ZASILKOVNA_API_HESLO;
+      const volani = [];
+      process.env.ZASILKOVNA_API_HESLO = 'x'.repeat(32);
+      global.fetch = async (url, o) => {
+        volani.push(o.body);
+        if (o.body.startsWith('<createPacket>')) return { text: async () => '<response><status>ok</status><result><id>987654</id><barcode>Z987654</barcode><barcodeText>Z 987 654</barcodeText></result></response>' };
+        return { text: async () => `<response><status>ok</status><result>${Buffer.from('%PDF-1.4 stitek').toString('base64')}</result></response>` };
+      };
+      try {
+        res = vytvoritRes();
+        await podat({ params: { id: String(zasObjId) }, body: { vaha: 0.7 } }, res);
+        assert.equal(res.statusCode, 200, JSON.stringify(res.body));
+        assert.equal(res.body.zasilka.cislo_zasilky, 'Z987654');
+        assert.match(volani[0], /<number>\d{6}<\/number><name>Petr<\/name><surname>Malý<\/surname>.*<addressId>12345<\/addressId><cod>0<\/cod><value>579<\/value><weight>0.7<\/weight>/);
+        const ulozena = (await pool.query("SELECT stav, cislo_zasilky, tracking_url, data FROM zasilky WHERE objednavka_id = $1", [zasObjId])).rows;
+        assert.equal(ulozena.length, 1);
+        assert.deepEqual({ ...ulozena[0], data: ulozena[0].data.packetId }, { stav: 'podana', cislo_zasilky: 'Z987654', tracking_url: 'https://tracking.packeta.com/cs/?id=Z987654', data: '987654' });
+        assert.ok(!JSON.stringify(ulozena).includes('x'.repeat(32)), 'heslo se neukládá');
+        // podruhé už ne
+        res = vytvoritRes();
+        await podat({ params: { id: String(zasObjId) }, body: { vaha: 1 } }, res);
+        assert.equal(res.statusCode, 409);
+        assert.equal(volani.length, 1);
+        // detail objednávky ukazuje zásilku
+        res = vytvoritRes();
+        await najitHandler(router, 'get', '/:id')({ params: { id: String(zasObjId) } }, res);
+        assert.equal(res.body.zasilky[0].cislo_zasilky, 'Z987654');
+        assert.equal(res.body.zasilky[0].data, undefined);
+        assert.equal(res.body.zasilkovna_podani, true);
+        // štítek
+        res = vytvoritRes();
+        const hlavicky = {};
+        res.setHeader = (k, v) => { hlavicky[k] = v; };
+        res.send = b => { res.body = b; return res; };
+        await najitHandler(router, 'get', '/:id/zasilkovna/stitek')({ params: { id: String(zasObjId) }, query: {} }, res);
+        assert.equal(res.statusCode, 200, String(res.body && res.body.chyba));
+        assert.equal(hlavicky['Content-Type'], 'application/pdf');
+        assert.equal(res.body.toString(), '%PDF-1.4 stitek');
+        assert.match(volani[1], /<packetId>987654<\/packetId><format>A6 on A4<\/format>/);
+        // GLS objednávku do Zásilkovny podat nejde
+        res = vytvoritRes();
+        await podat({ params: { id: String(nova.id) }, body: { vaha: 1 } }, res);
+        assert.equal(res.statusCode, 400);
+        assert.equal(volani.length, 2);
+      } finally {
+        global.fetch = puvodniFetch;
+        if (puvodniHeslo === undefined) delete process.env.ZASILKOVNA_API_HESLO; else process.env.ZASILKOVNA_API_HESLO = puvodniHeslo;
+      }
+
       // GLS ID místo Zásilkovny ani místo jiného dopravce neprojde
       res = vytvoritRes();
       await post(objednavkaZas('10.9.9.4', { vydejni_misto_id: '12345' }), res);
@@ -153,7 +208,7 @@ test('PostgreSQL: migrace, nastavení dopravy, objednávka GLS do výdejního m�
     // smazání objednávky smaže i její zásilky
     await pool.query('DELETE FROM objednavky_polozky WHERE objednavka_id = $1', [nova.id]);
     await pool.query('DELETE FROM objednavky WHERE id = $1', [nova.id]);
-    assert.equal((await pool.query('SELECT COUNT(*)::int AS n FROM zasilky')).rows[0].n, 0);
+    assert.equal((await pool.query('SELECT COUNT(*)::int AS n FROM zasilky WHERE objednavka_id = $1', [nova.id])).rows[0].n, 0);
   } finally {
     console.log = puvodniLog;
     await pool.end();

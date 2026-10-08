@@ -6,6 +6,7 @@ const { nacistNastaveniDopravy, overitNastaveniDopravy, verejneNastaveni, METODY
 const { overitVydejniMisto } = require('../lib/glsVydejniMista');
 const gls = require('../lib/gls');
 const zasilkovna = require('../lib/zasilkovna');
+const zasilkovnaApi = require('../lib/zasilkovnaApi');
 
 // Nabízené způsoby dopravy a ceny pro e-shop (jen zapnuté a s cenou)
 router.get('/', async (req, res) => {
@@ -34,7 +35,8 @@ router.get('/admin', vyzadovatAdmina, async (req, res) => {
     nastaveni,
     metody: PORADI.map(kod => ({ kod, nazev: METODY[kod].nazev, vzdyZdarma: !!METODY[kod].vzdyZdarma })),
     glsApi: gls.stav(),
-    zasilkovna: zasilkovna.stav()
+    zasilkovna: zasilkovna.stav(),
+    zasilkovnaApi: zasilkovnaApi.stav()
   });
 });
 

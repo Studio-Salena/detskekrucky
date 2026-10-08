@@ -13,6 +13,7 @@ const { migrovatSnapshoty, SQL_UDAJE_OBJEDNAVKY } = require('../lib/objednavkySn
 const { METODY, nacistNastaveniDopravy, jeDostupna, vypocitatCenuDopravy, typVydejnihoMista } = require('../lib/doprava');
 const { overitVydejniMisto } = require('../lib/glsVydejniMista');
 const zasilkovna = require('../lib/zasilkovna');
+const zasilkovnaApi = require('../lib/zasilkovnaApi');
 
 // Idempotentní migrace - vazba objednávky na uplatněný dárkový poukaz, číslo
 // objednávky a číslo/datum vystavení faktury.
@@ -509,9 +510,78 @@ router.get('/:id', vyzadovatAdmina, async (req, res) => {
       WHERE op.objednavka_id = $1
     `, [req.params.id]);
 
-    res.json({ ...objednavka.rows[0], polozky: polozky.rows });
+    // Zásilky u dopravců (bez interních dat odpovědi API)
+    let zasilky = [];
+    try {
+      zasilky = (await pool.query(
+        'SELECT id, dopravce, stav, cislo_zasilky, tracking_url, vytvoreno FROM zasilky WHERE objednavka_id = $1 ORDER BY id', [req.params.id]
+      )).rows;
+    } catch (e) { /* tabulka zásilek není povinná pro zobrazení objednávky */ }
+
+    res.json({ ...objednavka.rows[0], polozky: polozky.rows, zasilky, zasilkovna_podani: zasilkovnaApi.stav().podani });
   } catch (err) {
     res.status(500).json({ chyba: err.message });
+  }
+});
+
+// Podání zásilky do Zásilkovny (jen admin, jen na výslovný klik). Objednávka se
+// po dobu volání zamkne, aby dvojklik nezaložil dvě zásilky.
+router.post('/:id/zasilkovna', vyzadovatAdmina, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ chyba: 'Neplatná objednávka.' });
+  if (!zasilkovnaApi.stav().podani) return res.status(503).json({ chyba: 'Podání do Zásilkovny není zapnuté (chybí API heslo na Renderu).' });
+  const vaha = Number(req.body && req.body.vaha);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const o = (await client.query(`SELECT o.*, ${SQL_UDAJE_OBJEDNAVKY} FROM objednavky o JOIN zakaznici z ON o.zakaznik_id = z.id WHERE o.id = $1 FOR UPDATE OF o`, [id])).rows[0];
+    if (!o) { await client.query('ROLLBACK'); return res.status(404).json({ chyba: 'Objednávka nenalezena.' }); }
+    if (o.stav === 'zrusena') { await client.query('ROLLBACK'); return res.status(400).json({ chyba: 'Zrušenou objednávku nejde podat.' }); }
+    const existujici = (await client.query("SELECT cislo_zasilky FROM zasilky WHERE objednavka_id = $1 AND dopravce = 'zasilkovna' AND cislo_zasilky IS NOT NULL", [id])).rows[0];
+    if (existujici) { await client.query('ROLLBACK'); return res.status(409).json({ chyba: `Zásilka už je podaná (${existujici.cislo_zasilky}).` }); }
+    let atributy;
+    try { atributy = zasilkovnaApi.sestavitZasilku(o, vaha); }
+    catch (e) { await client.query('ROLLBACK'); return res.status(400).json({ chyba: e.message }); }
+    let vysledek;
+    try {
+      vysledek = await zasilkovnaApi.vytvoritZasilku(o, vaha);
+    } catch (e) {
+      await client.query('ROLLBACK');
+      console.error('Podání do Zásilkovny selhalo (objednávka ' + id + '):', e.message);
+      return res.status(502).json({ chyba: 'Zásilkovna zásilku nepřijala: ' + e.message });
+    }
+    const zasilka = (await client.query(
+      `INSERT INTO zasilky (objednavka_id, dopravce, stav, cislo_zasilky, tracking_url, data)
+       VALUES ($1, 'zasilkovna', 'podana', $2, $3, $4) RETURNING id, dopravce, stav, cislo_zasilky, tracking_url, vytvoreno`,
+      [id, vysledek.barcode, zasilkovnaApi.sledovaniUrl(vysledek.barcode),
+        JSON.stringify({ packetId: vysledek.packetId, barcodeText: vysledek.barcodeText, vaha: atributy.weight, hodnota: atributy.value, vydejniMisto: atributy.addressId })]
+    )).rows[0];
+    await client.query('COMMIT');
+    res.json({ zprava: 'Zásilka podána do Zásilkovny', zasilka });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Podání do Zásilkovny - chyba:', err.message);
+    res.status(500).json({ chyba: 'Zásilku se nepodařilo uložit.' });
+  } finally {
+    client.release();
+  }
+});
+
+// Štítek PDF k podané zásilce Zásilkovny
+router.get('/:id/zasilkovna/stitek', vyzadovatAdmina, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ chyba: 'Neplatná objednávka.' });
+  const format = zasilkovnaApi.FORMATY_STITKU.includes(req.query.format) ? req.query.format : 'A6 on A4';
+  try {
+    const z = (await pool.query("SELECT data, cislo_zasilky FROM zasilky WHERE objednavka_id = $1 AND dopravce = 'zasilkovna' AND cislo_zasilky IS NOT NULL ORDER BY id DESC LIMIT 1", [id])).rows[0];
+    if (!z || !z.data || !z.data.packetId) return res.status(404).json({ chyba: 'Objednávka nemá podanou zásilku Zásilkovny.' });
+    const pdf = await zasilkovnaApi.stitekPdf(z.data.packetId, format);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="stitek-${String(z.cislo_zasilky).replace(/[^A-Za-z0-9]/g, '')}.pdf"`);
+    res.send(pdf);
+  } catch (e) {
+    console.error('Štítek Zásilkovny selhal (objednávka ' + id + '):', e.message);
+    res.status(502).json({ chyba: 'Štítek se nepodařilo stáhnout: ' + e.message });
   }
 });
 
