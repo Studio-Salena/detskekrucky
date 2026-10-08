@@ -31,6 +31,7 @@ const produktyImagesRoutes = require('./routes/produktyImages');
 const poukazDlazdiceRoutes = require('./routes/poukazDlazdice');
 const modelyRoutes = require('./routes/modely');
 const dopravaRoutes = require('./routes/doprava');
+const nakupniFakturyRoutes = require('./routes/nakupniFaktury');
 const vyzadovatAdmina = require('./middleware/adminAuth');
 const { jeZablokovana, zaznamenatNeuspech, resetovat } = require('./middleware/loginLimiter');
 const { jeZablokovana: jeZablokovanaRezervace, zaznamenatRezervaci } = require('./middleware/rezervaceLimiter');
@@ -98,6 +99,7 @@ app.use('/api/poukazy', poukazyRoutes);
 app.use('/api/poukaz-dlazdice', poukazDlazdiceRoutes);
 app.use('/api/modely', modelyRoutes);
 app.use('/api/doprava', dopravaRoutes);
+app.use('/api/nakupni-faktury', nakupniFakturyRoutes);
 
 // Texty webu (výchozí hodnoty, přepíšou se z DB)
 let textyWebu = {

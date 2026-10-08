@@ -144,6 +144,7 @@ body{background:var(--app-bg)}
 .page .card{background:#fff;border:1px solid var(--app-line);border-radius:16px;padding:20px}
 .form-input{width:100%;max-width:360px;padding:9px 12px;border:2px solid var(--tan-light);border-radius:10px;font-family:'Nunito',sans-serif;font-size:0.88rem;background:#fff;color:var(--text);outline:none}
 .form-input:focus{border-color:var(--sb-bg)}
+#nfKurzPole[hidden]{display:none}
 .presun-pozn{background:#fff;border:1px dashed var(--app-line);border-radius:12px;padding:12px 16px;font-size:0.85rem;color:var(--text-light);margin-top:20px}
 
 /* MODELY PODLE ZNAČKY */
@@ -512,6 +513,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           <button type="button" class="nav-item" onclick="showPage('prodejna',this,'prehledy')"><span class="nav-text">Prodeje</span></button>
           <button type="button" class="nav-item" onclick="showPage('reporty',this,'poukazy')"><span class="nav-text">Poukazy</span></button>
           <button type="button" class="nav-item" onclick="showPage('ucetnictvi',this)"><span class="nav-text">Účetnictví</span></button>
+          <button type="button" class="nav-item" onclick="showPage('ucetnictvi',this,'faktury')"><span class="nav-text">Nákupní faktury</span></button>
         </div>
       </div>
 
@@ -900,16 +902,24 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     </div>
 
     <!-- ÚČETNICTVÍ -->
-    <div class="page" id="page-ucetnictvi">
+    <div class="page" id="page-ucetnictvi" data-vychozi-pohled="prehled">
       <div class="page-header">
         <div class="page-title">💰 Účetnictví</div>
-        <div class="table-actions">
+        <div class="table-actions" data-pohled="prehled">
           <button class="btn btn-csv no-print" onclick="exportCSV('ucetnictvi')">⬇ CSV pro účetní</button>
           <button class="btn btn-csv no-print" onclick="exportUcetnictviPDF()">📄 PDF pro účetní</button>
           <button class="btn btn-print no-print" onclick="window.print()">🖨️ Tisk</button>
           <button class="refresh-btn no-print" onclick="loadUcetnictvi()">↻</button>
         </div>
+        <div class="table-actions" data-pohled="faktury">
+          <button class="refresh-btn no-print" onclick="loadNakupniFaktury()" aria-label="Načíst znovu">↻</button>
+        </div>
       </div>
+      <div class="pohledy no-print" role="tablist" aria-label="Účetnictví">
+        <button type="button" role="tab" data-cil="prehled" onclick="prepnoutPohled('ucetnictvi','prehled')">Přehled</button>
+        <button type="button" role="tab" data-cil="faktury" onclick="prepnoutPohled('ucetnictvi','faktury')">Nákupní faktury</button>
+      </div>
+      <div data-pohled="prehled">
       <div class="stats-grid" style="grid-template-columns:repeat(6,1fr)">
         <div class="stat-card"><div class="stat-label">Tržby celkem</div><div class="stat-value" id="ucetTrzby">...</div></div>
         <div class="stat-card"><div class="stat-label">Průměrná objednávka</div><div class="stat-value" id="ucetPrumer">...</div></div>
@@ -945,6 +955,41 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           Sazba 60 % a strop 1 200 000 Kč platí pro volnou/vázanou živnost k roku 2026 – před podáním si aktuální hodnoty ověř
           (mění se čas od času), ideálně s daňovým poradcem.
         </div>
+      </div>
+      </div>
+
+      <!-- NÁKUPNÍ FAKTURY: evidence faktur za nakoupené zboží a jejich úhrad -->
+      <div data-pohled="faktury">
+        <div class="sklad-filtry" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+          <button class="btn btn-primary" onclick="otevritNakupniFakturu()">+ Přidat fakturu</button>
+          <input type="text" class="search-input" id="nfHledat" placeholder="🔍 Dodavatel nebo číslo faktury" aria-label="Hledat v nákupních fakturách" style="width:240px;max-width:100%" oninput="vykreslitNakupniFaktury()">
+          <select id="nfRok" class="search-input" style="width:auto" aria-label="Rok" onchange="vykreslitNakupniFaktury()"><option value="">Všechny roky</option></select>
+          <select id="nfMesic" class="search-input" style="width:auto" aria-label="Měsíc" onchange="vykreslitNakupniFaktury()">
+            <option value="">Celý rok</option>
+            <option value="01">leden</option><option value="02">únor</option><option value="03">březen</option><option value="04">duben</option>
+            <option value="05">květen</option><option value="06">červen</option><option value="07">červenec</option><option value="08">srpen</option>
+            <option value="09">září</option><option value="10">říjen</option><option value="11">listopad</option><option value="12">prosinec</option>
+          </select>
+          <div class="filter-pills" id="nfStavFiltr" style="margin:0">
+            <span class="pill active" data-filtr="vse" onclick="filtrovatNakupniFaktury('vse')">Vše</span>
+            <span class="pill" data-filtr="nezaplacene" onclick="filtrovatNakupniFaktury('nezaplacene')">⏳ Nezaplacené</span>
+            <span class="pill" data-filtr="po_splatnosti" onclick="filtrovatNakupniFaktury('po_splatnosti')">⚠️ Po splatnosti</span>
+            <span class="pill" data-filtr="zaplacene" onclick="filtrovatNakupniFaktury('zaplacene')">✅ Zaplacené</span>
+          </div>
+          <button class="btn btn-csv btn-sm no-print" onclick="exportNakupniFakturyCSV()">⬇ CSV</button>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-label">Zaplaceno v období</div><div class="stat-value" id="nfZaplaceno">...</div><div class="stat-sub" id="nfZaplacenoSub">podle data úhrady</div></div>
+          <div class="stat-card"><div class="stat-label">Nezaplaceno</div><div class="stat-value stat-orange" id="nfNezaplaceno">...</div><div class="stat-sub" id="nfNezaplacenoSub"></div></div>
+          <div class="stat-card"><div class="stat-label">Po splatnosti</div><div class="stat-value stat-red" id="nfPoSplatnosti">...</div><div class="stat-sub" id="nfPoSplatnostiSub"></div></div>
+          <div class="stat-card"><div class="stat-label">DPH z faktur v období</div><div class="stat-value" id="nfDph">...</div><div class="stat-sub" id="nfDphSub">orientačně, podle data vystavení</div></div>
+        </div>
+        <div class="table-wrap">
+          <div class="table-header"><h3 id="nfPocet">Nákupní faktury</h3></div>
+          <div id="nfTabulka"><div class="loading">Načítám...</div></div>
+        </div>
+        <p class="report-pozn" style="margin-top:4px">Přehled zaplacených a nezaplacených faktur za nakoupené zboží. Částky v cizí měně se přepočítávají kurzem zadaným u faktury.
+          U nákupů z EU (přenesená daňová povinnost) a dovozu je DPH dopočítaná ze základu – je to orientační podklad, konečné vyčíslení DPH si ověřte s účetní.</p>
       </div>
     </div>
 
@@ -1210,6 +1255,60 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     <div id="detailModeluObsah"></div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modalDetailModelu')">Zavřít</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalNakupniFaktura">
+  <div class="modal" style="max-width:680px">
+    <h3 id="nfOknoNadpis">🧾 Nákupní faktura</h3>
+    <div id="nfMsg"></div>
+    <input type="hidden" id="nfId">
+    <div class="form-grid-2">
+      <div class="form-group"><label for="nfDodavatel">Dodavatel *</label><input type="text" id="nfDodavatel" list="nfDodavatele" maxlength="200" placeholder="např. Froddo d.o.o." oninput="navrhnoutZemiDodavatele()"></div>
+      <div class="form-group"><label for="nfZeme">Země dodavatele (kód)</label><input type="text" id="nfZeme" list="nfZemeSeznam" maxlength="2" placeholder="CZ" style="text-transform:uppercase" oninput="zmenaZemeFaktury()"></div>
+    </div>
+    <datalist id="nfDodavatele"></datalist>
+    <datalist id="nfZemeSeznam">
+      <option value="CZ">Česko</option><option value="SK">Slovensko</option><option value="PL">Polsko</option><option value="DE">Německo</option>
+      <option value="AT">Rakousko</option><option value="HR">Chorvatsko</option><option value="SI">Slovinsko</option><option value="HU">Maďarsko</option>
+      <option value="IT">Itálie</option><option value="ES">Španělsko</option><option value="PT">Portugalsko</option><option value="NL">Nizozemsko</option>
+      <option value="DK">Dánsko</option><option value="FR">Francie</option><option value="GB">Velká Británie (mimo EU)</option><option value="CN">Čína (mimo EU)</option><option value="US">USA (mimo EU)</option>
+    </datalist>
+    <div class="form-grid-3">
+      <div class="form-group"><label for="nfCislo">Číslo faktury *</label><input type="text" id="nfCislo" maxlength="100"></div>
+      <div class="form-group"><label for="nfVystaveno">Datum vystavení *</label><input type="date" id="nfVystaveno"></div>
+      <div class="form-group"><label for="nfSplatnost">Splatnost</label><input type="date" id="nfSplatnost"></div>
+    </div>
+    <div class="form-grid-3">
+      <div class="form-group"><label for="nfMena">Měna</label>
+        <select id="nfMena" onchange="prepocitatNakupniFakturu()">
+          <option value="CZK">CZK</option><option value="EUR">EUR</option><option value="USD">USD</option><option value="GBP">GBP</option><option value="PLN">PLN</option><option value="HUF">HUF</option><option value="CHF">CHF</option>
+        </select></div>
+      <div class="form-group"><label for="nfCastka">Částka celkem *</label><input type="number" id="nfCastka" min="0" step="0.01" oninput="prepocitatNakupniFakturu()"></div>
+      <div class="form-group" id="nfKurzPole"><label for="nfKurz">Kurz (Kč za 1 <span id="nfKurzMena">EUR</span>)</label><input type="number" id="nfKurz" min="0" step="0.001" oninput="prepocitatNakupniFakturu()">
+        <small><a href="https://www.cnb.cz/cs/financni-trhy/devizovy-trh/kurzy-devizoveho-trhu/kurzy-devizoveho-trhu/" target="_blank" rel="noopener">kurz ČNB</a></small></div>
+    </div>
+    <div class="form-grid-2">
+      <div class="form-group"><label for="nfRezim">Režim DPH</label>
+        <select id="nfRezim" onchange="nfRezimRucne = true; prepocitatNakupniFakturu()">
+          <option value="tuzemsko">Tuzemsko (částka je s DPH)</option>
+          <option value="eu_prenesena">EU – přenesená daňová povinnost</option>
+          <option value="dovoz">Dovoz mimo EU</option>
+          <option value="bez_dph">Bez DPH</option>
+        </select></div>
+      <div class="form-group"><label for="nfSazba">Sazba DPH</label>
+        <select id="nfSazba" onchange="prepocitatNakupniFakturu()"><option value="21">21 %</option><option value="12">12 %</option><option value="0">0 %</option></select></div>
+    </div>
+    <div class="info-box" id="nfVypocet" aria-live="polite"></div>
+    <div class="form-grid-2" style="align-items:end">
+      <div class="form-group"><label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="nfUhrazeno" onchange="document.getElementById('nfDatumUhrady').disabled = !this.checked; if (this.checked && !document.getElementById('nfDatumUhrady').value) document.getElementById('nfDatumUhrady').value = dnesniDatumIso();"> Uhrazeno</label></div>
+      <div class="form-group"><label for="nfDatumUhrady">Datum úhrady</label><input type="date" id="nfDatumUhrady" disabled></div>
+    </div>
+    <div class="form-group"><label for="nfPoznamka">Poznámka</label><input type="text" id="nfPoznamka" maxlength="1000" placeholder="např. sezóna jaro 2027, číslo objednávky u dodavatele"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modalNakupniFaktura')">Zrušit</button>
+      <button class="btn btn-primary" id="nfUlozitBtn" onclick="ulozitNakupniFakturu()">💾 Uložit fakturu</button>
     </div>
   </div>
 </div>
@@ -1948,7 +2047,7 @@ function showPage(name, el, kotva) {
   if (name==='zakaznici') loadZakaznici();
   if (name==='sklad') { loadSklad(); loadPohyby(); }
   if (name==='produkty') loadProdukty();
-  if (name==='ucetnictvi') loadUcetnictvi();
+  if (name==='ucetnictvi') { loadUcetnictvi(); loadNakupniFaktury(); }
   if (name==='kategorie') loadKategorie();
   if (name==='prodejna') { loadProdejna(); nacistSkladProProdejna(); }
   if (name==='nastaveni') loadNastaveni();
@@ -6474,6 +6573,243 @@ async function ulozitNastaveniKatalogu() {
   } catch (e) {
     msg.innerHTML = '<div class="error-msg">Uložení se nepodařilo.</div>';
   }
+}
+
+// NÁKUPNÍ FAKTURY (Účetnictví -> Nákupní faktury). Výpočet Kč a DPH dělá server
+// (lib/nakupniFaktury.js); tady jen náhled ve formuláři stejným vzorcem.
+let nakupniFaktury = [], nfStavFiltr = 'vse', nfRezimRucne = false;
+const NF_REZIMY = { tuzemsko: 'Tuzemsko', eu_prenesena: 'EU – přenesená', dovoz: 'Dovoz', bez_dph: 'Bez DPH' };
+const NF_EU = ['AT', 'BE', 'BG', 'CY', 'DE', 'DK', 'EE', 'ES', 'FI', 'FR', 'GR', 'HR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK'];
+const kcNf = n => Number(n).toLocaleString('cs-CZ', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' Kč';
+const datumCz = iso => iso ? new Date(iso + 'T00:00:00').toLocaleDateString('cs-CZ') : '—';
+
+async function loadNakupniFaktury() {
+  const el = document.getElementById('nfTabulka');
+  try {
+    const r = await adminFetch(API + '/nakupni-faktury');
+    const d = await r.json().catch(() => null);
+    if (!r.ok || !Array.isArray(d)) throw new Error((d && d.chyba) || 'Faktury se nepodařilo načíst.');
+    nakupniFaktury = d;
+    // roky do filtru (ponechá zvolený), dodavatelé do našeptávače
+    const sel = document.getElementById('nfRok');
+    const zvoleny = sel.value;
+    const roky = [...new Set(d.map(f => f.datum_vystaveni.slice(0, 4)))].sort().reverse();
+    sel.innerHTML = '<option value="">Všechny roky</option>' + roky.map(r => `<option value="${escAttr(r)}">${escH(r)}</option>`).join('');
+    sel.value = roky.includes(zvoleny) ? zvoleny : '';
+    const dodavatele = [...new Map(d.map(f => [normalizovat(f.dodavatel), f])).values()];
+    document.getElementById('nfDodavatele').innerHTML = dodavatele.map(f => `<option value="${escAttr(f.dodavatel)}"></option>`).join('');
+    vykreslitNakupniFaktury();
+  } catch (e) {
+    el.innerHTML = `<div class="error-msg">${escH(e.message)} Zkuste to znovu tlačítkem ↻.</div>`;
+  }
+}
+
+function filtrovatNakupniFaktury(f) {
+  nfStavFiltr = f;
+  vykreslitNakupniFaktury();
+}
+function poSplatnosti(f) {
+  return !f.datum_uhrady && f.datum_splatnosti && f.datum_splatnosti < dnesniDatumIso();
+}
+function vObdobi(datum, rok, mesic) {
+  if (!datum) return false;
+  return (!rok || datum.slice(0, 4) === rok) && (!mesic || datum.slice(5, 7) === mesic);
+}
+function nfFiltrovane() {
+  const q = normalizovat(document.getElementById('nfHledat').value.trim());
+  const rok = document.getElementById('nfRok').value, mesic = document.getElementById('nfMesic').value;
+  return nakupniFaktury.filter(f =>
+    (!q || normalizovat(`${f.dodavatel} ${f.cislo_faktury}`).includes(q)) &&
+    (!rok || vObdobi(f.datum_vystaveni, rok, mesic) || (f.datum_uhrady && vObdobi(f.datum_uhrady, rok, mesic))) &&
+    (nfStavFiltr === 'vse' || (nfStavFiltr === 'zaplacene' ? !!f.datum_uhrady : nfStavFiltr === 'nezaplacene' ? !f.datum_uhrady : poSplatnosti(f))));
+}
+
+function vykreslitNakupniFaktury() {
+  const el = document.getElementById('nfTabulka');
+  document.querySelectorAll('#nfStavFiltr .pill').forEach(p => p.classList.toggle('active', p.dataset.filtr === nfStavFiltr));
+  const rok = document.getElementById('nfRok').value, mesic = document.getElementById('nfMesic').value;
+  document.getElementById('nfMesic').disabled = !rok;
+  // Karty: zaplaceno a DPH za zvolené období, nezaplacené a po splatnosti vždy celkově
+  const zaplacene = nakupniFaktury.filter(f => f.datum_uhrady && (!rok || vObdobi(f.datum_uhrady, rok, mesic)));
+  const nezaplacene = nakupniFaktury.filter(f => !f.datum_uhrady);
+  const poSpl = nezaplacene.filter(poSplatnosti);
+  const sDph = nakupniFaktury.filter(f => !rok || vObdobi(f.datum_vystaveni, rok, mesic));
+  const soucet = (l, k) => l.reduce((s, f) => s + Number(f[k]), 0);
+  document.getElementById('nfZaplaceno').textContent = kcNf(soucet(zaplacene, 'castka_czk'));
+  document.getElementById('nfZaplacenoSub').textContent = `${pocetSlovy(zaplacene.length, ['faktura', 'faktury', 'faktur'])} · podle data úhrady`;
+  document.getElementById('nfNezaplaceno').textContent = kcNf(soucet(nezaplacene, 'castka_czk'));
+  document.getElementById('nfNezaplacenoSub').textContent = pocetSlovy(nezaplacene.length, ['faktura', 'faktury', 'faktur']);
+  document.getElementById('nfPoSplatnosti').textContent = poSpl.length;
+  document.getElementById('nfPoSplatnostiSub').textContent = poSpl.length ? kcNf(soucet(poSpl, 'castka_czk')) : 'vše v termínu';
+  document.getElementById('nfDph').textContent = kcNf(soucet(sDph, 'dph_czk'));
+
+  const list = nfFiltrovane();
+  document.getElementById('nfPocet').textContent = `Nákupní faktury (${list.length})`;
+  if (!nakupniFaktury.length) { el.innerHTML = '<div class="empty">Zatím žádné nákupní faktury. Přidejte první tlačítkem „+ Přidat fakturu“.</div>'; return; }
+  if (!list.length) { el.innerHTML = '<div class="empty">Žádná faktura neodpovídá filtru</div>'; return; }
+  const dnes = dnesniDatumIso();
+  el.innerHTML = `<table><thead><tr><th>Dodavatel</th><th>Číslo faktury</th><th>Vystaveno</th><th>Splatnost</th><th>Částka</th><th>DPH</th><th>Stav</th><th></th></tr></thead><tbody>
+    ${list.map(f => {
+      const i = nakupniFaktury.indexOf(f);
+      const dnyPo = poSplatnosti(f) ? Math.round((new Date(dnes) - new Date(f.datum_splatnosti)) / 864e5) : 0;
+      const stav = f.datum_uhrady ? `<span class="badge badge-doruceno">✅ Zaplaceno ${escH(datumCz(f.datum_uhrady))}</span>`
+        : dnyPo > 0 ? `<span class="badge badge-zruseno">⚠️ ${dnyPo} ${dnyPo === 1 ? 'den' : dnyPo <= 4 ? 'dny' : 'dní'} po splatnosti</span>`
+        : '<span class="badge badge-vyrizuje">⏳ Nezaplaceno</span>';
+      return `<tr>
+        <td><strong>${escH(f.dodavatel)}</strong> <small style="color:var(--text-light)">${escH(f.zeme)}</small>${f.poznamka ? `<div style="font-size:0.75rem;color:var(--text-light)">${escH(f.poznamka)}</div>` : ''}</td>
+        <td>${escH(f.cislo_faktury)}</td>
+        <td style="white-space:nowrap">${escH(datumCz(f.datum_vystaveni))}</td>
+        <td style="white-space:nowrap">${escH(datumCz(f.datum_splatnosti))}</td>
+        <td style="white-space:nowrap;text-align:right"><strong>${kcNf(f.castka_czk)}</strong>${f.mena !== 'CZK' ? `<div style="font-size:0.75rem;color:var(--text-light)">${Number(f.castka).toLocaleString('cs-CZ')} ${escH(f.mena)} × ${Number(f.kurz).toLocaleString('cs-CZ')}</div>` : ''}</td>
+        <td style="white-space:nowrap;font-size:0.82rem">${kcNf(f.dph_czk)}<div style="color:var(--text-light)">${escH(NF_REZIMY[f.rezim_dph] || f.rezim_dph)} · ${Number(f.sazba_dph)} %</div></td>
+        <td>${stav}</td>
+        <td style="white-space:nowrap">
+          ${f.datum_uhrady ? '' : `<button type="button" class="btn btn-green btn-sm" onclick="oznacitUhradu(${i})">✔ Uhrazeno</button>`}
+          <button type="button" class="btn btn-outline btn-sm" onclick="otevritNakupniFakturu(${i})" aria-label="Upravit fakturu">✏️</button>
+          <button type="button" class="btn btn-red btn-sm" onclick="smazatNakupniFakturu(${i})" aria-label="Smazat fakturu">🗑️</button>
+        </td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+// Datum zadané jako 7. 10. 2026 nebo 2026-10-07 -> 2026-10-07
+function datumNaIso(text) {
+  const t = String(text || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  const m = t.match(/^(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})$/);
+  return m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : null;
+}
+async function oznacitUhradu(i) {
+  const f = nakupniFaktury[i];
+  if (!f) return;
+  const zadano = prompt(`Datum úhrady faktury ${f.cislo_faktury} (${f.dodavatel}):`, new Date().toLocaleDateString('cs-CZ'));
+  if (zadano === null) return;
+  const datum = datumNaIso(zadano);
+  if (!datum) { alert('Zadejte datum ve tvaru 7. 10. 2026.'); return; }
+  try {
+    const r = await adminFetch(API + '/nakupni-faktury/' + f.id + '/uhrada', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ datum_uhrady: datum }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { alert('❌ ' + (d.chyba || 'Úhradu se nepodařilo uložit.')); return; }
+  } catch (e) { alert('❌ Úhradu se nepodařilo uložit.'); return; }
+  loadNakupniFaktury();
+}
+async function smazatNakupniFakturu(i) {
+  const f = nakupniFaktury[i];
+  if (!f || !confirm(`Opravdu smazat fakturu ${f.cislo_faktury} od ${f.dodavatel}?`)) return;
+  try {
+    const r = await adminFetch(API + '/nakupni-faktury/' + f.id, { method: 'DELETE' });
+    if (!r.ok) { alert('❌ Fakturu se nepodařilo smazat.'); return; }
+  } catch (e) { alert('❌ Fakturu se nepodařilo smazat.'); return; }
+  loadNakupniFaktury();
+}
+
+// ===== Formulář =====
+function otevritNakupniFakturu(i) {
+  const f = i === undefined ? null : nakupniFaktury[i];
+  const nastavit = (id, v) => { document.getElementById(id).value = v ?? ''; };
+  document.getElementById('nfMsg').innerHTML = '';
+  document.getElementById('nfOknoNadpis').textContent = f ? '🧾 Upravit nákupní fakturu' : '🧾 Nová nákupní faktura';
+  nastavit('nfId', f ? f.id : '');
+  nastavit('nfDodavatel', f ? f.dodavatel : '');
+  nastavit('nfZeme', f ? f.zeme : 'CZ');
+  nastavit('nfCislo', f ? f.cislo_faktury : '');
+  nastavit('nfVystaveno', f ? f.datum_vystaveni : dnesniDatumIso());
+  nastavit('nfSplatnost', f ? f.datum_splatnosti : '');
+  nastavit('nfMena', f ? f.mena : 'CZK');
+  nastavit('nfCastka', f ? f.castka : '');
+  nastavit('nfKurz', f && f.mena !== 'CZK' ? f.kurz : '');
+  nastavit('nfRezim', f ? f.rezim_dph : 'tuzemsko');
+  nastavit('nfSazba', f ? String(Number(f.sazba_dph)) : '21');
+  nastavit('nfPoznamka', f ? f.poznamka : '');
+  document.getElementById('nfUhrazeno').checked = !!(f && f.datum_uhrady);
+  nastavit('nfDatumUhrady', f ? f.datum_uhrady : '');
+  document.getElementById('nfDatumUhrady').disabled = !(f && f.datum_uhrady);
+  nfRezimRucne = !!f;
+  prepocitatNakupniFakturu();
+  openModal('modalNakupniFaktura');
+}
+// U známého dodavatele předvyplnit zemi, měnu a režim z jeho poslední faktury
+function navrhnoutZemiDodavatele() {
+  if (document.getElementById('nfId').value) return;
+  const q = normalizovat(document.getElementById('nfDodavatel').value.trim());
+  const posledni = nakupniFaktury.find(f => normalizovat(f.dodavatel) === q);
+  if (!posledni) return;
+  document.getElementById('nfZeme').value = posledni.zeme;
+  document.getElementById('nfMena').value = posledni.mena;
+  document.getElementById('nfRezim').value = posledni.rezim_dph;
+  document.getElementById('nfSazba').value = String(Number(posledni.sazba_dph));
+  nfRezimRucne = true;
+  prepocitatNakupniFakturu();
+}
+function zmenaZemeFaktury() {
+  const zeme = document.getElementById('nfZeme').value.trim().toUpperCase();
+  if (!nfRezimRucne && /^[A-Z]{2}$/.test(zeme)) {
+    document.getElementById('nfRezim').value = zeme === 'CZ' ? 'tuzemsko' : NF_EU.includes(zeme) ? 'eu_prenesena' : 'dovoz';
+    if (zeme !== 'CZ' && document.getElementById('nfMena').value === 'CZK' && NF_EU.includes(zeme) && !['PL', 'HU', 'SE', 'DK', 'RO', 'BG'].includes(zeme)) document.getElementById('nfMena').value = 'EUR';
+  }
+  prepocitatNakupniFakturu();
+}
+function prepocitatNakupniFakturu() {
+  const mena = document.getElementById('nfMena').value;
+  document.getElementById('nfKurzPole').hidden = mena === 'CZK';
+  document.getElementById('nfKurzMena').textContent = mena;
+  const rezim = document.getElementById('nfRezim').value;
+  const sazbaSel = document.getElementById('nfSazba');
+  sazbaSel.disabled = rezim === 'bez_dph';
+  const castka = Number(document.getElementById('nfCastka').value);
+  const kurz = mena === 'CZK' ? 1 : Number(document.getElementById('nfKurz').value);
+  const sazba = rezim === 'bez_dph' ? 0 : Number(sazbaSel.value);
+  const vystup = document.getElementById('nfVypocet');
+  if (!(castka > 0) || !(kurz > 0)) { vystup.textContent = mena === 'CZK' ? 'Zadejte částku.' : 'Zadejte částku a kurz.'; return; }
+  const z = n => Math.round(n * 100) / 100;
+  const czk = z(castka * kurz);
+  const zaklad = rezim === 'tuzemsko' ? z(czk / (1 + sazba / 100)) : czk;
+  const dph = rezim === 'tuzemsko' ? z(czk - zaklad) : rezim === 'bez_dph' ? 0 : z(czk * sazba / 100);
+  vystup.textContent = `V Kč: ${kcNf(czk)} · základ ${kcNf(zaklad)} · DPH ${kcNf(dph)}` +
+    (rezim === 'eu_prenesena' ? ' (vyměříte sami – přenesená daňová povinnost)' : rezim === 'dovoz' ? ' (platí se při dovozu)' : '');
+}
+async function ulozitNakupniFakturu() {
+  const msg = document.getElementById('nfMsg');
+  const btn = document.getElementById('nfUlozitBtn');
+  const id = document.getElementById('nfId').value;
+  const hodnota = i => document.getElementById(i).value;
+  const telo = {
+    dodavatel: hodnota('nfDodavatel'), zeme: hodnota('nfZeme').trim().toUpperCase(), cislo_faktury: hodnota('nfCislo'),
+    datum_vystaveni: hodnota('nfVystaveno'), datum_splatnosti: hodnota('nfSplatnost') || null,
+    datum_uhrady: document.getElementById('nfUhrazeno').checked ? (hodnota('nfDatumUhrady') || null) : null,
+    mena: hodnota('nfMena'), castka: hodnota('nfCastka'), kurz: hodnota('nfMena') === 'CZK' ? 1 : hodnota('nfKurz'),
+    rezim_dph: hodnota('nfRezim'), sazba_dph: Number(hodnota('nfSazba')), poznamka: hodnota('nfPoznamka')
+  };
+  if (document.getElementById('nfUhrazeno').checked && !telo.datum_uhrady) { msg.innerHTML = '<div class="error-msg">Vyplňte datum úhrady.</div>'; return; }
+  btn.disabled = true;
+  try {
+    const r = await adminFetch(API + '/nakupni-faktury' + (id ? '/' + id : ''), { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(telo) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { msg.innerHTML = `<div class="error-msg">${escH(d.chyba || 'Fakturu se nepodařilo uložit.')}</div>`; return; }
+    document.getElementById('modalNakupniFaktura')._zmeneno = false;
+    closeModal('modalNakupniFaktura');
+    loadNakupniFaktury();
+  } catch (e) {
+    msg.innerHTML = '<div class="error-msg">Fakturu se nepodařilo uložit (chyba spojení).</div>';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// CSV pro účetní: středník a desetinná čárka (česká verze Excelu)
+function exportNakupniFakturyCSV() {
+  const cislo = n => String(Number(n)).replace('.', ',');
+  const rows = [['Dodavatel', 'Země', 'Číslo faktury', 'Datum vystavení', 'Splatnost', 'Datum úhrady', 'Měna', 'Částka', 'Kurz', 'Částka Kč', 'Režim DPH', 'Sazba DPH %', 'Základ Kč', 'DPH Kč', 'Poznámka']];
+  nfFiltrovane().forEach(f => rows.push([f.dodavatel, f.zeme, f.cislo_faktury, datumCz(f.datum_vystaveni), f.datum_splatnosti ? datumCz(f.datum_splatnosti) : '',
+    f.datum_uhrady ? datumCz(f.datum_uhrady) : '', f.mena, cislo(f.castka), cislo(f.kurz), cislo(f.castka_czk), NF_REZIMY[f.rezim_dph] || f.rezim_dph,
+    cislo(f.sazba_dph), cislo(f.zaklad_czk), cislo(f.dph_czk), f.poznamka || '']));
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `nakupni-faktury-${dnesniDatumIso()}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
 // OKNA (etapa 5). openModal/closeModal mají stejné rozhraní jako dřív; navíc:
