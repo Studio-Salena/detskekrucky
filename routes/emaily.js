@@ -560,6 +560,7 @@ async function odeslat_upozorneni_zadost_poukaz(zadost) {
     <table role="presentation" style="width:100%;background:${BARVA_POZADI_BOX};border:1px solid ${BARVA_RAMECEK};border-radius:8px">
       <tr><td style="padding:16px 20px">
         <p style="margin:0 0 6px 0;font-size:14px"><strong>Hodnota:</strong> ${Number(zadost.hodnota).toLocaleString('cs-CZ')} Kč</p>
+        <p style="margin:0 0 6px 0;font-size:14px"><strong>Vzhled:</strong> ${zadost.vzhled === 'vanocni' ? '🎄 Vánoční poukaz' : 'Klasický poukaz'}</p>
         <p style="margin:0 0 6px 0;font-size:14px"><strong>Kupující:</strong> ${escH(zadost.kupujici_jmeno)}</p>
         <p style="margin:0 0 6px 0;font-size:14px"><strong>E-mail:</strong> ${escH(zadost.kupujici_email)}</p>
         ${zadost.kupujici_telefon ? `<p style="margin:0 0 6px 0;font-size:14px"><strong>Telefon:</strong> ${escH(zadost.kupujici_telefon)}</p>` : ''}

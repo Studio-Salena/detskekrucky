@@ -7,7 +7,7 @@ async function mockQuery(sql, params = []) {
   const s = sql.replace(/\s+/g, ' ').trim();
   if (s.startsWith('CREATE TABLE') || s.startsWith('ALTER TABLE') || s === 'BEGIN' || s === 'COMMIT' || s === 'ROLLBACK') return {};
   if (s.startsWith('INSERT INTO poukazy_zadosti')) {
-    return { rows: [{ id: 1, hodnota: params[0], kupujici_jmeno: params[1], kupujici_email: params[2] }] };
+    return { rows: [{ id: 1, hodnota: params[0], kupujici_jmeno: params[1], kupujici_email: params[2], vzhled: params[6] }] };
   }
   if (s.startsWith('SELECT id FROM darkove_poukazy WHERE kod')) {
     return { rows: [] }; // kód/EAN vždy "volný" - test netestuje kolize
@@ -123,4 +123,22 @@ test('vydání poukazu uloží zvolený vzhled, neznámý vzhled odmítne', asyn
   await handler({ body: { hodnota: 1000, zakoupeno_kde: 'prodejna', vzhled: 'velikonocni' } }, spatne);
   assert.equal(spatne.statusCode, 400);
   assert.match(spatne.body.chyba, /vzhled/);
+});
+
+test('žádost o poukaz: vzhled z e-shopu (klasický / vánoční) se uloží, jiný se odmítne, bez volby klasický', async () => {
+  const zachycene = [];
+  const handler = najitHandler(nacistPoukazySMocky(zachycene), 'post', '/zadost');
+  let res = vytvoritRes();
+  await handler({ ip: novaIp(), body: { hodnota: 1000, vzhled: 'vanocni', kupujici_jmeno: 'Jana', kupujici_email: 'jana@example.com' } }, res);
+  await pockatNaFireAndForget();
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.vzhled, 'vanocni');
+  assert.equal(zachycene[0].zadost.vzhled, 'vanocni');
+  res = vytvoritRes();
+  await handler({ ip: novaIp(), body: { hodnota: 500, kupujici_jmeno: 'Jana', kupujici_email: 'jana@example.com' } }, res);
+  assert.equal(res.body.vzhled, 'klasicky');
+  res = vytvoritRes();
+  await handler({ ip: novaIp(), body: { hodnota: 500, vzhled: '<b>', kupujici_jmeno: 'Jana', kupujici_email: 'jana@example.com' } }, res);
+  assert.equal(res.statusCode, 400);
+  assert.match(res.body.chyba, /vzhled/);
 });

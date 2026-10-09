@@ -48,6 +48,8 @@ async function initTabulky() {
         stav TEXT NOT NULL DEFAULT 'nova',
         vytvoreno TIMESTAMPTZ DEFAULT NOW()
       );
+      -- vzhled, který si zákazník vybral v e-shopu (2026-10-09)
+      ALTER TABLE poukazy_zadosti ADD COLUMN IF NOT EXISTS vzhled TEXT NOT NULL DEFAULT 'klasicky';
     `);
     console.log('Poukazy tabulky OK');
   } catch (e) {
@@ -104,6 +106,10 @@ router.post('/zadost', async (req, res) => {
     return res.status(429).json({ chyba: `Příliš mnoho žádostí z tohoto místa. Zkuste to znovu za ${Math.ceil(zbyvaSekund / 60)} min.` });
   }
   const { hodnota, kupujici_jmeno, kupujici_email, kupujici_telefon, pro_koho, vzkaz } = req.body;
+  const vzhled = req.body.vzhled === undefined ? 'klasicky' : req.body.vzhled;
+  if (!POVOLENE_VZHLEDY.includes(vzhled)) {
+    return res.status(400).json({ chyba: 'Vyberte prosím vzhled poukazu.' });
+  }
   const hodnotaCislo = Number(hodnota);
   if (!POVOLENE_HODNOTY.includes(hodnotaCislo)) {
     return res.status(400).json({ chyba: `Hodnota poukazu musí být jedna z: ${POVOLENE_HODNOTY.join(', ')} Kč.` });
@@ -114,8 +120,8 @@ router.post('/zadost', async (req, res) => {
   zaznamenatZadost(req.ip);
   try {
     const result = await pool.query(
-      'INSERT INTO poukazy_zadosti (hodnota, kupujici_jmeno, kupujici_email, kupujici_telefon, pro_koho, vzkaz) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
-      [hodnotaCislo, kupujici_jmeno, kupujici_email, kupujici_telefon || null, pro_koho || null, vzkaz || null]
+      'INSERT INTO poukazy_zadosti (hodnota, kupujici_jmeno, kupujici_email, kupujici_telefon, pro_koho, vzkaz, vzhled) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
+      [hodnotaCislo, kupujici_jmeno, kupujici_email, kupujici_telefon || null, pro_koho || null, vzkaz || null, vzhled]
     );
     res.json(result.rows[0]);
 
