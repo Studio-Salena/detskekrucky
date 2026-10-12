@@ -1325,7 +1325,9 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           <option value="bez_dph">Bez DPH</option>
         </select></div>
       <div class="form-group"><label for="nfSazba">Sazba DPH</label>
-        <select id="nfSazba" onchange="prepocitatNakupniFakturu()"><option value="21">21 %</option><option value="12">12 %</option><option value="0">0 %</option></select></div>
+        <input type="number" id="nfSazba" min="0" max="100" step="0.01" list="nfSazbyNabidka" placeholder="např. 21" oninput="prepocitatNakupniFakturu()">
+        <datalist id="nfSazbyNabidka"><option value="21"><option value="12"><option value="0"></datalist>
+        <small>Sazba v % – napište jakoukoli (např. 21, 12, 23 u zahraniční faktury).</small></div>
     </div>
     <div class="info-box" id="nfVypocet" aria-live="polite"></div>
     <div class="form-grid-2" style="align-items:end">
@@ -7017,6 +7019,7 @@ function prepocitatNakupniFakturu() {
   const sazba = rezim === 'bez_dph' ? 0 : Number(sazbaSel.value);
   const vystup = document.getElementById('nfVypocet');
   if (!(castka > 0) || !(kurz > 0)) { vystup.textContent = mena === 'CZK' ? 'Zadejte částku.' : 'Zadejte částku a kurz.'; return; }
+  if (rezim !== 'bez_dph' && (sazbaSel.value === '' || !(sazba >= 0 && sazba <= 100))) { vystup.textContent = 'Zadejte sazbu DPH (0–100 %).'; return; }
   const z = n => Math.round(n * 100) / 100;
   const czk = z(castka * kurz);
   const zaklad = rezim === 'tuzemsko' ? z(czk / (1 + sazba / 100)) : czk;
@@ -7036,6 +7039,7 @@ async function ulozitNakupniFakturu() {
     mena: hodnota('nfMena'), castka: hodnota('nfCastka'), kurz: hodnota('nfMena') === 'CZK' ? 1 : hodnota('nfKurz'),
     rezim_dph: hodnota('nfRezim'), sazba_dph: Number(hodnota('nfSazba')), poznamka: hodnota('nfPoznamka')
   };
+  if (telo.rezim_dph !== 'bez_dph' && hodnota('nfSazba').trim() === '') { msg.innerHTML = '<div class="error-msg">Vyplňte sazbu DPH.</div>'; return; }
   if (document.getElementById('nfUhrazeno').checked && !telo.datum_uhrady) { msg.innerHTML = '<div class="error-msg">Vyplňte datum úhrady.</div>'; return; }
   btn.disabled = true;
   try {

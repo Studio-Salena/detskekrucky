@@ -39,7 +39,12 @@ test('kontrola: povinné údaje, platná data, kurz u cizí měny, sazba; přepo
   assert.match(overitFakturu({ ...ZAKLAD, kurz: '' }).chyba, /kurz/);
   assert.match(overitFakturu({ ...ZAKLAD, castka: -5 }).chyba, /kladné/);
   assert.match(overitFakturu({ ...ZAKLAD, mena: 'BTC' }).chyba, /měna/);
-  assert.match(overitFakturu({ ...ZAKLAD, sazba_dph: 15 }).chyba, /Sazba/);
+  assert.equal(overitFakturu({ ...ZAKLAD, sazba_dph: 15 }).hodnoty.sazba_dph, 15, 'vlastní sazba projde');
+  assert.equal(overitFakturu({ ...ZAKLAD, sazba_dph: 5.5 }).hodnoty.sazba_dph, 5.5);
+  assert.match(overitFakturu({ ...ZAKLAD, sazba_dph: 101 }).chyba, /Sazba/);
+  assert.match(overitFakturu({ ...ZAKLAD, sazba_dph: -1 }).chyba, /Sazba/);
+  assert.match(overitFakturu({ ...ZAKLAD, sazba_dph: 'abc' }).chyba, /Sazba/);
+  assert.match(overitFakturu({ ...ZAKLAD, sazba_dph: 21.123 }).chyba, /Sazba/);
   assert.match(overitFakturu({ ...ZAKLAD, rezim_dph: 'neco' }).chyba, /režim/);
   assert.match(overitFakturu({ ...ZAKLAD, zeme: 'Chorvatsko' }).chyba, /Země/);
   const czk = overitFakturu({ ...ZAKLAD, zeme: 'cz', mena: 'CZK', castka: 2420, kurz: 999, sazba_dph: 21 }).hodnoty;
