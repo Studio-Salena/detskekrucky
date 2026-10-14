@@ -616,6 +616,19 @@
     line-height: 1.7;
     color: rgba(255,255,255,0.55);
   }
+  .prodejna-fotky { margin-top: 24px; }
+  .prodejna-fotky h4 {
+    font-size: 0.75rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--tan);
+    margin-bottom: 12px;
+    font-weight: 700;
+  }
+  .prodejna-fotky-mrizka { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; max-width: 520px; }
+  .prodejna-fotky-mrizka a { display: block; border-radius: 12px; overflow: hidden; aspect-ratio: 4 / 3; box-shadow: 0 4px 14px rgba(0,0,0,0.25); }
+  .prodejna-fotky-mrizka img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.3s; }
+  .prodejna-fotky-mrizka a:hover img { transform: scale(1.05); }
   .footer-col h4 {
     font-size: 0.75rem;
     letter-spacing: 0.18em;
@@ -2064,6 +2077,14 @@ async function newsletterOdeslat(e) {
         <div style="display:flex;gap:10px;align-items:flex-end;margin-top:14px">
           <img src="srnka.png" alt="Srnečka" style="width:130px;opacity:0.92;filter:drop-shadow(0 4px 10px rgba(0,0,0,0.18));animation:wiggle 3s ease-in-out infinite;">
           <img src="jezek.png" alt="Ježek" style="width:100px;opacity:0.92;filter:drop-shadow(0 4px 10px rgba(0,0,0,0.18));animation:wiggle 3s 0.4s ease-in-out infinite;">
+        </div>
+        <div class="prodejna-fotky">
+          <h4>Naše prodejna v Hulíně</h4>
+          <div class="prodejna-fotky-mrizka">
+            <a href="prodejna-1.jpg" target="_blank" rel="noopener"><img src="prodejna-1.jpg" alt="Prodejna Dětské krůčky – dětský koutek a výloha" loading="lazy" width="1200" height="900"></a>
+            <a href="prodejna-2.jpg" target="_blank" rel="noopener"><img src="prodejna-2.jpg" alt="Prodejna Dětské krůčky – regály s barefoot botami a pult" loading="lazy" width="1200" height="900"></a>
+            <a href="prodejna-majitelka.jpg" target="_blank" rel="noopener"><img src="prodejna-majitelka.jpg" alt="Monika Škarpichová s barefoot botičkami na prodejně" loading="lazy" width="1200" height="900"></a>
+          </div>
         </div>
       </div>
 
