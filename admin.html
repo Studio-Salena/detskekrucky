@@ -5694,6 +5694,9 @@ function tisknoutPoukaz(sEanem = true, data = null, kopie = 1) {
     .seznam{ display:flex; flex-direction:column; align-items:center; gap:24px; }
     .card{ break-inside:avoid; page-break-inside:avoid; }
     @media print { body{background:#fff;padding:0} .card{box-shadow:none} }
+    ${p.prazdny ? `/* prázdné poukazy: 3 na stránku A4 na výšku (zmenšené, ať se vejdou pod sebe) */
+    @page { size: A4 portrait; margin: 10mm; }
+    @media print { body{display:block;min-height:0} .seznam{gap:5mm} .card{zoom:0.72} .card:nth-child(3n){break-after:page;page-break-after:always} }` : ''}
   </style></head><body>
   <div class="seznam">${karta.repeat(Math.max(1, kopie))}</div>
   <script>
@@ -5768,6 +5771,13 @@ function tisknoutVanocniPoukaz(sEanem = true, data = null, kopie = 1) {
     @media print { body { background:#fff; padding:0; } .obal { max-width:none; } .obal + .obal { margin-top:0; break-before:page; page-break-before:always; } }
     /* prázdné místo pro EAN: světlý rámeček, ať jde štítek nalepit nebo číslo dopsat */
     .vp-ean-popisek { background:#fff; }
+    ${p.prazdny ? `/* prázdné poukazy: 3 na stránku A4 na výšku */
+    @page { size: A4 portrait; margin: 10mm; }
+    @media print {
+      .obal { width:128mm; margin:0 auto 5mm; }
+      .obal + .obal { break-before:auto; page-break-before:auto; }
+      .obal:nth-of-type(3n+1):not(:first-of-type) { break-before:page; page-break-before:always; }
+    }` : ''}
   </style></head><body>
   ${`<div class="obal">${htmlVanocnihoPoukazu(p, sKodem ? 'bc' : null)}</div>`.repeat(Math.max(1, kopie))}
   <script>
