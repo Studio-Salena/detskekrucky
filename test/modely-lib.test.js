@@ -155,3 +155,14 @@ test('rozměry velikostí: celá čísla v rozumném rozsahu nebo prázdné', ()
     assert.ok(overitRozmery(telo).chyba, JSON.stringify(telo).slice(0, 80));
   }
 });
+
+test('nadměrek modelu u rozměrů: 0–30 mm, prázdný = výchozí, chybějící = beze změny', () => {
+  const { overitRozmery } = require('../lib/modely');
+  const rozmery = [{ produkt_id: 3, velikost: 24, delka_mm: 156 }];
+  assert.equal('nadmerek' in overitRozmery({ rozmery }), false, 'bez nadměrku se nemění');
+  assert.equal(overitRozmery({ rozmery, nadmerek_mm: 15 }).nadmerek, 15);
+  assert.equal(overitRozmery({ rozmery, nadmerek_mm: 0 }).nadmerek, 0);
+  assert.equal(overitRozmery({ rozmery, nadmerek_mm: null }).nadmerek, null);
+  assert.equal(overitRozmery({ rozmery, nadmerek_mm: '' }).nadmerek, null);
+  for (const n of [-1, 31, 12.5, '12']) assert.ok(overitRozmery({ rozmery, nadmerek_mm: n }).chyba, String(n));
+});

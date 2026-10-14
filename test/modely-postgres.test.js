@@ -260,6 +260,15 @@ test('Produkty v adminu proti PostgreSQL: seznam s cenou od-do a skrytými, deta
     assert.equal(r4.statusCode, 200, JSON.stringify(r4.body));
     const ulozene = (await pool.query('SELECT velikost, delka_mm, sirka_mm FROM sklad WHERE produkt_id IN ($1, $2) ORDER BY velikost', [p24, p25])).rows;
     assert.deepEqual(ulozene.map(x => [x.velikost, x.delka_mm, x.sirka_mm]), [[24, 156, 64], [25, 163, null]]);
+    const nadmerek = async () => (await pool.query('SELECT nadmerek_mm FROM modely WHERE id = $1', [froddo.id])).rows[0].nadmerek_mm;
+    assert.equal(await nadmerek(), null, 'bez nadměrku zůstává výchozí');
+    const rN = res();
+    await ulozit({ params: { id: String(froddo.id) }, body: { rozmery: [{ produkt_id: p24, velikost: '24', delka_mm: 156, sirka_mm: 64 }], nadmerek_mm: 15 } }, rN);
+    assert.equal(rN.statusCode, 200, JSON.stringify(rN.body));
+    assert.equal(await nadmerek(), 15);
+    const rN2 = res();
+    await ulozit({ params: { id: String(froddo.id) }, body: { rozmery: [{ produkt_id: p24, velikost: '24', delka_mm: 156, sirka_mm: 64 }] } }, rN2);
+    assert.equal(await nadmerek(), 15, 'bez pole nadmerek_mm se nemění');
     // velikost cizího modelu: nic se neuloží (ani ta platná)
     const beda = r1.body.modely.find(m => m.znacka === 'Beda');
     const r5 = res();

@@ -177,6 +177,8 @@ body{background:var(--app-bg)}
 .detail-fotky img.hlavni{border:2px solid var(--brown)}
 .detail-velikosti td,.detail-velikosti th{white-space:nowrap}
 .detail-velikosti .rozmer-mm{width:76px;padding:6px 8px}
+.detail-nadmerek{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;font-weight:700;font-size:0.88rem}
+.detail-nadmerek input{width:76px;padding:6px 8px}
 .detail-rozmery-ulozit{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;font-weight:700;font-size:0.85rem}
 #produktyTable tr[hidden]{display:none}
 .seznam-foto-bunka{width:64px}
@@ -1612,9 +1614,9 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     <button class="btn btn-outline btn-sm" id="pridatVekovouSkupinuBtn" onclick="pridatVekovouSkupinu()">+ Přidat skupinu</button>
     <label style="display:flex;gap:8px;align-items:center;margin-top:16px;font-size:0.88rem"><input type="checkbox" id="nkPohlavi"> Rozlišovat holčička / chlapeček (přidá sloupec „Pro koho“)</label>
     <div class="form-group" style="margin-top:16px">
-      <label for="nkRezerva">Průvodce velikostí: rezerva (mm)</label>
+      <label for="nkRezerva">Průvodce velikostí: výchozí nadměrek (mm)</label>
       <input id="nkRezerva" class="form-input" type="number" min="0" max="30" step="1" style="max-width:120px">
-      <p style="font-size:0.8rem;color:var(--text-light);margin:4px 0 0">O kolik má být vnitřní délka boty delší než nožička. U barefoot bot se běžně doporučuje 10–15 mm.</p>
+      <p style="font-size:0.8rem;color:var(--text-light);margin:4px 0 0">O kolik má být vnitřní délka boty delší než nožička. U barefoot bot se běžně doporučuje 10–15 mm. Platí pro všechny boty, které nemají v detailu produktu vyplněný vlastní nadměrek.</p>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modalNastaveniKatalogu')">Zrušit</button>
@@ -3323,11 +3325,16 @@ function vykreslitDetailModelu() {
         </tr>`;
       }).join('')}
       </tbody></table></div>
+      ${bez ? '' : `<div class="detail-nadmerek">
+        <label for="detailNadmerek">Nadměrek (mm)</label>
+        <input id="detailNadmerek" class="form-input" type="number" min="0" max="30" step="1" inputmode="numeric" value="${m.nadmerek_mm ?? ''}" placeholder="${Number(nastaveniKatalogu.rezervaMm ?? 12)}" oninput="oznacitZmenuRozmeru()">
+        <span class="detail-pozn" style="margin:0">prázdné = výchozí ${Number(nastaveniKatalogu.rezervaMm ?? 12)} mm z nastavení katalogu</span>
+      </div>`}
       <div class="detail-rozmery-ulozit">
-        <button type="button" class="btn btn-primary btn-sm" id="detailUlozitRozmery" disabled onclick="ulozitRozmeryDetailu()">💾 Uložit rozměry</button>
+        <button type="button" class="btn btn-primary btn-sm" id="detailUlozitRozmery" disabled onclick="ulozitRozmeryDetailu()">💾 Uložit rozměry a nadměrek</button>
         <span id="detailRozmeryMsg" role="status"></span>
       </div>
-      <p class="detail-pozn">Délka a šířka = vnitřní rozměry boty v mm. Podle délky e-shop zákazníkům doporučuje velikost (nožička + rezerva ${Number(nastaveniKatalogu.rezervaMm ?? 12)} mm). EAN, počty kusů, minimální stav a naskladnění jsou ve Skladu (tlačítko „📦 Otevřít ve skladu“).</p>
+      <p class="detail-pozn">Délka a šířka = vnitřní rozměry boty v mm. Podle délky e-shop zákazníkům doporučuje velikost: vnitřní délka ≥ nožička + nadměrek (${m.nadmerek_mm != null ? `u tohoto modelu ${Number(m.nadmerek_mm)} mm` : `výchozí ${Number(nastaveniKatalogu.rezervaMm ?? 12)} mm`}). EAN, počty kusů, minimální stav a naskladnění jsou ve Skladu (tlačítko „📦 Otevřít ve skladu“).</p>
     </section>`;
 }
 
@@ -3379,16 +3386,20 @@ async function ulozitRozmeryDetailu() {
     radky[k][inp.dataset.rozmer] = t === '' ? null : Number(t);
   }
   const rozmery = Object.values(radky);
-  if (!rozmery.length) return;
+  if (!rozmery.length) { msg.textContent = 'Nadměrek jde uložit, až bude mít produkt aspoň jednu velikost.'; return; }
+  const telo = { rozmery };
+  const nadmerekInp = document.getElementById('detailNadmerek');
+  if (nadmerekInp) telo.nadmerek_mm = nadmerekInp.value.trim() === '' ? null : Number(nadmerekInp.value);
   btn.disabled = true;
   msg.textContent = 'Ukládám…'; msg.style.color = '';
   try {
-    const r = await adminFetch(API + '/modely/' + detailModeluId + '/rozmery', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rozmery }) });
+    const r = await adminFetch(API + '/modely/' + detailModeluId + '/rozmery', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(telo) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.chyba || 'Rozměry se nepodařilo uložit.');
     rozmery.forEach((x, j) => { const v = detailModeluData.varianty[Number(Object.keys(radky)[j])]; v.delka_mm = x.delka_mm; v.sirka_mm = x.sirka_mm; });
+    if ('nadmerek_mm' in telo) detailModeluData.model.nadmerek_mm = telo.nadmerek_mm;
     document.getElementById('modalDetailModelu')._zmeneno = false;
-    msg.textContent = '✅ Rozměry uloženy'; msg.style.color = 'var(--sage-tmava)';
+    msg.textContent = '✅ Uloženo'; msg.style.color = 'var(--sage-tmava)';
   } catch (e) {
     btn.disabled = false;
     msg.textContent = '❌ ' + e.message; msg.style.color = 'var(--red)';

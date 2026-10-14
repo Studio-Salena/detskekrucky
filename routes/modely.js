@@ -243,16 +243,24 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
-// Rozměry (vnitřní délka a šířka v mm) u všech velikostí modelu najednou.
-// Všechno, nebo nic: velikost, která k modelu nepatří, zruší celé uložení.
+// Rozměry (vnitřní délka a šířka v mm) u všech velikostí modelu najednou,
+// volitelně i nadměrek modelu. Všechno, nebo nic: velikost, která k modelu
+// nepatří, zruší celé uložení.
 router.put('/:id/rozmery', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ chyba: 'Neplatné id modelu.' });
-  const { chyba, polozky } = overitRozmery(req.body);
+  const { chyba, polozky, nadmerek } = overitRozmery(req.body);
   if (chyba) return res.status(400).json({ chyba });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    if (nadmerek !== undefined) {
+      const m = await client.query('UPDATE modely SET nadmerek_mm = $1, upraveno = NOW() WHERE id = $2', [nadmerek, id]);
+      if (m.rowCount !== 1) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ chyba: 'Model nenalezen.' });
+      }
+    }
     for (const p of polozky) {
       const r = await client.query(
         `UPDATE sklad s SET delka_mm = $1, sirka_mm = $2
@@ -266,7 +274,7 @@ router.put('/:id/rozmery', async (req, res) => {
       }
     }
     await client.query('COMMIT');
-    res.json({ zprava: 'Rozměry uloženy', ulozeno: polozky.length });
+    res.json({ zprava: 'Rozměry uloženy', ulozeno: polozky.length, ...(nadmerek !== undefined && { nadmerek_mm: nadmerek }) });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('Uložení rozměrů selhalo:', err.message);

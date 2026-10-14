@@ -1638,6 +1638,7 @@ async function nacistProdukty() {
           popis: s.popis || '', typ_nohy: s.typ_nohy || '',
           barefoot: s.barefoot ?? null, sirkaNohy: s.sirka_nohy || [], zapinani: s.zapinani || [], membrana: s.membrana ?? null,
           pohlavi: s.pohlavi || null, nart: s.nart || [], dominantniPalec: s.dominantni_palec || null, material: s.material || null, procJsmeVybrali: s.proc_jsme_vybrali || [],
+          nadmerekMm: s.nadmerek_mm ?? null,
           maxId: 0, _vyprodane: new Set(),
           kategorieCitac: {}, emoji: '', primaryImageUrl: '', primaryImageAlt: '', images: [], _seenObrazky: new Set(), velikosti: []
         };
@@ -1835,12 +1836,17 @@ function hledaniOdpovida(p, hledat, nazevKategorie) {
 function jeSkladem(v) { return v.dostupnost !== 'dodavatel'; }
 
 // --- Průvodce velikostí ---
-// Vnitřní délka boty má být o rezervu delší než nožička (nastavení katalogu,
-// výchozí 12 mm). Filtr v katalogu bere boty s rezervou až o 10 mm větší.
+// Vnitřní délka boty má být o rezervu (nadměrek) delší než nožička - výchozí
+// z nastavení katalogu (12 mm), model může mít v adminu vlastní. Filtr
+// v katalogu bere boty s rezervou až o 10 mm větší.
 const NOHA_MIN = 70, NOHA_MAX = 300, NOHA_ROZPETI = 10;
 function rezervaPruvodce() {
   const r = nastaveniKatalogu && nastaveniKatalogu.rezervaMm;
   return Number.isInteger(r) && r >= 0 && r <= 30 ? r : 12;
+}
+function nadmerekBoty(p, vychozi) {
+  const r = p && p.nadmerekMm;
+  return Number.isInteger(r) && r >= 0 && r <= 30 ? r : vychozi;
 }
 function platnaNoha(n) { return Number.isInteger(n) && n >= NOHA_MIN && n <= NOHA_MAX; }
 function velikostSediNaNohu(v, noha, rezerva) {
@@ -1887,7 +1893,7 @@ function produktOdpovida(p, stav, ctx, vynechat) {
   const krome = k => vynechat !== k;
   if (krome('kategorie') && stav.kategorie && p.kategorie !== stav.kategorie) return false;
   if (krome('velikost') && stav.velikost && !p.velikosti.some(v => v.velikost === stav.velikost && (!stav.skladem || jeSkladem(v)))) return false;
-  if (krome('noha') && stav.noha && !p.velikosti.some(v => velikostSediNaNohu(v, stav.noha, ctx.rezerva ?? 12) && (!stav.skladem || jeSkladem(v)))) return false;
+  if (krome('noha') && stav.noha && !p.velikosti.some(v => velikostSediNaNohu(v, stav.noha, nadmerekBoty(p, ctx.rezerva ?? 12)) && (!stav.skladem || jeSkladem(v)))) return false;
   if (krome('skladem') && stav.skladem && !p.velikosti.some(jeSkladem)) return false;
   if (krome('sleva') && stav.sleva && !p.cena_puvodni) return false;
   if (krome('pro') && stav.pro && !KATALOG_PRO[stav.pro].pohlavi.includes(p.pohlavi)) return false;
@@ -2201,7 +2207,7 @@ function filtryHtml(stav, pocty) {
   const rez = rezervaPruvodce();
   casti.push(skupina('Délka nožičky', `<div class="filtr-noha">
       <input type="number" inputmode="numeric" min="${NOHA_MIN}" max="${NOHA_MAX}" step="1" data-pole="noha" placeholder="např. 145" aria-label="Délka nožičky v mm" value="${stav.noha ?? ''}"><span>mm</span></div>
-      <p class="filtr-pozn">Ukážeme boty s velikostí o ${rez}–${rez + NOHA_ROZPETI} mm delší. Jen boty se změřenými rozměry.</p>`));
+      <p class="filtr-pozn">Ukážeme boty s velikostí o ${rez}–${rez + NOHA_ROZPETI} mm delší (u některých modelů podle střihu jinak). Jen boty se změřenými rozměry.</p>`));
 
   const velikosti = [...new Set([...vsechnyProdukty.flatMap(p => p.velikosti.map(v => v.velikost)), ...(stav.velikost ? [stav.velikost] : [])])].sort((a, b) => a - b);
   if (velikosti.length) {
@@ -2881,7 +2887,7 @@ function spustitPruvodce(vybrat) {
   if (!aktivniProdukt) return;
   const cislo = id => { const t = document.getElementById(id).value.trim(); return t === '' ? null : Math.round(Number(t)); };
   const noha = cislo('pruvodceDelka'), sirka = cislo('pruvodceSirka');
-  const rezerva = rezervaPruvodce();
+  const rezerva = nadmerekBoty(aktivniProdukt, rezervaPruvodce());
   const d = doporucitVelikost(aktivniProdukt.velikosti, noha, sirka, rezerva);
   document.querySelectorAll('#detailSizes .size-btn.doporucena').forEach(b => b.classList.remove('doporucena'));
   document.getElementById('pruvodceVysledek').innerHTML = vysledekPruvodceHtml(d, noha, sirka, rezerva);

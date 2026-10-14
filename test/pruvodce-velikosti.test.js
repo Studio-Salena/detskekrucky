@@ -27,7 +27,7 @@ vm.runInContext([
   'const NOHA_MIN = 70, NOHA_MAX = 300, NOHA_ROZPETI = 10;',
   ...['KATALOG_SIRKA', 'KATALOG_ZAPINANI', 'KATALOG_RAZENI', 'KATALOG_PRO'].map(konstanta),
   'var nastaveniKatalogu = { rezervaMm: 12 };',
-  ...['escHtml', 'rezervaPruvodce', 'platnaNoha', 'velikostSediNaNohu', 'doporucitVelikost', 'vysledekPruvodceHtml',
+  ...['escHtml', 'rezervaPruvodce', 'nadmerekBoty', 'platnaNoha', 'velikostSediNaNohu', 'doporucitVelikost', 'vysledekPruvodceHtml',
     'prazdnyStavKatalogu', 'bezDiakritiky', 'slugText', 'stavZUrl', 'urlZeStavu', 'hledaniOdpovida', 'jeSkladem', 'produktOdpovida'].map(vytahnout)
 ].join('\n'), sandbox);
 const run = kod => { const v = vm.runInContext(kod, sandbox); return v !== null && typeof v === 'object' ? JSON.parse(JSON.stringify(v)) : v; };
@@ -100,4 +100,18 @@ test('filtr Délka nožičky: adresa ?noha= a boty s rezervou 12–22 mm', () =>
   // jen skladem: velikost u dodavatele nestačí
   const dodavatel = { ...bota(156), velikosti: [{ velikost: 24, delka_mm: 156, dostupnost: 'dodavatel' }] };
   assert.equal(zavolat('produktOdpovida', dodavatel, { ...s, skladem: true }, ctx), false);
+  // vlastní nadměrek modelu (15 mm) má přednost před výchozím: sedí 155–165 mm
+  const sNadmerkem = d => ({ ...bota(d), nadmerekMm: 15 });
+  assert.equal(zavolat('produktOdpovida', sNadmerkem(152), s, ctx), false, 'u modelu s nadměrkem 15 mm je 12 mm málo');
+  assert.equal(zavolat('produktOdpovida', sNadmerkem(155), s, ctx), true);
+  assert.equal(zavolat('produktOdpovida', sNadmerkem(165), s, ctx), true);
+  assert.equal(zavolat('produktOdpovida', sNadmerkem(166), s, ctx), false);
+});
+
+test('nadměrek boty: vlastní u modelu, jinak výchozí', () => {
+  assert.equal(zavolat('nadmerekBoty', { nadmerekMm: 15 }, 12), 15);
+  assert.equal(zavolat('nadmerekBoty', { nadmerekMm: 0 }, 12), 0);
+  assert.equal(zavolat('nadmerekBoty', { nadmerekMm: null }, 12), 12);
+  assert.equal(zavolat('nadmerekBoty', { nadmerekMm: 40 }, 12), 12);
+  assert.equal(zavolat('nadmerekBoty', null, 12), 12);
 });
