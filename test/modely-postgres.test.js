@@ -269,6 +269,30 @@ test('Produkty v adminu proti PostgreSQL: seznam s cenou od-do a skrytými, deta
     const rN2 = res();
     await ulozit({ params: { id: String(froddo.id) }, body: { rozmery: [{ produkt_id: p24, velikost: '24', delka_mm: 156, sirka_mm: 64 }] } }, rN2);
     assert.equal(await nadmerek(), 15, 'bez pole nadmerek_mm se nemění');
+
+    // Sleva na celý model: z původní ceny, nová sleva starou nahradí, zrušení ji vrátí
+    const sleva = najit('post', '/sleva');
+    const ceny = async () => (await pool.query('SELECT cena, cena_puvodni FROM produkty WHERE model_id = $1 ORDER BY id', [froddo.id])).rows
+      .map(x => [Number(x.cena), x.cena_puvodni == null ? null : Number(x.cena_puvodni)]);
+    const puvodni = await ceny();
+    const zaklad = puvodni.map(([c, p]) => Math.max(c, p ?? c));
+    const rS1 = res();
+    await sleva({ body: { ids: [froddo.id], typ: 'procenta', hodnota: 20 } }, rS1);
+    assert.equal(rS1.statusCode, 200, JSON.stringify(rS1.body));
+    assert.deepEqual(await ceny(), zaklad.map(z => [Math.round(z * 0.8), z]));
+    const rS2 = res();
+    await sleva({ body: { ids: [froddo.id], typ: 'castka', hodnota: 100 } }, rS2);
+    assert.deepEqual(await ceny(), zaklad.map(z => [z - 100, z]), 'počítá se z původní ceny, nesčítá');
+    const rS3 = res();
+    await sleva({ body: { ids: [froddo.id], typ: 'castka', hodnota: Math.min(...zaklad) } }, rS3);
+    assert.equal(rS3.statusCode, 400, 'sleva nesmí srazit cenu na nulu');
+    assert.deepEqual(await ceny(), zaklad.map(z => [z - 100, z]), 'při chybě beze změny');
+    const rS4 = res();
+    await sleva({ body: { ids: [froddo.id], typ: 'zrusit' } }, rS4);
+    assert.deepEqual(await ceny(), zaklad.map(z => [z, null]));
+    const rS5 = res();
+    await sleva({ body: { ids: [999999], typ: 'zrusit' } }, rS5);
+    assert.equal(rS5.statusCode, 404);
     // velikost cizího modelu: nic se neuloží (ani ta platná)
     const beda = r1.body.modely.find(m => m.znacka === 'Beda');
     const r5 = res();

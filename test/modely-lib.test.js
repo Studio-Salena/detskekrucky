@@ -166,3 +166,15 @@ test('nadměrek modelu u rozměrů: 0–30 mm, prázdný = výchozí, chybějíc
   assert.equal(overitRozmery({ rozmery, nadmerek_mm: '' }).nadmerek, null);
   for (const n of [-1, 31, 12.5, '12']) assert.ok(overitRozmery({ rozmery, nadmerek_mm: n }).chyba, String(n));
 });
+
+test('sleva na modely: % 1–90, Kč kladné celé číslo, zrušení bez hodnoty', () => {
+  const { overitSlevu } = require('../lib/modely');
+  assert.deepEqual(overitSlevu({ ids: [1, 1, 2], typ: 'procenta', hodnota: 20 }), { ids: [1, 2], typ: 'procenta', hodnota: 20 });
+  assert.deepEqual(overitSlevu({ ids: [3], typ: 'castka', hodnota: 150 }), { ids: [3], typ: 'castka', hodnota: 150 });
+  assert.deepEqual(overitSlevu({ ids: [3], typ: 'zrusit' }), { ids: [3], typ: 'zrusit' });
+  for (const telo of [null, {}, { ids: [], typ: 'zrusit' }, { ids: [0], typ: 'zrusit' }, { ids: [1], typ: 'jina' },
+    { ids: [1], typ: 'procenta', hodnota: 0 }, { ids: [1], typ: 'procenta', hodnota: 91 }, { ids: [1], typ: 'procenta', hodnota: 12.5 },
+    { ids: [1], typ: 'procenta', hodnota: '20' }, { ids: [1], typ: 'castka', hodnota: 0 }, { ids: [1], typ: 'castka' }]) {
+    assert.ok(overitSlevu(telo).chyba, JSON.stringify(telo));
+  }
+});

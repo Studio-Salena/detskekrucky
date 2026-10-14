@@ -8,7 +8,7 @@ const vyzadovatAdmina = require('../middleware/adminAuth');
 const {
   VOLBY, KATEGORIE_BEZ_VLASTNOSTI, VYCHOZI_NASTAVENI_KATALOGU,
   klicModelu, migrovatModely, overitUpravuModelu, jeVyplneno, overitNastaveniKatalogu,
-  overitHromadnouZmenu, overitRozmery
+  overitHromadnouZmenu, overitRozmery, overitSlevu
 } = require('../lib/modely');
 
 async function initModely() {
@@ -317,6 +317,51 @@ router.post('/hromadne', async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     res.status(500).json({ chyba: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Sleva na vybrané modely - všechny jejich velikosti najednou. Původní cena se
+// uloží do cena_puvodni (e-shop ji ukáže přeškrtnutou a dá štítek Sleva),
+// zrušení slevy vrátí původní cenu. Cenu v objednávce dál počítá server z produkty.cena.
+// Všechno, nebo nic: když by sleva u některé velikosti srazila cenu na nulu, nezmění se nic.
+router.post('/sleva', async (req, res) => {
+  const { chyba, ids, typ, hodnota } = overitSlevu(req.body);
+  if (chyba) return res.status(400).json({ chyba });
+  // základ = původní cena (u bot bez slevy aktuální cena)
+  const ZAKLAD = 'GREATEST(cena, COALESCE(cena_puvodni, cena))';
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const nalezene = await client.query('SELECT id FROM modely WHERE id = ANY($1::int[]) FOR UPDATE', [ids]);
+    if (nalezene.rows.length !== ids.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ chyba: 'Některé vybrané produkty už neexistují. Obnovte stránku a zkuste to znovu.' });
+    }
+    let result;
+    if (typ === 'zrusit') {
+      result = await client.query(
+        `UPDATE produkty SET cena = ${ZAKLAD}, cena_puvodni = NULL WHERE model_id = ANY($1::int[]) AND cena_puvodni IS NOT NULL`, [ids]);
+    } else {
+      if (typ === 'castka') {
+        const nejlevnejsi = await client.query(`SELECT MIN(${ZAKLAD}) AS min FROM produkty WHERE model_id = ANY($1::int[])`, [ids]);
+        if (nejlevnejsi.rows[0].min != null && Number(nejlevnejsi.rows[0].min) <= hodnota) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ chyba: `Sleva ${hodnota} Kč je vyšší než cena některé velikosti (${Number(nejlevnejsi.rows[0].min)} Kč).` });
+        }
+      }
+      const nova = typ === 'procenta' ? `GREATEST(1, ROUND(${ZAKLAD} * (100 - $2) / 100.0))` : `${ZAKLAD} - $2`;
+      result = await client.query(
+        `UPDATE produkty SET cena_puvodni = ${ZAKLAD}, cena = ${nova} WHERE model_id = ANY($1::int[])`, [ids, hodnota]);
+    }
+    await client.query('UPDATE modely SET upraveno = NOW() WHERE id = ANY($1::int[])', [ids]);
+    await client.query('COMMIT');
+    res.json({ zmeneno: result.rowCount });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Sleva selhala:', err.message);
+    res.status(500).json({ chyba: 'Slevu se nepodařilo uložit.' });
   } finally {
     client.release();
   }
