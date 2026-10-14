@@ -136,6 +136,6 @@ test('veřejný seznam kategorií posílá zmenšený obrázek a neprozrazuje st
   const res = vytvoritRes();
   await handler({}, res);
 
-  assert.equal(res.body[0].obrazek_url, 'https://res.cloudinary.com/x/a.jpg?w=240');
+  assert.equal(res.body[0].obrazek_url, 'https://res.cloudinary.com/x/a.jpg?w=400');
   assert.equal('obrazek_key' in res.body[0], false);
 });
