@@ -822,11 +822,11 @@ body > header{background:var(--warm-white);border-bottom:1px solid var(--tan-lig
 .kategorie-dlazdice{background:#fff;border:1px solid var(--tan-light);border-radius:var(--r-m);padding:16px 10px 14px;min-height:124px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:10px;box-shadow:none;transform:none}
 .kategorie-dlazdice:hover{border-color:var(--brown-light);box-shadow:var(--stin-karta);transform:none}
 .kategorie-dlazdice.active{border:2px solid var(--brown);padding:15px 9px 13px}
-.kategorie-dlazdice .ikona{width:104px;height:84px;margin:0;display:flex;align-items:center;justify-content:center;font-size:3rem;line-height:1;object-fit:contain}
+.kategorie-dlazdice .ikona{width:104px;height:118px;margin:0;display:flex;align-items:center;justify-content:center;font-size:3rem;line-height:1;object-fit:contain}
 /* Obrázek přes celou šířku dlaždice; bílé/papírové pozadí obrázku splyne s bílou dlaždicí */
-.kategorie-dlazdice img.ikona{width:100%;height:118px;object-fit:contain;border-radius:var(--r-s);mix-blend-mode:multiply}
+.kategorie-dlazdice img.ikona{width:100%;height:118px;margin:0;object-fit:contain;border-radius:var(--r-s);mix-blend-mode:multiply}
 /* Dárkové poukazy: dvě karty přes sebe ve stejné výšce jako obrázky kategorií */
-.poukaz-karty{width:150px;height:84px;margin:0 auto}
+.poukaz-karty{width:150px;height:84px;margin:17px auto} /* 84 + 2×17 = 118 px, stejně vysoko jako obrázky ostatních dlaždic */
 .poukaz-karta.zadni{width:122px;height:53px}
 .poukaz-karta.predni{width:96px;height:64px}
 .kategorie-dlazdice .nazev{font-family:var(--font-text);font-weight:700;font-size:0.9rem;color:var(--text);line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -958,7 +958,8 @@ footer{background:var(--text)}
   .hero h1{font-size:2.4rem}
   .kategorie-dlazdice{min-height:128px}
   .kategorie-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .kategorie-dlazdice .ikona{width:96px;height:76px}
+  .kategorie-dlazdice .ikona{width:96px;height:104px}
+  .poukaz-karty{margin:10px auto}
   .kategorie-dlazdice img.ikona{width:100%;height:104px}
   .poukaz-karty{transform:scale(0.92)}
   .product-info{padding:10px 12px 12px}
