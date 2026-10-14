@@ -37,11 +37,11 @@ async function smazatObrazekZUloziste(publicId) {
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM kategorie ORDER BY poradi');
-    // Dlaždice je malá - posílat zmenšenou verzi, ne originál z telefonu.
+    // Dlaždice je malá - posílat zmenšenou verzi (400 px kvůli ostrosti na mobilech), ne originál z telefonu.
     // storage_key je interní údaj úložiště, veřejně ho neposílat.
     res.json(result.rows.map(({ obrazek_key, ...k }) => ({
       ...k,
-      obrazek_url: k.obrazek_url ? cloudinaryLib.ziskatOptimalizovanouUrl(k.obrazek_url, 240) : null
+      obrazek_url: k.obrazek_url ? cloudinaryLib.ziskatOptimalizovanouUrl(k.obrazek_url, 400) : null
     })));
   } catch (err) {
     res.status(500).json({ chyba: err.message });
