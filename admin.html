@@ -664,6 +664,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <div class="page-title">🎁 Dárkové poukazy</div>
         <div class="table-actions">
           <button class="btn btn-primary" onclick="otevritVydatPoukaz()">+ Vydat poukaz</button>
+          <button class="btn btn-outline no-print" onclick="otevritPrazdnyPoukaz()" title="Poukazy na akci – EAN a datum se dopíšou až při prodeji">🖨️ Prázdné poukazy k tisku</button>
           <button class="btn btn-csv no-print" onclick="exportCSV('poukazy')">⬇ CSV</button>
           <button class="refresh-btn no-print" onclick="loadPoukazy()">↻</button>
         </div>
@@ -1575,6 +1576,37 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <button class="btn btn-outline" onclick="upravitNovyPoukaz()">← Upravit</button>
         <button class="btn btn-primary" id="pkVydatBtn" onclick="ulozitPoukaz()">✅ Vydat poukaz</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalPrazdnyPoukaz">
+  <div class="modal" style="max-width:480px">
+    <h3>🖨️ Prázdné poukazy k tisku</h3>
+    <p style="font-size:0.85rem;color:var(--text-light);line-height:1.55;margin-bottom:14px">Poukazy na akci: vytisknou se <strong>bez EAN, čísla poukazu a data platnosti</strong> a nic se neukládá. Při prodeji poukaz vydejte tady v adminu (+ Vydat poukaz) a číslo/EAN a datum platnosti na něj dopište, nebo nalepte štítek „🏷️ Jen EAN“. <strong>Dokud poukaz není vydaný v adminu, nejde uplatnit.</strong></p>
+    <div class="form-group">
+      <label for="ppVzhled">Vzhled poukazu</label>
+      <select id="ppVzhled">
+        <option value="klasicky">🎁 Klasický</option>
+        <option value="vanocni">🎄 Vánoční</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="ppHodnota">Hodnota</label>
+      <select id="ppHodnota">
+        <option value="500">500 Kč</option>
+        <option value="1000">1000 Kč</option>
+        <option value="1500">1500 Kč</option>
+        <option value="">nevyplněná – dopíšu ručně</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="ppKopie">Počet kusů</label>
+      <input type="number" id="ppKopie" min="1" max="50" step="1" value="1" style="max-width:100px">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modalPrazdnyPoukaz')">Zavřít</button>
+      <button class="btn btn-primary" onclick="tisknoutPrazdnyPoukaz()">🖨️ Tisknout</button>
     </div>
   </div>
 </div>
@@ -5553,15 +5585,54 @@ function upravitNovyPoukaz() {
   document.getElementById('pkKrokFormular').style.display = 'block';
 }
 
-function tisknoutPoukaz(sEanem = true) {
-  if (!poslednePoukazData) return;
-  if (poslednePoukazData.vzhled === 'vanocni') return tisknoutVanocniPoukaz(sEanem);
-  const p = poslednePoukazData;
+// Prázdné poukazy na akci: nic se neukládá, EAN/číslo a platnost zůstanou
+// prázdné k dopsání (nebo nalepení štítku) až při prodeji
+function otevritPrazdnyPoukaz() {
+  document.getElementById('ppVzhled').value = vychoziVzhledPoukazu();
+  openModal('modalPrazdnyPoukaz');
+}
+function tisknoutPrazdnyPoukaz() {
+  const kopie = parseInt(document.getElementById('ppKopie').value, 10);
+  if (!(kopie >= 1 && kopie <= 50)) { alert('Počet kusů musí být 1–50.'); return; }
+  const hodnota = document.getElementById('ppHodnota').value;
+  const p = { prazdny: true, hodnota: hodnota ? Number(hodnota) : null, vzhled: document.getElementById('ppVzhled').value, kod: '', ean: '' };
+  if (p.vzhled === 'vanocni') tisknoutVanocniPoukaz(false, p, kopie);
+  else tisknoutPoukaz(false, p, kopie);
+}
+
+function tisknoutPoukaz(sEanem = true, data = null, kopie = 1) {
+  const p = data || poslednePoukazData;
+  if (!p) return;
+  if (p.vzhled === 'vanocni') return tisknoutVanocniPoukaz(sEanem, p, kopie);
   const zobrazitEan = sEanem && !!p.ean;
   const proKoho = (p.poznamka && p.poznamka.startsWith('Pro:')) ? p.poznamka.replace('Pro:','').trim() : '';
+  const castka = p.hodnota ? `${Number(p.hodnota).toLocaleString('cs-CZ')} Kč` : '&nbsp;'.repeat(18) + ' Kč';
+  const platnost = p.prazdny ? '' : new Date(p.platnost_do).toLocaleDateString('cs-CZ');
+  // u prázdného poukazu řádek na číslo poukazu a místo na nalepení EAN štítku
+  const prazdneRadky = p.prazdny ? '<div class="detail-row"><span class="detail-label">ČÍSLO POUKAZU:</span><span class="detail-fill"></span></div>' : '';
+  const prazdnyEan = p.prazdny ? '<div class="ean-misto">místo pro EAN štítek</div>' : '';
+  const karta = `
+  <div class="card">
+    <div class="logo-side"><img src="logo.jpg" alt="Dětské krůčky"></div>
+    <div class="content-side">
+      <div class="title">DÁRKOVÝ POUKAZ</div>
+      <div class="value-row">V HODNOTĚ: <span class="value-amount">${castka}</span></div>
+      <div class="desc">Na nákup barefoot obuvi</div>
+      <div class="details">
+        <div class="detail-row"><span class="detail-label">PRO:</span><span class="detail-fill">${escH(proKoho)}</span></div>
+        <div class="detail-row"><span class="detail-label">VĚNOVÁNO OD:</span><span class="detail-fill"></span></div>
+        <div class="detail-row"><span class="detail-label">PLATNOST DO:</span><span class="detail-fill">${platnost}</span></div>
+        ${prazdneRadky}
+      </div>
+      <div class="footer-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+        ${zobrazitEan ? '<svg id="bc"></svg>' : prazdnyEan}
+        <div class="footer-web">Více na: <strong>www.detskekrucky.cz</strong></div>
+      </div>
+    </div>
+  </div>`;
   const zakladUrl = window.location.origin + window.location.pathname.replace('admin.html','');
   const pw = window.open('','_blank','width=760,height=460');
-  pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Poukaz ${escH(p.kod)}</title>
+  pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${p.prazdny ? 'Prázdné poukazy' : 'Poukaz ' + escH(p.kod)}</title>
   <base href="${zakladUrl}">
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></scr` + `ipt>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant:wght@700;800&family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
@@ -5619,25 +5690,12 @@ function tisknoutPoukaz(sEanem = true) {
     .detail-fill{ flex:1; border-bottom:1.5px dotted #9a8a76; min-height:1.3em; padding-left:4px; font-weight:700; color:#5a4a3a; }
     .footer-row{ display:flex; align-items:center; justify-content:space-between; margin-top:16px; }
     .footer-web{ font-size:0.82rem; color:#4a3a2c; }
+    .ean-misto{ width:220px; height:72px; border:1.5px dashed #b8a88f; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:0.72rem; color:#9a8a76; }
+    .seznam{ display:flex; flex-direction:column; align-items:center; gap:24px; }
+    .card{ break-inside:avoid; page-break-inside:avoid; }
     @media print { body{background:#fff;padding:0} .card{box-shadow:none} }
   </style></head><body>
-  <div class="card">
-    <div class="logo-side"><img src="logo.jpg" alt="Dětské krůčky"></div>
-    <div class="content-side">
-      <div class="title">DÁRKOVÝ POUKAZ</div>
-      <div class="value-row">V HODNOTĚ: <span class="value-amount">${Number(p.hodnota).toLocaleString('cs-CZ')} Kč</span></div>
-      <div class="desc">Na nákup barefoot obuvi</div>
-      <div class="details">
-        <div class="detail-row"><span class="detail-label">PRO:</span><span class="detail-fill">${escH(proKoho)}</span></div>
-        <div class="detail-row"><span class="detail-label">VĚNOVÁNO OD:</span><span class="detail-fill"></span></div>
-        <div class="detail-row"><span class="detail-label">PLATNOST DO:</span><span class="detail-fill">${new Date(p.platnost_do).toLocaleDateString('cs-CZ')}</span></div>
-      </div>
-      <div class="footer-row" style="flex-direction:column;align-items:flex-start;gap:8px">
-        ${zobrazitEan ? '<svg id="bc"></svg>' : ''}
-        <div class="footer-web">Více na: <strong>www.detskekrucky.cz</strong></div>
-      </div>
-    </div>
-  </div>
+  <div class="seznam">${karta.repeat(Math.max(1, kopie))}</div>
   <script>
     ${zobrazitEan ? `JsBarcode('#bc', '${escJs(p.ean)}', {format:'EAN13', width:1.8, height:48, fontSize:13, margin:0});` : ''}
     window.onload = () => setTimeout(()=>window.print(), 400);
@@ -5664,20 +5722,22 @@ const VANOCNI_POUKAZ_CSS = `
 document.head.insertAdjacentHTML('beforeend', '<style>' + VANOCNI_POUKAZ_CSS + '</style>');
 
 // barcodeId: kam se vykreslí EAN; null bez kódu poukazu = náhled před vydáním
+// p.prazdny = prázdný poukaz na akci (bez platnosti, čísla a EAN, k dopsání rukou)
 function htmlVanocnihoPoukazu(p, barcodeId) {
   const proKoho = (p.poznamka && p.poznamka.startsWith('Pro:')) ? p.poznamka.replace('Pro:','').trim() : '';
   const radek = (top, popisek, hodnota) =>
     `<div class="vp-radek" style="top:${top}%"><span class="vp-popisek">${popisek}</span> <span class="vp-hodnota">${escH(hodnota)}</span></div>`;
   const ean = barcodeId
     ? `<div class="vp-ean"><svg id="${barcodeId}"></svg></div>`
+    : p.prazdny ? '<div class="vp-ean"><div class="vp-ean-popisek">místo pro EAN štítek</div></div>'
     : (p.kod ? '' : '<div class="vp-ean"><div class="vp-ean-popisek">EAN kód se přidělí po vydání</div></div>');
   return `<div class="vp">
     <img class="vp-podklad" src="vanocni-poukaz.png" alt="Vánoční poukaz">
-    <div class="vp-castka">${Number(p.hodnota).toLocaleString('cs-CZ')}</div>
+    <div class="vp-castka">${p.hodnota ? Number(p.hodnota).toLocaleString('cs-CZ') : ''}</div>
     ${radek(66.4, 'Pro:', proKoho)}
     ${radek(72.5, 'Věnováno od:', '')}
-    ${radek(78.4, 'Platnost do:', new Date(p.platnost_do).toLocaleDateString('cs-CZ'))}
-    ${radek(84.0, 'Číslo poukazu:', p.kod || 'přidělí se po vydání')}
+    ${radek(78.4, 'Platnost do:', p.prazdny ? '' : new Date(p.platnost_do).toLocaleDateString('cs-CZ'))}
+    ${radek(84.0, 'Číslo poukazu:', p.prazdny ? '' : (p.kod || 'přidělí se po vydání'))}
     ${ean}
   </div>`;
 }
@@ -5688,13 +5748,13 @@ function prizpusobitEanSirce(svg) {
   svg.removeAttribute('width'); svg.removeAttribute('height');
 }
 
-function tisknoutVanocniPoukaz(sEanem = true) {
-  if (!poslednePoukazData) return;
-  const p = poslednePoukazData;
+function tisknoutVanocniPoukaz(sEanem = true, data = null, kopie = 1) {
+  const p = data || poslednePoukazData;
+  if (!p) return;
   const sKodem = sEanem && !!p.ean;
   const zakladUrl = window.location.origin + window.location.pathname.replace('admin.html','');
   const pw = window.open('','_blank','width=1000,height=720');
-  pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Vánoční poukaz ${escH(p.kod)}</title>
+  pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${p.prazdny ? 'Prázdné vánoční poukazy' : 'Vánoční poukaz ' + escH(p.kod)}</title>
   <base href="${zakladUrl}">
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></scr` + `ipt>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;800;900&display=swap" rel="stylesheet">
@@ -5704,9 +5764,12 @@ function tisknoutVanocniPoukaz(sEanem = true) {
     body { margin:0; padding:20px; background:#e8e2d5; }
     .obal { max-width:1100px; margin:0 auto; }
     ${VANOCNI_POUKAZ_CSS}
-    @media print { body { background:#fff; padding:0; } .obal { max-width:none; } }
+    .obal + .obal { margin-top:20px; }
+    @media print { body { background:#fff; padding:0; } .obal { max-width:none; } .obal + .obal { margin-top:0; break-before:page; page-break-before:always; } }
+    /* prázdné místo pro EAN: světlý rámeček, ať jde štítek nalepit nebo číslo dopsat */
+    .vp-ean-popisek { background:#fff; }
   </style></head><body>
-  <div class="obal">${htmlVanocnihoPoukazu(p, sKodem ? 'bc' : null)}</div>
+  ${`<div class="obal">${htmlVanocnihoPoukazu(p, sKodem ? 'bc' : null)}</div>`.repeat(Math.max(1, kopie))}
   <script>
     // Tisk až po načtení obrázku i knihovny na EAN, jinak by vyšel prázdný papír / bez kódu
     window.addEventListener('load', () => {
