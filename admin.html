@@ -893,7 +893,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           <div class="stat-card"><div class="stat-label">Tržby celkem</div><div class="stat-value" id="statTrzby">...</div><div class="stat-sub" id="reportTrzbyRozpad">bez zrušených</div></div>
           <div class="stat-card"><div class="stat-label">Tento měsíc</div><div class="stat-value" id="reportTrzbyMesic">...</div><div class="stat-sub" id="reportTrzbyMesicRozpad"></div></div>
           <div class="stat-card"><div class="stat-label">Objednávky z e-shopu</div><div class="stat-value" id="statObjednavky">...</div><div class="stat-sub stat-red" id="statNove"></div></div>
-          <div class="stat-card"><div class="stat-label">Hodnota skladu</div><div class="stat-value" id="statHodnotaSkladu">...</div><div class="stat-sub">v prodejních cenách</div></div>
+          <div class="stat-card"><div class="stat-label">Hodnota skladu</div><div class="stat-value" id="statHodnotaSkladu">...</div><div class="stat-sub">skladem, v prodejních cenách (bez „U dodavatele“)</div></div>
         </div>
         <div class="chart-wrap no-print">
           <div class="chart-title">📈 Tržby po měsících (posledních 6 měsíců)</div>
@@ -6390,7 +6390,8 @@ async function loadReporty() {
     document.getElementById('reportTrzbyRozpad').textContent = `prodejna ${kc(trzbyProdejna)} · e-shop ${kc(trzbyEshop)}`;
     document.getElementById('statObjednavky').textContent = objednavky.length;
     document.getElementById('statNove').textContent = objednavky.filter(o=>o.stav==='nova').length + ' nových';
-    const hodnotaSkladu = pole(celySklad).reduce((s,p)=>s+(Number(p.cena)||0)*(Number(p.pocet_kusu)||0),0);
+    // jen boty skutečně na prodejně – velikosti „U dodavatele“ se nepočítají
+    const hodnotaSkladu = pole(celySklad).filter(p=>p.dostupnost!=='dodavatel').reduce((s,p)=>s+(Number(p.cena)||0)*(Number(p.pocet_kusu)||0),0);
     document.getElementById('statHodnotaSkladu').textContent = kc(hodnotaSkladu);
 
     const mesice = {};
