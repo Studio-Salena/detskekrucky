@@ -1619,6 +1619,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <button class="btn btn-outline" onclick="closeModal('modalZobrazitPoukaz')">Zavřít</button>
       <button class="btn btn-outline" id="btnUctenkaPoukaz" style="display:none" onclick="tisknoutUctenkuPoukazu()">🧾 Účtenka za poukaz</button>
       <button class="btn btn-outline" onclick="tisknoutPoukazEAN()">🏷️ Jen EAN</button>
+      <button class="btn btn-outline" onclick="stitekEanPoukazu()" title="Štítek s EAN pro tiskárnu Fichero (30 × 15 mm)">🏷️ EAN na tiskárnu</button>
       <button class="btn btn-outline" onclick="tisknoutPoukaz(false)">🖨️ Poukaz bez EAN</button>
       <button class="btn btn-primary" onclick="tisknoutPoukaz(true)">🖨️ Poukaz s EAN</button>
     </div>
@@ -1790,7 +1791,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     <p style="color:var(--text-light);margin-top:0" id="stitekEanNazev"></p>
     <div id="stitekEanMsg"></div>
     <div style="text-align:center;margin:10px 0"><img id="stitekEanNahled" alt="Náhled štítku s EAN" style="width:240px;max-width:100%;border:1px dashed #bbb;border-radius:4px;background:#fff"></div>
-    <p style="font-size:0.82rem;color:var(--text-light);line-height:1.5">V aplikaci Fichero nastavte štítek <strong>30 × 15 mm</strong>, vložte tento obrázek a roztáhněte ho přes celý štítek. Počet kusů zadáte v aplikaci.</p>
+    <p style="font-size:0.82rem;color:var(--text-light);line-height:1.5">V aplikaci Fichero nastavte štítek <strong>30 × 15 mm</strong>, vložte tento obrázek a roztáhněte ho <strong>až k okrajům štítku</strong> (obrázek má okraje už v sobě). Počet kusů zadáte v aplikaci.</p>
     <p style="font-size:0.82rem;color:var(--text-light);line-height:1.5"><strong>Android:</strong> „Poslat do aplikace“ → Fichero, nebo Stáhnout a vložit z Galerie.<br><strong>iPhone:</strong> „Poslat do aplikace“ → Fichero nebo „Uložit obrázek“, případně podržte prst na náhledu → „Přidat do Fotek“; ve Fichero pak obrázek vložte z Fotek.</p>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modalStitekEan')">Zavřít</button>
@@ -2964,7 +2965,7 @@ function renderSklad(data) {
         <button class="btn btn-green btn-sm" onclick="rychleNaskladnit(${s.id},${s.velikost},'${escAttr(escJs(s.nazev))}')">+</button>
         <button class="btn btn-orange btn-sm" onclick="rychleOdecist(${s.id},${s.velikost},'${escAttr(escJs(s.nazev))}')">−</button>
         <button class="btn btn-outline btn-sm" onclick="upravitSkladPolozku(${s.id},${s.velikost},'${escAttr(escJs(s.nazev))}','${escAttr(escJs(s.ean||''))}',${s.delka_mm||0},${s.sirka_mm||0},'${escAttr(escJs(s.dostupnost||'skladem'))}')" title="Upravit velikost/EAN/rozměry">✏️</button>
-        ${s.ean ? `<button class="btn btn-outline btn-sm" onclick="otevritStitekEan('${escAttr(escJs(s.ean))}','${escAttr(escJs(s.nazev))}','${escAttr(escJs(String(s.velikost)))}')" title="Štítek s EAN pro tiskárnu Fichero">🏷️</button>` : ''}
+        ${s.ean ? `<button class="btn btn-outline btn-sm" onclick="otevritStitekEan('${escAttr(escJs(s.ean))}','${escAttr(escJs(`${s.nazev} · vel. ${s.velikost}`))}')" title="Štítek s EAN pro tiskárnu Fichero">🏷️</button>` : ''}
         <button class="btn btn-red btn-sm" onclick="smazatSkladPolozku(${s.id},${s.velikost},'${escAttr(escJs(s.nazev))}')">🗑️</button>
       </td>
     </tr>`;
@@ -2975,7 +2976,7 @@ function renderSklad(data) {
 // v mobilu). Obrázek má poměr štítku a dvojnásobek 203 dpi (480 × 240 px), aby ho
 // aplikace zmenšila bez rozmazání čar. Platný EAN-13/EAN-8 jako EAN, cokoli jiného
 // jako Code 128 – čtečka pak přečte přesně to, co je uložené ve skladu.
-const STITEK_EAN_PX = { sirka: 480, vyska: 240, okraj: 12 };
+const STITEK_EAN_PX = { sirka: 480, vyska: 240, okraj: 4 };
 function formatCaroveKodu(kod) {
   const k = String(kod ?? '').trim();
   const kontrolaSedi = d => {
@@ -2997,7 +2998,8 @@ function vykreslitStitekEan(kod) {
   const kodC = document.createElement('canvas');
   let vejde = false;
   for (let modul = 4; modul >= 1 && !vejde; modul--) {
-    JsBarcode(kodC, String(kod).trim(), { format, width: modul, height: 150, displayValue: true, font: 'Arial', fontSize: 34, textMargin: 2,
+    // čáry ~80 % výšky štítku, pod nimi tučné číslice
+    JsBarcode(kodC, String(kod).trim(), { format, width: modul, height: 188, displayValue: true, font: 'Arial', fontOptions: 'bold', fontSize: 42, textMargin: 2,
       margin: 0, marginLeft: zona[0] * modul, marginRight: zona[1] * modul, background: '#ffffff', lineColor: '#000000' });
     vejde = kodC.width <= sirka - 2 * okraj && kodC.height <= vyska - 2 * okraj;
   }
@@ -3012,10 +3014,10 @@ function vykreslitStitekEan(kod) {
   return c;
 }
 let stitekEanSoubor = null;
-function otevritStitekEan(ean, nazev, velikost) {
+function otevritStitekEan(ean, popis) {
   const msg = document.getElementById('stitekEanMsg');
   const img = document.getElementById('stitekEanNahled');
-  document.getElementById('stitekEanNazev').textContent = `${nazev} · vel. ${velikost} · EAN ${ean}`;
+  document.getElementById('stitekEanNazev').textContent = `${popis} · EAN ${ean}`;
   msg.innerHTML = '';
   img.removeAttribute('src');
   stitekEanSoubor = null;
@@ -3027,6 +3029,12 @@ function otevritStitekEan(ean, nazev, velikost) {
   c.toBlob(b => { if (b) stitekEanSoubor = new File([b], `ean-${String(ean).trim().replace(/[^\w-]/g, '_')}.png`, { type: 'image/png' }); }, 'image/png');
   const lzeSdilet = !!(navigator.canShare && navigator.canShare({ files: [new File([''], 'x.png', { type: 'image/png' })] }));
   document.getElementById('stitekEanSdilet').style.display = lzeSdilet ? '' : 'none';
+}
+function stitekEanPoukazu() {
+  const p = poslednePoukazData;
+  if (!p) return;
+  if (!p.ean) { alert('Tento poukaz nemá EAN kód.'); return; }
+  otevritStitekEan(p.ean, `Poukaz ${p.kod} · ${Number(p.hodnota).toLocaleString('cs-CZ')} Kč`);
 }
 async function sdiletStitekEan() {
   if (!stitekEanSoubor) return;
@@ -4843,7 +4851,10 @@ let mobilniSkenCil = { input: 'eanInput', callback: 'hledatEan' };
 function otevritMobilniSken(inputId = 'eanInput', callbackFn = 'hledatEan') {
   mobilniSkenCil = { input: inputId, callback: callbackFn };
   mobilniSkenId = 'r' + Date.now() + Math.random().toString(36).slice(2, 8);
-  const url = window.location.origin + window.location.pathname.replace('admin.html', 'mobilni-sken.html') + '?session=' + mobilniSkenId;
+  // stránka vedle adminu – funguje pro …/admin.html i …/admin (bez .html, GitHub Pages)
+  const adresa = new URL('mobilni-sken.html', window.location.href);
+  adresa.searchParams.set('session', mobilniSkenId);
+  const url = adresa.href;
 
   document.getElementById('mobilniSkenQR').innerHTML =
     `<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}" style="width:200px;height:200px;border-radius:8px" alt="QR kód">`;
