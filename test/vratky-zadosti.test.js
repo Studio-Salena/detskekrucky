@@ -412,3 +412,34 @@ test('B3.2: e-shop zobrazuje jméno v kroku 2 jen pro čtení přes escHtml, bez
   const odeslani = eshop.slice(eshop.indexOf('async function odeslatZadostVratky'), eshop.indexOf('async function odeslatZadostVratky') + 2500);
   assert.doesNotMatch(odeslani, /jmeno/);
 });
+
+// ═══ B3.4 - texty online formuláře označují odstoupení od smlouvy ═══
+
+test('B3.4: okno má nadpis a finální tlačítko odstoupení od smlouvy, potvrzení po odeslání', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const eshop = fs.readFileSync(path.join(__dirname, '..', 'eshop.html'), 'utf8');
+  const modal = eshop.slice(eshop.indexOf('id="modalVratky"'), eshop.indexOf('<!-- POUKAZY MODAL -->'));
+  // jen text bez značek a s jednou mezerou - odolné vůči změnám formátování HTML
+  const text = html => html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+
+  const nadpis = modal.match(/<h3[^>]*>([\s\S]*?)<\/h3>/);
+  assert.ok(nadpis, 'okno nemá nadpis');
+  assert.equal(text(nadpis[1]).trim(), 'Odstoupení od smlouvy');
+
+  // úvod = první odstavec hned za nadpisem okna (ne kdekoli v souboru)
+  const uvod = modal.match(/<\/h3>\s*<p[^>]*>([\s\S]*?)<\/p>/);
+  assert.ok(uvod, 'okno nemá úvodní text za nadpisem');
+  assert.equal(text(uvod[1]).trim(), 'Vyplňte údaje k objednávce, ověřte objednávku a vyberte položky, u kterých chcete odstoupit od smlouvy.');
+  assert.doesNotMatch(text(modal), /totožnost/);
+
+  const tlacitko = modal.match(/<button[^>]*onclick="odeslatZadostVratky\(\)"[^>]*>([\s\S]*?)<\/button>/);
+  assert.ok(tlacitko, 'chybí odesílací tlačítko');
+  assert.equal(text(tlacitko[1]).trim(), 'Potvrdit odstoupení od smlouvy');
+  assert.doesNotMatch(text(modal), /Odeslat žádost o vrácení/);
+
+  const start = eshop.indexOf('async function odeslatZadostVratky');
+  const odeslani = eshop.slice(start, eshop.indexOf('function prepnoutTab', start));
+  assert.match(odeslani, /class="msg msg-success">\s*Odstoupení od smlouvy bylo odesláno\.\s+Potvrzení vám zašleme e-mailem\.\s*</);
+  assert.doesNotMatch(odeslani, /Žádost byla odeslána/);
+});

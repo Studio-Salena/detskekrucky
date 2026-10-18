@@ -1438,8 +1438,8 @@ body:has(.katalog-filtry.open) #back-to-top{display:none}
 <!-- VRATKY MODAL -->
 <div class="modal-overlay" id="modalVratky">
   <div class="modal" style="max-width:520px">
-    <h3 style="font-family:'Dancing Script',cursive;color:var(--brown);font-size:1.6rem;margin-bottom:8px">↩️ Vrátit zboží</h3>
-    <p style="color:var(--text-light);font-size:0.85rem;margin-bottom:20px">Zadejte číslo objednávky a e-mail, kterým jste objednávali – najdeme vaši objednávku a vy vyberete, co chcete vrátit.</p>
+    <h3 style="font-family:'Dancing Script',cursive;color:var(--brown);font-size:1.6rem;margin-bottom:8px">Odstoupení od smlouvy</h3>
+    <p style="color:var(--text-light);font-size:0.85rem;margin-bottom:20px">Vyplňte údaje k objednávce, ověřte objednávku a vyberte položky, u kterých chcete odstoupit od smlouvy.</p>
 
     <div id="vratkyKrok1">
       <div id="vratkyOveritMsg"></div>
@@ -1452,15 +1452,15 @@ body:has(.katalog-filtry.open) #back-to-top{display:none}
       <div id="vratkyOdeslatMsg"></div>
       <!-- Jméno ze snímku objednávky jen k potvrzení (B3.2) - needitovatelné, server ho bere sám -->
       <div id="vratkyJmeno" style="background:var(--cream);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:0.9rem"></div>
-      <p style="font-weight:700;margin-bottom:10px">Vyberte položky k vrácení:</p>
+      <p style="font-weight:700;margin-bottom:10px">Vyberte položky, kterých se odstoupení týká:</p>
       <div id="vratkyPolozkySeznam" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px"></div>
-      <div class="form-group"><label>Důvod vrácení</label><textarea id="vratkyDuvod" rows="3" placeholder="Např. nesedí velikost..." style="width:100%;padding:10px;border:2px solid var(--tan-light);border-radius:10px;font-family:inherit;resize:vertical"></textarea></div>
+      <div class="form-group"><label>Důvod vrácení (nepovinné)</label><textarea id="vratkyDuvod" rows="3" placeholder="Např. nesedí velikost..." style="width:100%;padding:10px;border:2px solid var(--tan-light);border-radius:10px;font-family:inherit;resize:vertical"></textarea></div>
       <div class="form-group"><label>Telefon (nepovinné, pro rychlejší domluvu)</label><input type="text" id="vratkyTelefon" placeholder="+420 777 123 456"></div>
       <div class="honeypot-pole" aria-hidden="true">
         <label for="vratkyWeb">Nevyplňujte toto pole</label>
         <input type="text" id="vratkyWeb" tabindex="-1" autocomplete="off">
       </div>
-      <button onclick="odeslatZadostVratky()" style="width:100%;padding:14px;background:var(--brown);color:#fff;border:none;border-radius:12px;font-family:'Nunito',sans-serif;font-weight:700;font-size:1rem;cursor:pointer;margin-bottom:10px">Odeslat žádost o vrácení</button>
+      <button onclick="odeslatZadostVratky()" style="width:100%;padding:14px;background:var(--brown);color:#fff;border:none;border-radius:12px;font-family:'Nunito',sans-serif;font-weight:700;font-size:1rem;cursor:pointer;margin-bottom:10px">Potvrdit odstoupení od smlouvy</button>
     </div>
 
     <button onclick="closeModal('modalVratky')" style="width:100%;padding:12px;background:none;border:2px solid var(--tan);border-radius:12px;font-family:'Nunito',sans-serif;font-weight:700;font-size:0.9rem;cursor:pointer;color:var(--text-light)">Zavřít</button>
@@ -4010,7 +4010,7 @@ async function overitObjednavkuVratky() {
           <span style="font-size:0.85rem;color:var(--text-light)">Objednáno: ${p.pocet} ks × ${Number(p.cena).toLocaleString('cs-CZ')} Kč</span>
         </div>
         <div>
-          <label style="font-size:0.8rem">Vrátit ks:</label>
+          <label style="font-size:0.8rem">Počet kusů k vrácení:</label>
           <input type="number" class="vr-pocet" data-idx="${i}" value="${p.pocet}" min="1" max="${p.pocet}" style="width:60px;padding:6px;border:2px solid var(--tan-light);border-radius:8px">
         </div>
       </div>
@@ -4108,9 +4108,9 @@ async function odeslatZadostVratky() {
     if (pocet > 0) vybranePolozky.push({ produkt_id: p.produkt_id, nazev: p.nazev, velikost: p.velikost, pocet, cena: p.cena });
   });
 
-  if (!vybranePolozky.length) { msg.innerHTML = '<div class="msg msg-error">Vyberte prosím aspoň jednu položku k vrácení.</div>'; return; }
+  if (!vybranePolozky.length) { msg.innerHTML = '<div class="msg msg-error">Vyberte prosím alespoň jednu položku, které se odstoupení týká.</div>'; return; }
 
-  msg.innerHTML = '<div style="color:var(--text-light)">⏳ Odesílám žádost…</div>';
+  msg.innerHTML = '<div style="color:var(--text-light)">⏳ Odesílám odstoupení…</div>';
   try {
     const res = await fetch(API + '/vratky-zadosti', {
       method: 'POST', headers: {'Content-Type':'application/json'},
@@ -4124,7 +4124,7 @@ async function odeslatZadostVratky() {
       })
     });
     if (res.ok) {
-      msg.innerHTML = '<div class="msg msg-success">✅ Žádost byla odeslána! Ozveme se vám co nejdřív s dalším postupem.</div>';
+      msg.innerHTML = '<div class="msg msg-success">Odstoupení od smlouvy bylo odesláno. Potvrzení vám zašleme e-mailem.</div>';
       setTimeout(() => {
         closeModal('modalVratky');
         document.getElementById('vratkyKrok1').style.display = 'block';
@@ -4137,7 +4137,7 @@ async function odeslatZadostVratky() {
       }, 2500);
     } else {
       const data = await res.json().catch(()=>({}));
-      msg.innerHTML = `<div class="msg msg-error">${data.chyba || 'Chyba při odesílání žádosti.'}</div>`;
+      msg.innerHTML = `<div class="msg msg-error">${data.chyba || 'Odstoupení se nepodařilo odeslat. Zkuste to prosím znovu.'}</div>`;
     }
   } catch (e) {
     msg.innerHTML = '<div class="msg msg-error">Chyba spojení, zkuste to prosím znovu.</div>';
