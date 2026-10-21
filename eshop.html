@@ -1358,7 +1358,7 @@ body:has(.katalog-filtry.open) #back-to-top{display:none}
       <div class="form-group">
         <label for="chPoukazKod">Mám dárkový poukaz</label>
         <div style="display:flex;gap:8px">
-          <input type="text" id="chPoukazKod" placeholder="DK-XXXX-XXXX">
+          <input type="text" id="chPoukazKod" placeholder="Kód nebo číslice EAN z poukazu" inputmode="text">
           <button type="button" onclick="uplatnitPoukazEshop()" style="padding:0 16px;background:var(--sage);color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;white-space:nowrap">Uplatnit</button>
         </div>
         <div id="chPoukazMsg" style="margin-top:6px"></div>
@@ -3652,7 +3652,7 @@ function potvrzeniObjednavkyHtml({ cislo, celkem, email, platba }) {
 async function uplatnitPoukazEshop() {
   const kod = document.getElementById('chPoukazKod').value.trim();
   const msg = document.getElementById('chPoukazMsg');
-  if (!kod) { msg.innerHTML = '<div class="msg msg-error">Zadejte kód poukazu.</div>'; return; }
+  if (!kod) { msg.innerHTML = '<div class="msg msg-error">Zadejte kód poukazu nebo číslice pod čárovým kódem.</div>'; return; }
   try {
     const res = await fetch(API + '/poukazy/overit/' + encodeURIComponent(kod));
     const data = await res.json();
