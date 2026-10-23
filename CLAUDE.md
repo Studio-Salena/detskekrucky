@@ -60,3 +60,4 @@ Web a e-shop pro obchod s barefoot obuví pro děti (majitelka: Monika Škarpich
 
 - Doplnit rozměry (mm) u modelů, které je nemají – bez nich průvodce nabízí poradnu
 - GLS: až bude smluvní ceník a přístupy k MyGLS
+- **Spuštění e-shopu:** do té doby je `eshop.html` zamčený (blok v `<head>` přesměruje na `eshop-brzy.html`, náhled přes `eshop.html?nahled=…`, klíč je v komentáři u bloku) a má `noindex`. Při spuštění oboje odstranit a tlačítko Eshop na `index.html` přepnout z `eshop-brzy.html` na `eshop.html`.

@@ -4,6 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dětské krůčky - Barefoot obuv</title>
+<!-- E-shop zatím není spuštěný: bez náhledového klíče přesměrovat na eshop-brzy.html.
+     Náhled: eshop.html?nahled=VhnxYyqF (prohlížeč si ho zapamatuje). Ověření účtu z e-mailu (?overeni=) projde.
+     PŘI SPUŠTĚNÍ E-SHOPU tenhle blok i meta robots odstranit. -->
+<meta name="robots" content="noindex">
+<script>
+(function () {
+  try {
+    var q = new URLSearchParams(location.search);
+    if (q.get('nahled') === 'VhnxYyqF') localStorage.setItem('eshopNahled', '1');
+    if (localStorage.getItem('eshopNahled') === '1' || q.has('overeni')) return;
+  } catch (e) {}
+  location.replace('eshop-brzy.html');
+})();
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,400;0,600;1,400&family=Dancing+Script:wght@600;700&family=Nunito:wght@300;400;700;800&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
