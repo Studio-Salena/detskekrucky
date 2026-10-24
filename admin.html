@@ -688,6 +688,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
             <span class="pill" data-filtr="vycerpane" onclick="filtrovatPoukazy('vycerpane')">✔️ Vyčerpané</span>
             <span class="pill" data-filtr="expirovane" onclick="filtrovatPoukazy('expirovane')">⏰ Expirované</span>
             <span class="pill" data-filtr="zrusene" onclick="filtrovatPoukazy('zrusene')">❌ Zrušené</span>
+            <span class="pill" data-filtr="dar" onclick="filtrovatPoukazy('dar')">🎁 Darované</span>
           </div>
         </div>
         <div id="poukazyTable"><div class="loading">Načítám...</div></div>
@@ -1531,6 +1532,15 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     <div id="poukazMsg"></div>
     <div id="pkKrokFormular">
     <div class="form-group">
+      <label for="pkDruh">Druh poukazu</label>
+      <select id="pkDruh" onchange="prepnoutDruhPoukazu()">
+        <option value="prodej">🛍️ Prodej (EAN 21…)</option>
+        <option value="dar">🎁 Dar – zdarma, nepočítá se do tržeb (EAN 22…)</option>
+        <option value="akce">🎪 Akce – prázdný tištěný poukaz (EAN 23…)</option>
+      </select>
+      <div id="pkDruhPozn" style="font-size:0.78rem;color:var(--text-light);margin-top:4px"></div>
+    </div>
+    <div class="form-group">
       <label>Vzhled poukazu</label>
       <select id="pkVzhled">
         <option value="klasicky">🎁 Klasický</option>
@@ -1545,14 +1555,14 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <option value="1500">1500 Kč</option>
       </select>
     </div>
-    <div class="form-group">
+    <div class="form-group" id="pkKdeSkupina">
       <label>Prodáno kde</label>
       <select id="pkKde" onchange="prepnoutPoukazKde()">
         <option value="prodejna">Prodejna</option>
         <option value="eshop">E-shop</option>
       </select>
     </div>
-    <div class="form-group">
+    <div class="form-group" id="pkPlatbaSkupina">
       <label>Jak zaplatila</label>
       <select id="pkPlatba">
         <option value="hotovost">💵 Hotovost</option>
@@ -1563,8 +1573,8 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       </select>
       <div style="font-size:0.78rem;color:var(--text-light);margin-top:4px">Podle tohohle vznikne i záznam prodeje a účtenka – peníze se rovnou započítají do tržeb.</div>
     </div>
-    <div class="form-group"><label>Jméno kupujícího (nepovinné)</label><input type="text" id="pkJmeno" placeholder="Jana Nová"></div>
-    <div class="form-group"><label>E-mail kupujícího (nepovinné)</label><input type="email" id="pkEmail" placeholder="jana@email.cz"></div>
+    <div class="form-group"><label for="pkJmeno" id="pkJmenoPopis">Jméno kupujícího (nepovinné)</label><input type="text" id="pkJmeno" placeholder="Jana Nová"></div>
+    <div class="form-group"><label for="pkEmail" id="pkEmailPopis">E-mail kupujícího (nepovinné)</label><input type="email" id="pkEmail" placeholder="jana@email.cz"></div>
     <div class="form-group"><label>Poznámka</label><input type="text" id="pkPoznamka" placeholder="Volitelné"></div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modalVydatPoukaz')">Zrušit</button>
@@ -1586,7 +1596,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
 <div class="modal-overlay" id="modalPrazdnyPoukaz">
   <div class="modal" style="max-width:480px">
     <h3>🖨️ Prázdné poukazy k tisku</h3>
-    <p style="font-size:0.85rem;color:var(--text-light);line-height:1.55;margin-bottom:14px">Poukazy na akci: vytisknou se <strong>bez EAN a data platnosti</strong> a nic se neukládá. Při prodeji poukaz vydejte tady v adminu (+ Vydat poukaz), dopište datum platnosti a nalepte EAN štítek („🏷️ EAN na tiskárnu“ nebo „🏷️ Jen EAN“ v detailu poukazu). <strong>Dokud poukaz není vydaný v adminu, nejde uplatnit.</strong></p>
+    <p style="font-size:0.85rem;color:var(--text-light);line-height:1.55;margin-bottom:14px">Poukazy na akci: vytisknou se <strong>bez EAN a data platnosti</strong> a nic se neukládá. Při prodeji poukaz vydejte tady v adminu (+ Vydat poukaz, druh <strong>🎪 Akce</strong> – EAN začne 23…), dopište datum platnosti a nalepte EAN štítek („🏷️ EAN na tiskárnu“ nebo „🏷️ Jen EAN“ v detailu poukazu). <strong>Dokud poukaz není vydaný v adminu, nejde uplatnit.</strong></p>
     <div class="form-group">
       <label for="ppVzhled">Vzhled poukazu</label>
       <select id="ppVzhled">
@@ -5470,6 +5480,7 @@ function poukazyPodleFiltru(seznam) {
   if (poukazyFiltr === 'vycerpane') return seznam.filter(p => p.stav === 'pouzity');
   if (poukazyFiltr === 'expirovane') return seznam.filter(p => p.stav === 'aktivni' && poPlatnosti(p));
   if (poukazyFiltr === 'zrusene') return seznam.filter(p => p.stav === 'zruseny');
+  if (poukazyFiltr === 'dar') return seznam.filter(p => p.druh === 'dar');
   return seznam;
 }
 function filtrovatPoukazy(f) {
@@ -5496,9 +5507,10 @@ async function loadPoukazy() {
     } else {
       const stavPopisek = {aktivni:'<span class="badge badge-ok">✅ Aktivní</span>', pouzity:'<span class="badge badge-zruseno">✔️ Vyčerpaný</span>', zruseny:'<span class="badge badge-zruseno">❌ Zrušený</span>'};
       document.getElementById('poukazyTable').innerHTML = `
-        <table><thead><tr><th>Kód</th><th>Hodnota</th><th>Zůstatek</th><th>Platnost do</th><th>Kde</th><th>Kupující</th><th>Stav</th><th>Akce</th></tr></thead>
+        <table><thead><tr><th>Kód</th><th>Druh</th><th>Hodnota</th><th>Zůstatek</th><th>Platnost do</th><th>Kde</th><th>Kupující</th><th>Stav</th><th>Akce</th></tr></thead>
         <tbody>${zobrazit.map(p=>`<tr>
-          <td><code style="background:var(--cream);padding:2px 6px;border-radius:4px">${escH(p.kod)}</code></td>
+          <td><code style="background:var(--cream);padding:2px 6px;border-radius:4px">${escH(p.kod)}</code><br><small style="color:var(--text-light)">${escH(p.ean)}</small></td>
+          <td>${DRUHY_POUKAZU[p.druh] || DRUHY_POUKAZU.prodej}</td>
           <td><strong>${Number(p.hodnota).toLocaleString('cs-CZ')} Kč</strong></td>
           <td><strong style="color:${Number(p.zustatek)>0?'var(--sage)':'var(--text-light)'}">${Number(p.zustatek).toLocaleString('cs-CZ')} Kč</strong></td>
           <td>${new Date(p.platnost_do).toLocaleDateString('cs-CZ')}</td>
@@ -5507,6 +5519,7 @@ async function loadPoukazy() {
           <td>${new Date(p.platnost_do) < new Date() && p.stav==='aktivni' ? '<span class="badge badge-zruseno">⏰ Expirovaný</span>' : (stavPopisek[p.stav]||p.stav)}</td>
           <td style="display:flex;gap:4px">
             <button class="btn btn-outline btn-sm" onclick="zobrazitPoukazDetail(${p.id})">🖨️</button>
+            ${p.druh !== 'dar' ? `<button class="btn btn-outline btn-sm" title="Označit jako dar (nepočítá se do tržeb)" onclick="oznacitPoukazDar(${p.id}, ${!!p.vydano_prodej_id})">🎁</button>` : ''}
             <button class="btn btn-red btn-sm" onclick="smazatPoukaz(${p.id}, ${!!p.vydano_prodej_id})">🗑️</button>
           </td>
         </tr>`).join('')}</tbody></table>`;
@@ -5514,6 +5527,18 @@ async function loadPoukazy() {
   } catch(e) { document.getElementById('poukazyTable').innerHTML = '<div class="error-msg">Chyba načítání</div>'; }
 
   loadPoukazyZadosti();
+}
+
+// Dodatečně přeznačit vydaný poukaz na dar (EAN zůstane, záznam prodeje se smaže)
+async function oznacitPoukazDar(id, maProdej) {
+  const varovani = maProdej ? '\n\nK poukazu je zaevidovaný prodej (účtenka) – smaže se a jeho částka zmizí z tržeb.' : '';
+  if (!confirm('Označit poukaz jako dar? Nebude se počítat do tržeb ani do zisku, ani až ho někdo utratí.' + varovani)) return;
+  try {
+    const res = await adminFetch(API + '/poukazy/' + id + '/dar', { method: 'PATCH' });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); alert('❌ ' + (e.chyba || 'Nepodařilo se.')); return; }
+  } catch (e) { alert('❌ Chyba spojení'); return; }
+  loadPoukazy();
+  loadProdejna();
 }
 
 async function loadPoukazyZadosti() {
@@ -5585,8 +5610,29 @@ function otevritVydatPoukaz() {
   document.getElementById('pkKde').value = 'prodejna';
   document.getElementById('pkPlatba').value = 'hotovost';
   document.getElementById('pkVzhled').value = vychoziVzhledPoukazu();
+  document.getElementById('pkDruh').value = 'prodej';
+  prepnoutDruhPoukazu();
   upravitNovyPoukaz();
   openModal('modalVydatPoukaz');
+}
+
+// Dar = bez platby (nepočítá se do tržeb), akce = prodej na akci, štítek s EAN 23…
+const DRUHY_POUKAZU = { prodej: '🛍️ Prodej', dar: '🎁 Dar', akce: '🎪 Akce' };
+function prepnoutDruhPoukazu() {
+  const druh = document.getElementById('pkDruh').value;
+  const dar = druh === 'dar';
+  document.getElementById('pkKdeSkupina').style.display = dar ? 'none' : '';
+  document.getElementById('pkPlatbaSkupina').style.display = dar ? 'none' : '';
+  if (dar) { document.getElementById('pkKde').value = 'prodejna'; document.getElementById('pkPlatba').value = ''; }
+  else if (!document.getElementById('pkPlatba').value) prepnoutPoukazKde();
+  if (druh === 'akce') { document.getElementById('pkKde').value = 'prodejna'; prepnoutPoukazKde(); }
+  document.getElementById('pkJmenoPopis').textContent = dar ? 'Komu je darovaný (nepovinné)' : 'Jméno kupujícího (nepovinné)';
+  document.getElementById('pkEmailPopis').textContent = dar ? 'E-mail obdarovaného (nepovinné)' : 'E-mail kupujícího (nepovinné)';
+  document.getElementById('pkDruhPozn').textContent = {
+    prodej: 'Běžný prodej poukazu – peníze se započítají do tržeb.',
+    dar: 'Poukaz zdarma (soutěž, reklamace, poděkování…). Nezapočítá se do tržeb ani do zisku – ani když ho obdarovaný utratí.',
+    akce: 'Prázdný poukaz vytištěný předem a prodaný na akci – po vydání na něj nalepte EAN štítek (23…).'
+  }[druh];
 }
 
 // Při prodeji na prodejně zákazník obvykle platí hned (hotovost), přes e-shop skoro vždy převodem
@@ -5671,8 +5717,9 @@ function dataNovehoPoukazu() {
     kupujici_jmeno: document.getElementById('pkJmeno').value.trim(),
     kupujici_email: document.getElementById('pkEmail').value.trim(),
     poznamka: document.getElementById('pkPoznamka').value.trim(),
-    platba: document.getElementById('pkPlatba').value || null,
-    vzhled: document.getElementById('pkVzhled').value
+    platba: document.getElementById('pkDruh').value === 'dar' ? null : (document.getElementById('pkPlatba').value || null),
+    vzhled: document.getElementById('pkVzhled').value,
+    druh: document.getElementById('pkDruh').value
   };
 }
 
@@ -5688,8 +5735,9 @@ function zobrazitNahledNovehoPoukazu() {
   platnostDo.setFullYear(platnostDo.getFullYear() + 1);
   document.getElementById('pkNahledKarta').innerHTML = htmlKartyPoukazu({ ...d, platnost_do: platnostDo }, null);
   const platbaText = document.getElementById('pkPlatba').selectedOptions[0].textContent;
-  document.getElementById('pkNahledShrnuti').innerHTML =
-    `Prodáno: <strong>${d.zakoupeno_kde === 'eshop' ? 'E-shop' : 'Prodejna'}</strong> · Platba: <strong>${escH(platbaText)}</strong>` +
+  document.getElementById('pkNahledShrnuti').innerHTML = `Druh: <strong>${DRUHY_POUKAZU[d.druh]}</strong> · ` + (d.druh === 'dar'
+    ? 'Zdarma – nezapočítá se do tržeb'
+    : `Prodáno: <strong>${d.zakoupeno_kde === 'eshop' ? 'E-shop' : 'Prodejna'}</strong> · Platba: <strong>${escH(platbaText)}</strong>`) +
     (d.kupujici_jmeno || d.kupujici_email ? `<br>Kupující: <strong>${escH([d.kupujici_jmeno, d.kupujici_email].filter(Boolean).join(', '))}</strong>` : '');
   document.getElementById('poukazMsg').innerHTML = '';
   document.getElementById('pkKrokFormular').style.display = 'none';
@@ -6446,9 +6494,13 @@ async function loadReporty() {
     const aktivni = seznam.filter(p=>p.stav==='aktivni');
     const poPlatnosti = aktivni.filter(p=>new Date(p.platnost_do) < ted);
     document.getElementById('reportPoukazyVydano').textContent = kc(seznam.reduce((s,p)=>s+Number(p.hodnota),0));
-    document.getElementById('reportPoukazyVydanoSub').textContent = pocetSlovy(seznam.length, ['poukaz', 'poukazy', 'poukazů']);
+    const darovane = seznam.filter(p=>p.druh==='dar');
+    document.getElementById('reportPoukazyVydanoSub').textContent = pocetSlovy(seznam.length, ['poukaz', 'poukazy', 'poukazů'])
+      + (darovane.length ? ` · z toho darem ${kc(darovane.reduce((s,p)=>s+Number(p.hodnota),0))}` : '');
     document.getElementById('reportPoukazyUplatneno').textContent = kc(pouziti.reduce((s,x)=>s+Number(x.castka),0));
-    document.getElementById('reportPoukazyUplatnenoSub').textContent = pocetSlovy(pouziti.length, ['uplatnění', 'uplatnění', 'uplatnění']);
+    const uplatnenoDarem = pouziti.filter(x=>x.darem).reduce((s,x)=>s+Number(x.castka),0);
+    document.getElementById('reportPoukazyUplatnenoSub').textContent = pocetSlovy(pouziti.length, ['uplatnění', 'uplatnění', 'uplatnění'])
+      + (uplatnenoDarem ? ` · z toho darované ${kc(uplatnenoDarem)} (mimo tržby)` : '');
     document.getElementById('reportPoukazyZustatek').textContent = kc(aktivni.reduce((s,p)=>s+Number(p.zustatek),0));
     document.getElementById('reportPoukazyZustatekSub').textContent = poPlatnosti.length
       ? `z toho ${kc(poPlatnosti.reduce((s,p)=>s+Number(p.zustatek),0))} po platnosti`

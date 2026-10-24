@@ -9,6 +9,11 @@ const { odeslat_upozorneni_zadost_poukaz, odeslat_poukaz_zakaznikovi } = require
 const POVOLENE_HODNOTY = [500, 1000, 1500];
 // Vzhled tištěného poukazu - volí se při vydání, ať jde i později vytisknout stejně
 const POVOLENE_VZHLEDY = ['klasicky', 'vanocni'];
+// Druh poukazu: prodej (zaplacený), dar (daný zdarma - nepočítá se do tržeb ani
+// při vydání, ani při uplatnění) a akce (prázdný tištěný poukaz prodaný na akci).
+// Druh je vidět i z EAN: 21… prodej, 22… dar, 23… akce (starší poukazy mají 20…).
+const PREFIX_EAN = { prodej: '21', dar: '22', akce: '23' };
+const POVOLENE_DRUHY = Object.keys(PREFIX_EAN);
 
 async function initTabulky() {
   try {
@@ -29,6 +34,7 @@ async function initTabulky() {
       );
       ALTER TABLE darkove_poukazy ADD COLUMN IF NOT EXISTS vydano_prodej_id INTEGER REFERENCES prodejna_prodeje(id) ON DELETE SET NULL;
       ALTER TABLE darkove_poukazy ADD COLUMN IF NOT EXISTS vzhled TEXT NOT NULL DEFAULT 'klasicky';
+      ALTER TABLE darkove_poukazy ADD COLUMN IF NOT EXISTS druh TEXT NOT NULL DEFAULT 'prodej';
       CREATE TABLE IF NOT EXISTS poukazy_pouziti (
         id SERIAL PRIMARY KEY,
         poukaz_id INTEGER REFERENCES darkove_poukazy(id) ON DELETE CASCADE,
@@ -66,9 +72,9 @@ function vygenerovatKod() {
   return `DK-${c1}-${c2}`;
 }
 
-// Vygeneruje platný EAN-13 kód (prefix 20 = interní/vlastní použití dle GS1)
-function vygenerovatEan() {
-  let zaklad = '20';
+// Vygeneruje platný EAN-13 kód (prefix 2x = interní/vlastní použití dle GS1, druhá číslice = druh poukazu)
+function vygenerovatEan(druh = 'prodej') {
+  let zaklad = PREFIX_EAN[druh];
   for (let i = 0; i < 10; i++) zaklad += Math.floor(Math.random() * 10);
   let soucet = 0;
   for (let i = 0; i < 12; i++) {
@@ -144,6 +150,7 @@ router.post('/zadost', async (req, res) => {
 router.post('/', vyzadovatAdmina, async (req, res) => {
   const { hodnota, zakoupeno_kde, kupujici_jmeno, kupujici_email, poznamka, platba } = req.body;
   const vzhled = req.body.vzhled || 'klasicky';
+  const druh = req.body.druh || 'prodej';
   const hodnotaCislo = Number(hodnota);
   if (!POVOLENE_HODNOTY.includes(hodnotaCislo)) {
     return res.status(400).json({ chyba: `Hodnota poukazu musí být jedna z: ${POVOLENE_HODNOTY.join(', ')} Kč.` });
@@ -154,13 +161,19 @@ router.post('/', vyzadovatAdmina, async (req, res) => {
   if (!POVOLENE_VZHLEDY.includes(vzhled)) {
     return res.status(400).json({ chyba: 'Neplatný vzhled poukazu.' });
   }
+  if (!POVOLENE_DRUHY.includes(druh)) {
+    return res.status(400).json({ chyba: 'Neplatný druh poukazu.' });
+  }
+  if (druh === 'dar' && platba) {
+    return res.status(400).json({ chyba: 'Darovaný poukaz se neplatí – nevybírejte platbu.' });
+  }
 
   const client = await pool.connect();
   try {
     let kod, ean, pokus = 0;
     while (true) {
       kod = vygenerovatKod();
-      ean = vygenerovatEan();
+      ean = vygenerovatEan(druh);
       const existuje = await client.query('SELECT id FROM darkove_poukazy WHERE kod = $1 OR ean = $2', [kod, ean]);
       if (existuje.rows.length === 0) break;
       if (++pokus > 10) { client.release(); return res.status(500).json({ chyba: 'Nepodařilo se vygenerovat unikátní kód, zkuste to znovu.' }); }
@@ -171,9 +184,9 @@ router.post('/', vyzadovatAdmina, async (req, res) => {
     await client.query('BEGIN');
 
     let poukaz = (await client.query(
-      `INSERT INTO darkove_poukazy (kod, ean, hodnota, zustatek, platnost_do, stav, zakoupeno_kde, kupujici_jmeno, kupujici_email, poznamka, vzhled)
-       VALUES ($1,$2,$3,$3,$4,'aktivni',$5,$6,$7,$8,$9) RETURNING *`,
-      [kod, ean, hodnotaCislo, platnostDo.toISOString().slice(0,10), zakoupeno_kde || 'prodejna', kupujici_jmeno || null, kupujici_email || null, poznamka || null, vzhled]
+      `INSERT INTO darkove_poukazy (kod, ean, hodnota, zustatek, platnost_do, stav, zakoupeno_kde, kupujici_jmeno, kupujici_email, poznamka, vzhled, druh)
+       VALUES ($1,$2,$3,$3,$4,'aktivni',$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [kod, ean, hodnotaCislo, platnostDo.toISOString().slice(0,10), zakoupeno_kde || 'prodejna', kupujici_jmeno || null, kupujici_email || null, poznamka || null, vzhled, druh]
     )).rows[0];
 
     let prodej = null;
@@ -246,6 +259,30 @@ router.post('/pouzit', vyzadovatAdmina, async (req, res) => {
   }
 });
 
+// PATCH /api/poukazy/:id/dar – dodatečně označit už vydaný poukaz jako dar. EAN zůstává
+// (poukaz už může být vytištěný). Pokud k němu vznikl záznam prodeje, smaže se, ať
+// se do tržeb nepočítá ani vydání; útrata se pak vyřadí přes druh 'dar' (pouziti/vse).
+router.patch('/:id/dar', vyzadovatAdmina, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const nalezeny = await client.query('SELECT * FROM darkove_poukazy WHERE id=$1 FOR UPDATE', [req.params.id]);
+    if (!nalezeny.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ chyba: 'Poukaz nenalezen.' }); }
+    const prodejId = nalezeny.rows[0].vydano_prodej_id;
+    const poukaz = (await client.query(
+      "UPDATE darkove_poukazy SET druh='dar', vydano_prodej_id=NULL WHERE id=$1 RETURNING *", [req.params.id]
+    )).rows[0];
+    if (prodejId) await client.query('DELETE FROM prodejna_prodeje WHERE id=$1', [prodejId]);
+    await client.query('COMMIT');
+    res.json({ ...poukaz, smazany_prodej_id: prodejId || null });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ chyba: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // DELETE /api/poukazy/:id – zrušit poukaz (zůstává v evidenci pro účetnictví, jen se znepřístupní)
 router.delete('/:id', vyzadovatAdmina, async (req, res) => {
   const client = await pool.connect();
@@ -307,11 +344,12 @@ router.patch('/zadosti/:id/stav', vyzadovatAdmina, async (req, res) => {
 // zapocitano_pri_vydani = true znamená, že peníze za tento poukaz už byly připsané do tržeb
 // v okamžiku jeho prodeje (má vydano_prodej_id) – takže tahle jeho útrata se do tržeb podruhé
 // nepočítá. U starších poukazů (vydaných před touto funkcí) je false a útrata se do tržeb počítá
-// tady, jako dřív.
+// tady, jako dřív. Darovaný poukaz (druh 'dar') se do tržeb nepočítá vůbec - jeho útrata
+// se proto vyřadí stejně jako u poukazu započteného při prodeji (darem = true).
 router.get('/pouziti/vse', vyzadovatAdmina, async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT pp.*, (dp.vydano_prodej_id IS NOT NULL) AS zapocitano_pri_vydani
+      SELECT pp.*, (dp.vydano_prodej_id IS NOT NULL OR dp.druh = 'dar') AS zapocitano_pri_vydani, (dp.druh = 'dar') AS darem
       FROM poukazy_pouziti pp
       JOIN darkove_poukazy dp ON dp.id = pp.poukaz_id
       ORDER BY pp.vytvoreno DESC
