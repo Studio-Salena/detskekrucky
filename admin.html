@@ -1453,7 +1453,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <div class="form-group pos-blok" id="poukazKodWrap" style="display:none">
           <label for="prodejnaPoukazKod">Kód poukazu</label>
           <div style="display:flex;gap:6px">
-            <input type="text" id="prodejnaPoukazKod" placeholder="DK-XXXX-XXXX nebo EAN" style="flex:1;min-width:0">
+            <input type="text" id="prodejnaPoukazKod" placeholder="DK-XXXX-XXXX nebo EAN" style="flex:1;min-width:0" oninput="poukazProdejnaZustatek=null;aktualizovatDoplatek()">
             <button class="btn btn-outline" onclick="overitPoukazProdejna()">Ověřit</button>
             <button class="btn btn-outline" onclick="otevritKameruPole('prodejnaPoukazKod','kameraWrapPoukaz','kameraVideoPoukaz')" title="Skenovat kamerou" aria-label="Skenovat kamerou">📷</button>
             <button class="btn btn-outline" onclick="otevritMobilniSken('prodejnaPoukazKod','overitPoukazProdejna')" title="Skenovat mobilem" aria-label="Skenovat mobilem">📱</button>
@@ -1463,6 +1463,15 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
             <button class="btn btn-outline btn-sm" style="position:absolute;top:8px;right:8px;background:#fff" onclick="zavritKameruPole('kameraWrapPoukaz','kameraVideoPoukaz')">✕</button>
           </div>
           <div id="poukazProdejnaMsg" style="margin-top:4px"></div>
+          <div id="poukazDoplatekWrap" style="display:none;margin-top:8px;padding:10px;border-radius:10px;background:var(--app-bg)">
+            <div>Z poukazu <strong id="poukazZPoukazu"></strong> · zbývá doplatit <strong id="poukazDoplatit" style="color:var(--brown)"></strong></div>
+            <label for="prodejnaDoplatekPlatba" style="margin-top:6px">Doplatek zaplatí</label>
+            <select id="prodejnaDoplatekPlatba" onchange="aktualizovatDoplatek()">
+              <option value="hotovost">💵 Hotovost</option>
+              <option value="karta">💳 Karta</option>
+              <option value="qr">📱 QR platba</option>
+            </select>
+          </div>
         </div>
         <div class="form-group"><label for="prodejnaPoznamka">Poznámka</label><input type="text" id="prodejnaPoznamka" placeholder="Volitelná poznámka…"></div>
 
@@ -4955,6 +4964,27 @@ function prepocitatCelkem() {
   document.getElementById('prodejnaCelkem').textContent = s.celkem.toLocaleString('cs-CZ')+' Kč';
   if (document.getElementById('prodejnaPlatba').value === 'qr') aktualizovatQrPlatbu();
   if (document.getElementById('prodejnaPlatba').value === 'hotovost') prepocitatVraceno();
+  aktualizovatDoplatek();
+}
+
+// Doplatek k poukazu: po ověření poukazu, který nepokryje celý nákup
+let poukazProdejnaZustatek = null;
+function doplatekKPoukazu() {
+  if (document.getElementById('prodejnaPlatba').value !== 'poukaz' || poukazProdejnaZustatek == null) return 0;
+  return Math.max(0, spocitatProdej().celkem - poukazProdejnaZustatek);
+}
+function aktualizovatDoplatek() {
+  const doplatek = doplatekKPoukazu();
+  document.getElementById('poukazDoplatekWrap').style.display = doplatek > 0 ? 'block' : 'none';
+  if (document.getElementById('prodejnaPlatba').value !== 'poukaz') return;
+  const zpusob = document.getElementById('prodejnaDoplatekPlatba').value;
+  document.getElementById('hotovostWrap').style.display = doplatek > 0 && zpusob === 'hotovost' ? 'block' : 'none';
+  document.getElementById('qrPlatbaWrap').style.display = doplatek > 0 && zpusob === 'qr' ? 'block' : 'none';
+  if (doplatek <= 0) return;
+  document.getElementById('poukazZPoukazu').textContent = poukazProdejnaZustatek.toLocaleString('cs-CZ') + ' Kč';
+  document.getElementById('poukazDoplatit').textContent = doplatek.toLocaleString('cs-CZ') + ' Kč';
+  if (zpusob === 'qr') document.getElementById('qrPlatbaObrazek').src = qrPlatbaUrl(doplatek, 'Prodejna Detske krucky');
+  if (zpusob === 'hotovost') prepocitatVraceno();
 }
 
 // Platebni QR kod (format SPAYD pouzivany ceskymi bankovnimi aplikacemi)
@@ -4963,8 +4993,11 @@ function qrPlatbaUrl(castka, zprava) {
   const spd = `SPD*1.0*ACC:${UCET_IBAN}*AM:${Number(castka).toFixed(2)}*CC:CZK*MSG:${zprava}`;
   return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(spd)}`;
 }
+function castkaKZaplaceni() {
+  return doplatekKPoukazu() || parseInt(document.getElementById('prodejnaCelkem').textContent.replace(/\D/g,'')) || 0;
+}
 function aktualizovatQrPlatbu() {
-  const castka = parseInt(document.getElementById('prodejnaCelkem').textContent.replace(/\D/g,'')) || 0;
+  const castka = castkaKZaplaceni();
   document.getElementById('qrPlatbaObrazek').src = qrPlatbaUrl(castka, 'Prodejna Detske krucky');
 }
 
@@ -4992,26 +5025,26 @@ async function ulozitProdejnaProdat() {
   const platba = document.getElementById('prodejnaPlatba').value;
   const poukazKod = document.getElementById('prodejnaPoukazKod').value.trim();
 
-  // Pokud platba poukazem, ověřit PŘED uložením prodeje, ať nevznikne prodej bez pokrytí platby
+  // Pokud platba poukazem, ověřit PŘED uložením prodeje, ať nevznikne prodej bez pokrytí platby.
+  // Když poukaz nepokryje celý nákup, zbytek se doplatí (doplatekPlatba) a vše uloží server najednou.
+  let doplatekPlatba = null;
   if (platba === 'poukaz') {
     if (!poukazKod) { document.getElementById('prodejnaMsg').innerHTML = '<div class="error-msg">Zadejte kód poukazu.</div>'; return; }
     try {
       const overRes = await adminFetch(API+'/poukazy/overit/'+encodeURIComponent(poukazKod));
       const overData = await overRes.json();
       if (!overRes.ok) { document.getElementById('prodejnaMsg').innerHTML = `<div class="error-msg">${overData.chyba}</div>`; return; }
-      if (Number(overData.zustatek) < celkem) {
-        document.getElementById('prodejnaMsg').innerHTML = `<div class="error-msg">Na poukazu zbývá jen ${overData.zustatek} Kč, prodej je za ${celkem} Kč. Zvolte kombinaci s jinou platbou nebo sniž počet položek.</div>`;
-        return;
-      }
+      poukazProdejnaZustatek = Number(overData.zustatek);
+      if (poukazProdejnaZustatek < celkem) doplatekPlatba = document.getElementById('prodejnaDoplatekPlatba').value;
     } catch(e) { document.getElementById('prodejnaMsg').innerHTML = '<div class="error-msg">Chyba při ověřování poukazu</div>'; return; }
   }
 
   let hotovost_prijato = null, hotovost_vraceno = null;
-  if (platba === 'hotovost') {
+  if (platba === 'hotovost' || doplatekPlatba === 'hotovost') {
     const prijato = parseInt(document.getElementById('prodejnaHotovostPrijato').value) || 0;
     if (prijato > 0) {
       hotovost_prijato = prijato;
-      hotovost_vraceno = Math.max(0, prijato - celkem);
+      hotovost_vraceno = Math.max(0, prijato - (doplatekPlatba ? celkem - poukazProdejnaZustatek : celkem));
     }
   }
 
@@ -5021,8 +5054,20 @@ async function ulozitProdejnaProdat() {
     poznamka: document.getElementById('prodejnaPoznamka').value,
     polozky, celkem,
     mezisoucet, sleva, sleva_popis: sleva_popis || null,
-    hotovost_prijato, hotovost_vraceno
+    hotovost_prijato, hotovost_vraceno,
+    ...(doplatekPlatba ? { poukaz_kod: poukazKod, doplatek_platba: doplatekPlatba } : {})
   };
+
+  // Prodej s doplatkem uloží server i s uplatněním poukazu najednou - při chybě se nic neodečte
+  let ulozenySDoplatkem = null;
+  if (doplatekPlatba) {
+    try {
+      const res = await adminFetch(API+'/prodejna', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(prodej) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { document.getElementById('prodejnaMsg').innerHTML = `<div class="error-msg">${escH(data.chyba || 'Prodej se nepodařilo uložit.')}</div>`; return; }
+      ulozenySDoplatkem = data;
+    } catch(e) { document.getElementById('prodejnaMsg').innerHTML = '<div class="error-msg">Chyba spojení – prodej se neuložil.</div>'; return; }
+  }
 
   // Odečíst ze skladu
   try {
@@ -5035,8 +5080,8 @@ async function ulozitProdejnaProdat() {
   } catch(e) { console.error('Chyba odečtení skladu'); }
 
   // Uložit na server
-  let ulozenyProdej = { ...prodej, datum: new Date().toISOString() };
-  try {
+  let ulozenyProdej = ulozenySDoplatkem || { ...prodej, datum: new Date().toISOString() };
+  if (!ulozenySDoplatkem) try {
     const res = await adminFetch(API+'/prodejna', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify(prodej)
@@ -5045,7 +5090,7 @@ async function ulozitProdejnaProdat() {
   } catch(e) { console.error('Chyba ukládání prodeje na server'); }
 
   // Pokud platba poukazem, teď ho skutečně uplatnit (odečíst zůstatek)
-  if (platba === 'poukaz' && ulozenyProdej.id) {
+  if (platba === 'poukaz' && !ulozenySDoplatkem && ulozenyProdej.id) {
     try {
       await adminFetch(API+'/poukazy/pouzit', {
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -5066,6 +5111,7 @@ async function ulozitProdejnaProdat() {
   document.getElementById('prodejnaPoznamka').value = '';
   document.getElementById('prodejnaPoukazKod').value = '';
   document.getElementById('poukazProdejnaMsg').innerHTML = '';
+  poukazProdejnaZustatek = null;
   document.getElementById('prodejnaPlatba').value = 'hotovost';
   document.getElementById('prodejnaSlevaTyp').value = 'zadna';
   document.getElementById('prodejnaSlevaHodnota').value = '0';
@@ -5091,10 +5137,11 @@ function prepnoutPoukazPole() {
   document.getElementById('hotovostWrap').style.display = platba === 'hotovost' ? 'block' : 'none';
   if (platba === 'qr') aktualizovatQrPlatbu();
   if (platba === 'hotovost') prepocitatVraceno();
+  aktualizovatDoplatek();
 }
 
 function prepocitatVraceno() {
-  const celkem = parseInt(document.getElementById('prodejnaCelkem').textContent.replace(/\D/g,'')) || 0;
+  const celkem = castkaKZaplaceni();
   const prijato = parseInt(document.getElementById('prodejnaHotovostPrijato').value) || 0;
   const vraceno = Math.max(0, prijato - celkem);
   document.getElementById('prodejnaVraceno').textContent = vraceno.toLocaleString('cs-CZ')+' Kč';
@@ -5109,6 +5156,8 @@ async function overitPoukazProdejna() {
     const data = await res.json();
     if (!res.ok) { msg.innerHTML = `<div class="error-msg">${data.chyba}</div>`; return; }
     msg.innerHTML = `<div class="success-msg">✅ Platný poukaz – zůstatek <strong>${Number(data.zustatek).toLocaleString('cs-CZ')} Kč</strong> (platnost do ${new Date(data.platnost_do).toLocaleDateString('cs-CZ')})</div>`;
+    poukazProdejnaZustatek = Number(data.zustatek);
+    aktualizovatDoplatek();
   } catch(e) { msg.innerHTML = '<div class="error-msg">Chyba spojení</div>'; }
 }
 
@@ -5176,9 +5225,13 @@ function tiskUctenkyData(prodej, cislo) {
   ${Number(prodej.sleva)>0?`
   <div class="row"><span>Mezisoučet:</span><span>${Number(prodej.mezisoucet).toLocaleString('cs-CZ')} Kč</span></div>
   <div class="row"><span>Sleva${prodej.sleva_popis?' ('+escH(prodej.sleva_popis)+')':''}:</span><span>−${Number(prodej.sleva).toLocaleString('cs-CZ')} Kč</span></div>`:''}
-  <div class="row total"><span>CELKEM:</span><span>${Number(prodej.celkem).toLocaleString('cs-CZ')} Kč</span></div>
+  ${Number(prodej.poukaz_castka)>0?`
+  <div class="row"><span>Za zboží:</span><span>${(Number(prodej.celkem)+Number(prodej.poukaz_castka)).toLocaleString('cs-CZ')} Kč</span></div>
+  <div class="row"><span>Poukaz:</span><span>−${Number(prodej.poukaz_castka).toLocaleString('cs-CZ')} Kč</span></div>
+  ${prodej.poukaz_kod?`<div style="font-size:11px">${escH(prodej.poukaz_kod)}</div>`:''}`:''}
+  <div class="row total"><span>${Number(prodej.poukaz_castka)>0?'DOPLATEK':'CELKEM'}:</span><span>${Number(prodej.celkem).toLocaleString('cs-CZ')} Kč</span></div>
   <div style="font-size:12px;margin-top:4px">Neplátce DPH</div>
-  <div class="row"><span>Platba:</span><span>${platbaLabel(prodej.platba)}</span></div>
+  <div class="row"><span>Platba:</span><span>${Number(prodej.poukaz_castka)>0?'Dárkový poukaz + ':''}${platbaLabel(prodej.platba)}</span></div>
   ${prodej.platba==='hotovost'&&Number(prodej.hotovost_prijato)>0?`
   <div class="row"><span>Přijato:</span><span>${Number(prodej.hotovost_prijato).toLocaleString('cs-CZ')} Kč</span></div>
   <div class="row"><span>Vráceno:</span><span>${Number(prodej.hotovost_vraceno||0).toLocaleString('cs-CZ')} Kč</span></div>`:''}

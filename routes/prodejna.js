@@ -25,6 +25,9 @@ async function initTabulky() {
       ALTER TABLE prodejna_prodeje ADD COLUMN IF NOT EXISTS sleva_popis TEXT;
       ALTER TABLE prodejna_prodeje ADD COLUMN IF NOT EXISTS hotovost_prijato NUMERIC;
       ALTER TABLE prodejna_prodeje ADD COLUMN IF NOT EXISTS hotovost_vraceno NUMERIC;
+      -- Část nákupu zaplacená dárkovým poukazem, když zákazník zbytek doplácí (celkem = doplatek)
+      ALTER TABLE prodejna_prodeje ADD COLUMN IF NOT EXISTS poukaz_castka NUMERIC;
+      ALTER TABLE prodejna_prodeje ADD COLUMN IF NOT EXISTS poukaz_kod TEXT;
       CREATE TABLE IF NOT EXISTS vratky (
         id SERIAL PRIMARY KEY,
         prodej_id INTEGER REFERENCES prodejna_prodeje(id) ON DELETE SET NULL,
@@ -63,6 +66,7 @@ router.post('/', async (req, res) => {
   if (!Array.isArray(polozky) || !polozky.length) {
     return res.status(400).json({ chyba: 'Chybí položky prodeje.' });
   }
+  if (req.body.poukaz_kod) return prodejSDoplatkem(req, res);
   try {
     const result = await pool.query(
       'INSERT INTO prodejna_prodeje (zakaznik, platba, poznamka, polozky, celkem, mezisoucet, sleva, sleva_popis, hotovost_prijato, hotovost_vraceno) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *',
@@ -75,6 +79,48 @@ router.post('/', async (req, res) => {
     res.status(500).json({ chyba: err.message });
   }
 });
+
+// Poukaz nepokryje celý nákup: zbytek zákazník doplatí hotově, kartou nebo QR.
+// V jedné transakci se poukaz vyčerpá, uloží se prodej s celkem = doplatek
+// (jen ten jde do tržeb - hodnota poukazu se počítá při jeho prodeji, dar nikdy)
+// a zapíše se uplatnění poukazu. Když poukaz mezitím někdo použil, neuloží se nic.
+async function prodejSDoplatkem(req, res) {
+  const { zakaznik, poznamka, polozky, celkem, mezisoucet, sleva, sleva_popis, hotovost_prijato, poukaz_kod, doplatek_platba } = req.body;
+  const zaZbozi = Number(celkem);
+  if (!Number.isFinite(zaZbozi) || zaZbozi <= 0) return res.status(400).json({ chyba: 'Neplatná částka prodeje.' });
+  if (!['hotovost', 'karta', 'qr'].includes(doplatek_platba)) return res.status(400).json({ chyba: 'Vyberte, jak zákazník doplatí zbytek.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const nalezeny = await client.query('SELECT * FROM darkove_poukazy WHERE UPPER(kod) = $1 OR ean = $1 FOR UPDATE', [String(poukaz_kod).trim().toUpperCase()]);
+    const poukaz = nalezeny.rows[0];
+    const chyba = !poukaz ? 'Poukaz nebyl nalezen.'
+      : poukaz.stav !== 'aktivni' || Number(poukaz.zustatek) <= 0 ? 'Poukaz už není aktivní.'
+      : new Date(poukaz.platnost_do) < new Date(new Date().toISOString().slice(0, 10)) ? 'Platnost poukazu vypršela.'
+      : Number(poukaz.zustatek) >= zaZbozi ? 'Poukaz pokryje celý nákup – zvolte platbu jen dárkovým poukazem.'
+      : null;
+    if (chyba) { await client.query('ROLLBACK'); return res.status(400).json({ chyba }); }
+    const zPoukazu = Number(poukaz.zustatek);
+    const doplatek = zaZbozi - zPoukazu;
+    const prijato = doplatek_platba === 'hotovost' && Number(hotovost_prijato) > 0 ? Number(hotovost_prijato) : null;
+    const prodej = (await client.query(
+      `INSERT INTO prodejna_prodeje (zakaznik, platba, poznamka, polozky, celkem, mezisoucet, sleva, sleva_popis, hotovost_prijato, hotovost_vraceno, poukaz_castka, poukaz_kod)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      [zakaznik || null, doplatek_platba, poznamka || null, JSON.stringify(polozky), doplatek,
+       mezisoucet != null ? mezisoucet : zaZbozi, sleva || 0, sleva_popis || null,
+       prijato, prijato != null ? Math.max(0, prijato - doplatek) : null, zPoukazu, poukaz.kod]
+    )).rows[0];
+    await client.query("UPDATE darkove_poukazy SET zustatek = 0, stav = 'pouzity' WHERE id = $1", [poukaz.id]);
+    await client.query('INSERT INTO poukazy_pouziti (poukaz_id, castka, prodej_id) VALUES ($1,$2,$3)', [poukaz.id, zPoukazu, prodej.id]);
+    await client.query('COMMIT');
+    res.json(prodej);
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ chyba: err.message });
+  } finally {
+    client.release();
+  }
+}
 
 // PUT /api/prodejna/:id – upravit záznam prodeje (např. špatně zvolená platba, překlep ve jméně)
 router.put('/:id', async (req, res) => {

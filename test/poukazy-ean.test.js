@@ -43,7 +43,7 @@ test('EAN poukazu: prefix podle druhu, 13 číslic, platná kontrolní číslice
 
 test('darovaný poukaz: bez platby a jeho útrata se nepočítá do tržeb', () => {
   assert.match(ZDROJ, /druh === 'dar' && platba/);
-  assert.match(ZDROJ, /\(dp\.vydano_prodej_id IS NOT NULL OR dp\.druh = 'dar'\) AS zapocitano_pri_vydani/);
+  assert.match(ZDROJ, /\(dp\.vydano_prodej_id IS NOT NULL OR dp\.druh = 'dar'\) AND COALESCE\(pr\.poukaz_castka, 0\) = 0\) AS zapocitano_pri_vydani/);
   assert.match(ZDROJ, /ADD COLUMN IF NOT EXISTS druh TEXT NOT NULL DEFAULT 'prodej'/);
   assert.match(ADMIN, /<select id="pkDruh"/);
 });

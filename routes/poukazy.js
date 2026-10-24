@@ -346,12 +346,15 @@ router.patch('/zadosti/:id/stav', vyzadovatAdmina, async (req, res) => {
 // nepočítá. U starších poukazů (vydaných před touto funkcí) je false a útrata se do tržeb počítá
 // tady, jako dřív. Darovaný poukaz (druh 'dar') se do tržeb nepočítá vůbec - jeho útrata
 // se proto vyřadí stejně jako u poukazu započteného při prodeji (darem = true).
+// Prodej s doplatkem (prodejna_prodeje.poukaz_castka) se nevyřazuje nikdy - jeho celkem
+// je jen doplatek, který zákazník skutečně zaplatil.
 router.get('/pouziti/vse', vyzadovatAdmina, async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT pp.*, (dp.vydano_prodej_id IS NOT NULL OR dp.druh = 'dar') AS zapocitano_pri_vydani, (dp.druh = 'dar') AS darem
+      SELECT pp.*, ((dp.vydano_prodej_id IS NOT NULL OR dp.druh = 'dar') AND COALESCE(pr.poukaz_castka, 0) = 0) AS zapocitano_pri_vydani, (dp.druh = 'dar') AS darem
       FROM poukazy_pouziti pp
       JOIN darkove_poukazy dp ON dp.id = pp.poukaz_id
+      LEFT JOIN prodejna_prodeje pr ON pr.id = pp.prodej_id
       ORDER BY pp.vytvoreno DESC
     `);
     res.json(result.rows);
