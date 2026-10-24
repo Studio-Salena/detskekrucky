@@ -174,6 +174,16 @@ body{background:var(--app-bg)}
 .detail-pozn{font-size:0.82rem;color:var(--text-light);margin:6px 0 0}
 .detail-fotky{display:flex;gap:8px;flex-wrap:wrap}
 .detail-fotka{display:flex;flex-direction:column;align-items:center;gap:4px}
+/* Web → Dárkové poukazy → Vzhled poukazu: klasický a vánoční vedle sebe */
+.vzhled-poukazu{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:24px 32px;padding:20px 22px}
+.vzhled-polozka{display:grid;grid-template-columns:200px minmax(0,1fr);gap:20px;align-items:center}
+.vzhled-nahledek{width:200px;aspect-ratio:3/2;object-fit:cover;border-radius:10px;box-shadow:0 2px 10px rgba(74,52,39,0.18);background:#fff}
+.vzhled-polozka h4{margin:0 0 10px;font-size:1rem}
+.vzhled-polozka input[type=file]{display:block;max-width:100%;margin-bottom:10px;font-size:0.9rem}
+.vzhled-polozka .btn-vychozi{display:block;width:100%;max-width:320px;text-align:left;padding:8px 12px;border:2px solid #f3ddd2;border-radius:10px;background:#fff;color:var(--text);font-weight:700;font-size:0.82rem;cursor:pointer}
+.vzhled-polozka .vzhled-ok{margin-top:10px;color:var(--brown);font-size:1.05rem}
+.vzhled-pozice{grid-column:1/-1;font-size:0.82rem}
+.vzhled-pozice summary{cursor:pointer;color:var(--text-light)}
 .detail-fotka small{font-size:0.7rem;color:var(--text-light)}
 .detail-fotky img{width:96px;height:96px;object-fit:contain;background:var(--app-bg);border:1px solid var(--app-line);border-radius:10px}
 .detail-fotky img.hlavni{border:2px solid var(--brown)}
@@ -1055,6 +1065,10 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           </div>
         </div>
         <div id="poukazVanocniMsg" style="margin-top:8px"></div>
+      </div>
+      <div class="table-wrap" id="webPoukazVzhled" style="margin-top:16px">
+        <div class="table-header"><h3>🖼️ Vzhled poukazu</h3></div>
+        <div id="poukazVzhledEditory" class="vzhled-poukazu"></div>
       </div>
     <p class="presun-pozn">Vydávání a správa poukazů je v E-shop → Dárkové poukazy, přehled čísel v Reporty → Poukazy.</p>
   </div>
@@ -5540,6 +5554,7 @@ function filtrovatPoukazy(f) {
   loadPoukazy();
 }
 async function loadPoukazy() {
+  nacistVzhledPoukazu();
   try {
     const data = await adminFetch(API+'/poukazy').then(r=>r.json());
     const seznam = Array.isArray(data) ? data : [];
@@ -5730,7 +5745,7 @@ async function zobrazitPoukazDetail(id, poukazData=null) {
   setTimeout(() => {
     try {
       JsBarcode('#poukazBarcode', poukaz.ean, {format:'EAN13', width:1.6, height:42, fontSize:12, margin:0, background:'transparent'});
-      if (poukaz.vzhled === 'vanocni') prizpusobitEanSirce(document.getElementById('poukazBarcode'));
+      if (jeObrazkovyPoukaz(poukaz)) prizpusobitEanSirce(document.getElementById('poukazBarcode'));
     } catch(e){}
   }, 50);
   openModal('modalZobrazitPoukaz');
@@ -5739,7 +5754,7 @@ async function zobrazitPoukazDetail(id, poukazData=null) {
 // Karta poukazu v adminu - pro detail vydaného poukazu i náhled před vydáním.
 // barcodeId: kam se po vykreslení vloží EAN (null = místo kódu jen popisek).
 function htmlKartyPoukazu(poukaz, barcodeId) {
-  if (poukaz.vzhled === 'vanocni') return htmlVanocnihoPoukazu(poukaz, barcodeId);
+  if (jeObrazkovyPoukaz(poukaz)) return htmlVanocnihoPoukazu(poukaz, barcodeId);
   const proKoho = (poukaz.poznamka && poukaz.poznamka.startsWith('Pro:')) ? poukaz.poznamka.replace('Pro:','').trim() : '';
   return `
     <div style="display:flex;background:#f7f3ea;border-radius:6px;padding:8px;border:8px solid transparent;border-image:linear-gradient(135deg,#c9a15a,#e8d4a0,#b8874a,#e8d4a0,#c9a15a) 1;box-shadow:0 6px 20px rgba(107,76,53,0.2)">
@@ -5802,6 +5817,7 @@ function upravitNovyPoukaz() {
 // Prázdné poukazy na akci: nic se neukládá, EAN/číslo a platnost zůstanou
 // prázdné k dopsání (nebo nalepení štítku) až při prodeji
 function otevritPrazdnyPoukaz() {
+  nacistVzhledPoukazu();
   document.getElementById('ppVzhled').value = vychoziVzhledPoukazu();
   openModal('modalPrazdnyPoukaz');
 }
@@ -5810,14 +5826,14 @@ function tisknoutPrazdnyPoukaz() {
   if (!(kopie >= 1 && kopie <= 50)) { alert('Počet kusů musí být 1–50.'); return; }
   const hodnota = document.getElementById('ppHodnota').value;
   const p = { prazdny: true, hodnota: hodnota ? Number(hodnota) : null, vzhled: document.getElementById('ppVzhled').value, kod: '', ean: '' };
-  if (p.vzhled === 'vanocni') tisknoutVanocniPoukaz(false, p, kopie);
+  if (jeObrazkovyPoukaz(p)) tisknoutVanocniPoukaz(false, p, kopie);
   else tisknoutPoukaz(false, p, kopie);
 }
 
 function tisknoutPoukaz(sEanem = true, data = null, kopie = 1) {
   const p = data || poslednePoukazData;
   if (!p) return;
-  if (p.vzhled === 'vanocni') return tisknoutVanocniPoukaz(sEanem, p, kopie);
+  if (jeObrazkovyPoukaz(p)) return tisknoutVanocniPoukaz(sEanem, p, kopie);
   const zobrazitEan = sEanem && !!p.ean;
   const proKoho = (p.poznamka && p.poznamka.startsWith('Pro:')) ? p.poznamka.replace('Pro:','').trim() : '';
   const castka = p.hodnota ? `${Number(p.hodnota).toLocaleString('cs-CZ')} Kč` : '&nbsp;'.repeat(18) + ' Kč';
@@ -5940,23 +5956,46 @@ document.head.insertAdjacentHTML('beforeend', '<style>' + VANOCNI_POUKAZ_CSS + '
 
 // barcodeId: kam se vykreslí EAN; null bez kódu poukazu = náhled před vydáním
 // p.prazdny = prázdný poukaz na akci (bez platnosti, čísla a EAN, k dopsání rukou)
+// Vzhled tištěného poukazu z Web → Dárkové poukazy: vlastní obrázek a pozice údajů.
+// Bez obrázku: vánoční = vanocni-poukaz.png, klasický = karta s logem (htmlKartyPoukazu).
+const VYCHOZI_POZICE_POUKAZU = { castkaTop: 52.4, castkaLeft: 35.5, castkaSirka: 27.5, radkyLeft: 33.2, proTop: 66.4, odTop: 72.5, platnostTop: 78.4, eanTop: 79.9, eanLeft: 34.2, eanSirka: 12.5, pismo: 100 };
+let vzhledPoukazu = { klasicky: {}, vanocni: {} };
+async function nacistVzhledPoukazu() {
+  try {
+    const res = await adminFetch(API + '/poukaz-vzhled');
+    if (res.ok) vzhledPoukazu = await res.json();
+  } catch (e) { /* zůstane výchozí vzhled */ }
+}
+const typVzhledu = p => p.vzhled === 'vanocni' ? 'vanocni' : 'klasicky';
+function obrazekPoukazu(typ) {
+  return (vzhledPoukazu[typ] || {}).obrazek_url || (typ === 'vanocni' ? 'vanocni-poukaz.png' : null);
+}
+function poziceVzhledu(typ) {
+  return { ...VYCHOZI_POZICE_POUKAZU, ...((vzhledPoukazu[typ] || {}).pozice || {}) };
+}
+function jeObrazkovyPoukaz(p) { return !!obrazekPoukazu(typVzhledu(p)); }
+
 function htmlVanocnihoPoukazu(p, barcodeId) {
+  const typ = typVzhledu(p);
+  const z = poziceVzhledu(typ);
+  const vlastniEan = 'eanTop' in ((vzhledPoukazu[typ] || {}).pozice || {});
   const proKoho = (p.poznamka && p.poznamka.startsWith('Pro:')) ? p.poznamka.replace('Pro:','').trim() : '';
   const radek = (top, popisek, hodnota) =>
-    `<div class="vp-radek" style="top:${top}%"><span class="vp-popisek">${popisek}</span> <span class="vp-hodnota">${escH(hodnota)}</span></div>`;
+    `<div class="vp-radek" style="top:${top}%;left:${z.radkyLeft}%;font-size:${1.45 * z.pismo / 100}cqw"><span class="vp-popisek">${popisek}</span> <span class="vp-hodnota">${escH(hodnota)}</span></div>`;
+  const naRadku = `style="top:${z.eanTop}%;left:${z.eanLeft}%;width:${z.eanSirka}%"`;
   // Číslo poukazu se netiskne - stačí EAN (pokladna i e-shop přijmou obojí).
   // Vydaný poukaz má EAN na 4. řádku; prázdný nechává místo na štítek 30 × 15 mm
   // v levém rohu, na řádek by se nevešel.
   const ean = barcodeId
-    ? `<div class="vp-ean na-radku"><svg id="${barcodeId}"></svg></div>`
-    : p.prazdny ? '<div class="vp-ean"><div class="vp-ean-popisek">místo pro EAN štítek</div></div>'
-    : (p.kod ? '' : '<div class="vp-ean na-radku"><div class="vp-ean-popisek">EAN se přidělí po vydání</div></div>');
+    ? `<div class="vp-ean na-radku" ${naRadku}><svg id="${barcodeId}"></svg></div>`
+    : p.prazdny ? `<div class="vp-ean"${vlastniEan ? ` style="top:${z.eanTop}%;left:${z.eanLeft}%;width:${Math.max(z.eanSirka, 16)}%"` : ''}><div class="vp-ean-popisek">místo pro EAN štítek</div></div>`
+    : (p.kod ? '' : `<div class="vp-ean na-radku" ${naRadku}><div class="vp-ean-popisek">EAN se přidělí po vydání</div></div>`);
   return `<div class="vp">
-    <img class="vp-podklad" src="vanocni-poukaz.png" alt="Vánoční poukaz">
-    <div class="vp-castka">${p.hodnota ? Number(p.hodnota).toLocaleString('cs-CZ') : ''}</div>
-    ${radek(66.4, 'Pro:', proKoho)}
-    ${radek(72.5, 'Věnováno od:', '')}
-    ${radek(78.4, 'Platnost do:', p.prazdny ? '' : new Date(p.platnost_do).toLocaleDateString('cs-CZ'))}
+    <img class="vp-podklad" src="${escAttr(obrazekPoukazu(typ))}" alt="Dárkový poukaz">
+    <div class="vp-castka" style="top:${z.castkaTop}%;left:${z.castkaLeft}%;width:${z.castkaSirka}%;font-size:${3.4 * z.pismo / 100}cqw">${p.hodnota ? Number(p.hodnota).toLocaleString('cs-CZ') : ''}</div>
+    ${radek(z.proTop, 'Pro:', proKoho)}
+    ${radek(z.odTop, 'Věnováno od:', '')}
+    ${radek(z.platnostTop, 'Platnost do:', p.prazdny ? '' : new Date(p.platnost_do).toLocaleDateString('cs-CZ'))}
     ${ean}
   </div>`;
 }
@@ -5973,7 +6012,7 @@ function tisknoutVanocniPoukaz(sEanem = true, data = null, kopie = 1) {
   const sKodem = sEanem && !!p.ean;
   const zakladUrl = window.location.origin + window.location.pathname.replace('admin.html','');
   const pw = window.open('','_blank','width=1000,height=720');
-  pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${p.prazdny ? 'Prázdné vánoční poukazy' : 'Vánoční poukaz ' + escH(p.kod)}</title>
+  pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${p.prazdny ? 'Prázdné poukazy' : 'Dárkový poukaz ' + escH(p.kod)}</title>
   <base href="${zakladUrl}">
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></scr` + `ipt>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;800;900&display=swap" rel="stylesheet">
@@ -6310,7 +6349,107 @@ function zobrazitVanocniPoukaz(v) {
   if (typeof v.zobrazit === 'boolean') document.getElementById('poukazVanocniZobrazit').checked = v.zobrazit;
 }
 
+// Editor vzhledu tištěného poukazu (Web → Dárkové poukazy)
+const POPISKY_POZIC = {
+  castkaTop: 'Částka – shora', castkaLeft: 'Částka – zleva', castkaSirka: 'Částka – šířka',
+  radkyLeft: 'Řádky – zleva', proTop: 'Pro – shora', odTop: 'Věnováno od – shora', platnostTop: 'Platnost do – shora',
+  eanTop: 'EAN – shora', eanLeft: 'EAN – zleva', eanSirka: 'EAN – šířka', pismo: 'Písmo (%)'
+};
+const NAZVY_VZHLEDU = { klasicky: '🌸 Klasický', vanocni: '🎄 Vánoční' };
+// Náhled bez nahraného obrázku: vánoční výchozí obrázek, klasický náhled poukazu z dlaždice
+const VYCHOZI_NAHLED_VZHLEDU = { klasicky: 'poukaz-dlazdice.png', vanocni: 'vanocni-poukaz.png' };
+function vykreslitEditoryVzhledu(zprava = {}) {
+  const el = document.getElementById('poukazVzhledEditory');
+  if (!el) return;
+  el.innerHTML = ['klasicky', 'vanocni'].map(typ => {
+    const vlastni = !!(vzhledPoukazu[typ] || {}).obrazek_url;
+    const z = poziceVzhledu(typ);
+    return `<div class="vzhled-polozka vzhled-editor" data-typ="${typ}">
+      <img class="vzhled-nahledek" src="${escAttr(vlastni ? vzhledPoukazu[typ].obrazek_url : VYCHOZI_NAHLED_VZHLEDU[typ])}" alt="${escAttr(NAZVY_VZHLEDU[typ])} poukaz">
+      <div>
+        <h4>${NAZVY_VZHLEDU[typ]}</h4>
+        <input type="file" id="vzSoubor-${typ}" accept="image/*" aria-label="Obrázek poukazu – ${escAttr(NAZVY_VZHLEDU[typ])}" onchange="nahratObrazekVzhledu('${typ}')">
+        ${vlastni ? `<button type="button" class="btn-vychozi" onclick="vratitVychoziVzhled('${typ}')">Vrátit výchozí obrázek</button>` : ''}
+        <div id="vzMsg-${typ}">${zprava[typ] || ''}</div>
+      </div>
+      ${obrazekPoukazu(typ) ? `<details class="vzhled-pozice">
+        <summary>⚙️ Umístění textů na poukazu</summary>
+        <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start;margin-top:10px">
+          <div id="vzNahled-${typ}" style="flex:1 1 300px;max-width:520px"></div>
+          <div style="flex:1 1 220px">
+            <div style="display:grid;grid-template-columns:1fr 80px;gap:4px 8px;align-items:center">
+              ${Object.keys(POPISKY_POZIC).map(k => `<label for="vz-${typ}-${k}">${POPISKY_POZIC[k]}</label>
+                <input id="vz-${typ}-${k}" class="form-input" type="number" step="0.5" data-pozice="${k}" value="${z[k]}" oninput="nahledVzhledu('${typ}')" style="padding:4px 6px">`).join('')}
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" style="margin-top:10px" onclick="ulozitPoziceVzhledu('${typ}')">💾 Uložit umístění</button>
+            <div id="vzPoziceMsg-${typ}" style="margin-top:8px"></div>
+          </div>
+        </div>
+      </details>` : ''}
+    </div>`;
+  }).join('');
+  ['klasicky', 'vanocni'].forEach(nahledVzhledu);
+}
+// Pozice z polí editoru (bez uložení) - pro náhled i uložení
+function poziceZEditoru(typ) {
+  const pozice = {};
+  document.querySelectorAll(`.vzhled-editor[data-typ="${typ}"] [data-pozice]`).forEach(i => {
+    const n = Number(i.value);
+    if (i.value !== '' && Number.isFinite(n)) pozice[i.dataset.pozice] = n;
+  });
+  return pozice;
+}
+function nahledVzhledu(typ) {
+  const el = document.getElementById('vzNahled-' + typ);
+  if (!el) return;
+  const ulozene = vzhledPoukazu[typ] || {};
+  vzhledPoukazu[typ] = { ...ulozene, pozice: { ...(ulozene.pozice || {}), ...poziceZEditoru(typ) } };
+  const platnost = new Date(); platnost.setFullYear(platnost.getFullYear() + 1);
+  const vzor = { vzhled: typ, hodnota: 1000, poznamka: 'Pro: Eliška', platnost_do: platnost, kod: 'DK-VZOR', ean: '2100000000005' };
+  el.innerHTML = htmlKartyPoukazu(vzor, 'vzEan-' + typ);
+  vzhledPoukazu[typ] = ulozene;
+  try {
+    JsBarcode('#vzEan-' + typ, vzor.ean, { format: 'EAN13', width: 1.6, height: 42, fontSize: 12, margin: 0, background: 'transparent' });
+    if (obrazekPoukazu(typ)) prizpusobitEanSirce(document.getElementById('vzEan-' + typ));
+  } catch (e) {}
+}
+async function ulozitPoziceVzhledu(typ) {
+  const msg = document.getElementById('vzPoziceMsg-' + typ);
+  try {
+    const res = await adminFetch(API + '/poukaz-vzhled/' + typ + '/pozice', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pozice: poziceZEditoru(typ) }) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.chyba || 'Uložení se nepodařilo.');
+    vzhledPoukazu[typ] = { ...(vzhledPoukazu[typ] || {}), pozice: data.pozice };
+    msg.innerHTML = '<div class="vzhled-ok">✅ Umístění uloženo.</div>';
+  } catch (e) { msg.innerHTML = `<div class="error-msg">${escH(e.message)}</div>`; }
+}
+async function nahratObrazekVzhledu(typ) {
+  const input = document.getElementById('vzSoubor-' + typ);
+  const msg = document.getElementById('vzMsg-' + typ);
+  if (!input.files.length) return;
+  const fd = new FormData();
+  fd.append('obrazek', input.files[0]);
+  msg.innerHTML = '<div class="vzhled-ok">Nahrávám…</div>';
+  try {
+    const res = await adminFetch(API + '/poukaz-vzhled/' + typ + '/obrazek', { method: 'POST', body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.chyba || 'Nahrání se nepodařilo.');
+    await nacistVzhledPoukazu();
+    vykreslitEditoryVzhledu({ [typ]: '<div class="vzhled-ok">✅ Nový obrázek uložen.</div>' });
+  } catch (e) { msg.innerHTML = `<div class="error-msg">${escH(e.message)}</div>`; input.value = ''; }
+}
+async function vratitVychoziVzhled(typ) {
+  if (!confirm('Vrátit výchozí obrázek poukazu? Nahraný obrázek i umístění textů se smažou.')) return;
+  try {
+    const res = await adminFetch(API + '/poukaz-vzhled/' + typ, { method: 'DELETE' });
+    if (!res.ok) throw new Error();
+    await nacistVzhledPoukazu();
+    vykreslitEditoryVzhledu({ [typ]: '<div class="vzhled-ok">✅ Vrácen výchozí obrázek.</div>' });
+  } catch (e) { document.getElementById('vzMsg-' + typ).innerHTML = '<div class="error-msg">Nepodařilo se.</div>'; }
+}
+
 async function nacistPoukazDlazdici() {
+  nacistVzhledPoukazu().then(vykreslitEditoryVzhledu);
   try {
     const data = await fetch(API+'/poukaz-dlazdice').then(r=>r.json());
     zobrazitPoukazDlazdici(data.obrazek_url);
