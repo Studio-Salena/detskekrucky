@@ -33,7 +33,7 @@ test('validace: platné vlastnosti projdou, vícenásobné bez duplicit v pevné
   const { chyba, hodnoty } = overitUpravuModelu({
     kategorie: 'celorocky', barefoot: true, membrana: null,
     sirka: ['siroka', 'normalni', 'siroka'], nart: [], zapinani: ['suchy_zip'],
-    dominantni_palec: 'vhodna', material: 'kuze', pohlavi: null,
+    dominantni_palec: 'vhodna', material: 'kuze', opatek: 'zpevneny', pohlavi: null,
     proc_jsme_vybrali: [' měkká podrážka ', '', 'široká špička']
   });
   assert.equal(chyba, undefined);
@@ -41,6 +41,7 @@ test('validace: platné vlastnosti projdou, vícenásobné bez duplicit v pevné
   assert.deepEqual(hodnoty.nart, []);
   assert.deepEqual(hodnoty.proc_jsme_vybrali, ['měkká podrážka', 'široká špička']);
   assert.equal(hodnoty.membrana, null);
+  assert.equal(hodnoty.opatek, 'zpevneny');
   assert.equal('znacka' in hodnoty, false, 'neposlaná pole se nemění');
 });
 
@@ -51,6 +52,7 @@ test('validace odmítne neznámé hodnoty, špatné typy a příliš mnoho bodů
     { zapinani: [{ a: 1 }] },
     { material: 'zlato' },
     { material: 'toString' },
+    { opatek: 'tvrdy' },
     { barefoot: 'ano' },
     { pohlavi: 'jine' },
     { kategorie: '' },

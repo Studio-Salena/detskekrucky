@@ -27,7 +27,8 @@ vm.runInContext([
   'const NOHA_MIN = 70, NOHA_MAX = 300, NOHA_ROZPETI = 10;',
   ...['KATALOG_SIRKA', 'KATALOG_ZAPINANI', 'KATALOG_RAZENI', 'KATALOG_PRO'].map(konstanta),
   'var nastaveniKatalogu = { rezervaMm: 12 };',
-  ...['escHtml', 'rezervaPruvodce', 'nadmerekBoty', 'platnaNoha', 'velikostSediNaNohu', 'doporucitVelikost', 'vysledekPruvodceHtml',
+  ...['KATALOG_MESICE'].map(konstanta),
+  ...['jeVMesicich', 'escHtml', 'rezervaPruvodce', 'nadmerekBoty', 'platnaNoha', 'velikostSediNaNohu', 'doporucitVelikost', 'vysledekPruvodceHtml',
     'prazdnyStavKatalogu', 'bezDiakritiky', 'slugText', 'stavZUrl', 'urlZeStavu', 'hledaniOdpovida', 'jeSkladem', 'produktOdpovida'].map(vytahnout)
 ].join('\n'), sandbox);
 const run = kod => { const v = vm.runInContext(kod, sandbox); return v !== null && typeof v === 'object' ? JSON.parse(JSON.stringify(v)) : v; };
@@ -44,21 +45,23 @@ const VELIKOSTI = [
   { velikost: 26, delka_mm: 170, sirka_mm: 67, dostupnost: 'dodavatel' }
 ];
 
-test('doporučení: nejmenší velikost s rezervou aspoň 12 mm', () => {
+test('doporučení: největší velikost s nadměrkem nejvýš 12 mm', () => {
   assert.deepEqual(zavolat('doporucitVelikost', VELIKOSTI, 140, null, 12),
-    { typ: 'ok', velikost: 24, delka_mm: 156, sirka_mm: 64, rezerva: 16, velka: false, uzka: false, dodavatel: false });
-  assert.equal(zavolat('doporucitVelikost', VELIKOSTI, 138, null, 12).velikost, 23, 'přesně 12 mm rezervy stačí');
-  assert.equal(zavolat('doporucitVelikost', VELIKOSTI, 139, null, 12).velikost, 24);
-  const d = zavolat('doporucitVelikost', VELIKOSTI, 150, 70, 12);
+    { typ: 'ok', velikost: 23, delka_mm: 150, sirka_mm: 62, rezerva: 10, velka: false, uzka: false, dodavatel: false });
+  assert.equal(zavolat('doporucitVelikost', VELIKOSTI, 144, null, 12).velikost, 24, 'přesně 12 mm ještě sedí');
+  assert.equal(zavolat('doporucitVelikost', VELIKOSTI, 143, null, 12).velikost, 23, '13 mm je moc, zůstává menší');
+  const d = zavolat('doporucitVelikost', VELIKOSTI, 158, 70, 12);
   assert.equal(d.velikost, 26, 'velikost bez rozměrů se přeskočí');
   assert.equal(d.dodavatel, true);
   assert.equal(d.uzka, true, 'vnitřní šířka 67 < nožička 70');
-  assert.equal(zavolat('doporucitVelikost', VELIKOSTI, 100, null, 12).velka, true, 'rezerva 50 mm = bota vychází velká');
-  assert.equal(zavolat('doporucitVelikost', VELIKOSTI, 140, null, 15).velikost, 24, 'jiná rezerva z nastavení');
+  const velka = zavolat('doporucitVelikost', VELIKOSTI, 100, null, 12);
+  assert.equal(velka.velikost, 23, 'když nic nesedí, nejmenší větší');
+  assert.equal(velka.velka, true, 'nadměrek 50 mm = příliš velký');
+  assert.equal(zavolat('doporucitVelikost', VELIKOSTI, 140, null, 16).velikost, 24, 'jiné maximum z nastavení');
 });
 
 test('doporučení: malé boty, bez rozměrů, neplatná délka', () => {
-  assert.deepEqual(zavolat('doporucitVelikost', VELIKOSTI, 165, null, 12), { typ: 'mala', nejvetsi: 170 });
+  assert.deepEqual(zavolat('doporucitVelikost', VELIKOSTI, 170, null, 12), { typ: 'mala', nejvetsi: 170 });
   assert.deepEqual(zavolat('doporucitVelikost', [{ velikost: 22, delka_mm: null }], 140, null, 12), { typ: 'bez-rozmeru' });
   for (const n of [null, 69, 301, 140.5]) assert.deepEqual(zavolat('doporucitVelikost', VELIKOSTI, n, null, 12), { typ: 'neplatne' }, String(n));
 });
@@ -66,7 +69,10 @@ test('doporučení: malé boty, bez rozměrů, neplatná délka', () => {
 test('text doporučení: velikost, rezerva, upozornění; vše bez HTML z dat', () => {
   const ok = zavolat('vysledekPruvodceHtml', { typ: 'ok', velikost: '24<b>', delka_mm: 156, sirka_mm: 64, rezerva: 16, velka: false, uzka: true, dodavatel: true }, 140, 70, 12);
   assert.match(ok, /Doporučujeme velikost 24&lt;b&gt;/);
-  assert.match(ok, /rezerva 16 mm/);
+  assert.match(ok, /nadměrek 16 mm/);
+  const velka = zavolat('vysledekPruvodceHtml', { typ: 'ok', velikost: 23, delka_mm: 150, rezerva: 50, velka: true }, 100, null, 12);
+  assert.match(velka, /nadměrek-velky|nadmerek-velky/);
+  assert.match(velka, /50 mm<\/strong> je příliš velký \(víc než 12 mm\)/);
   assert.match(ok, /bota může být úzká/);
   assert.match(ok, /u dodavatele/);
   assert.match(zavolat('vysledekPruvodceHtml', { typ: 'mala', nejvetsi: 170 }, 165, null, 12), /všechny velikosti malé.*170 mm.*Poradíme vám/);
@@ -81,7 +87,7 @@ test('rezerva z nastavení katalogu, při nesmyslu výchozích 12 mm', () => {
   run('nastaveniKatalogu = { rezervaMm: 12 }');
 });
 
-test('filtr Délka nožičky: adresa ?noha= a boty s rezervou 12–22 mm', () => {
+test('filtr Délka nožičky: adresa ?noha= a boty s nadměrkem do 12 mm', () => {
   const stav = zavolat('stavZUrl', '?noha=140&velikost=24');
   assert.equal(stav.noha, 140);
   assert.equal(zavolat('urlZeStavu', stav), '?velikost=24&noha=140');
@@ -91,21 +97,20 @@ test('filtr Délka nožičky: adresa ?noha= a boty s rezervou 12–22 mm', () =>
   const bota = d => ({ kategorie: 'x', znacka: 'Z', nazev: 'B', cena: 1000, velikosti: [{ velikost: 24, delka_mm: d, dostupnost: 'skladem' }] });
   const s = { ...zavolat('prazdnyStavKatalogu'), noha: 140 };
   const odpovida = d => zavolat('produktOdpovida', bota(d), s, ctx);
-  assert.equal(odpovida(151), false, 'rezerva 11 mm je málo');
-  assert.equal(odpovida(152), true);
-  assert.equal(odpovida(162), true);
-  assert.equal(odpovida(163), false, 'rezerva 23 mm je moc');
+  assert.equal(odpovida(140), false, 'bez nadměrku je malá');
+  assert.equal(odpovida(141), true);
+  assert.equal(odpovida(152), true, 'nadměrek přesně 12 mm');
+  assert.equal(odpovida(153), false, 'nadměrek 13 mm je moc');
   assert.equal(odpovida(null), false, 'bez rozměrů se při filtru neukáže');
   assert.equal(zavolat('produktOdpovida', bota(null), { ...s, noha: null }, ctx), true, 'bez filtru se ukáže');
   // jen skladem: velikost u dodavatele nestačí
   const dodavatel = { ...bota(156), velikosti: [{ velikost: 24, delka_mm: 156, dostupnost: 'dodavatel' }] };
   assert.equal(zavolat('produktOdpovida', dodavatel, { ...s, skladem: true }, ctx), false);
-  // vlastní nadměrek modelu (15 mm) má přednost před výchozím: sedí 155–165 mm
+  // vlastní max. nadměrek modelu (15 mm) má přednost před výchozím: sedí 141–155 mm
   const sNadmerkem = d => ({ ...bota(d), nadmerekMm: 15 });
-  assert.equal(zavolat('produktOdpovida', sNadmerkem(152), s, ctx), false, 'u modelu s nadměrkem 15 mm je 12 mm málo');
+  assert.equal(zavolat('produktOdpovida', sNadmerkem(153), s, ctx), true, 'u modelu s max. 15 mm stačí i 13 mm');
   assert.equal(zavolat('produktOdpovida', sNadmerkem(155), s, ctx), true);
-  assert.equal(zavolat('produktOdpovida', sNadmerkem(165), s, ctx), true);
-  assert.equal(zavolat('produktOdpovida', sNadmerkem(166), s, ctx), false);
+  assert.equal(zavolat('produktOdpovida', sNadmerkem(156), s, ctx), false);
 });
 
 test('nadměrek boty: vlastní u modelu, jinak výchozí', () => {

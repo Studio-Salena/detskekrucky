@@ -26,8 +26,9 @@ const sandbox = {};
 vm.createContext(sandbox);
 vm.runInContext([
   ...['DOPRAVA_VYCHOZI', 'DOPRAVA_NAZVY', 'PLATBA_NAZVY', 'UCET_IBAN', 'CHYBA_BEZ_VYDEJNIHO_MISTA', 'CHYBA_BEZ_MISTA_ZASILKOVNY'].map(konstanta),
-  'var nastaveniDopravy = DOPRAVA_VYCHOZI; var glsVydejniMisto = null; var zasVydejniMisto = null;',
-  ...['vypocitatDopravu', 'escHtml', 'escAttr', 'spocitatObjednavku', 'souhrnObjednavkyHtml', 'qrPlatbaUrl', 'potvrzeniObjednavkyHtml', 'shrnutiUdajuHtml',
+  'var nastaveniDopravy = DOPRAVA_VYCHOZI; var glsVydejniMisto = null; var zasVydejniMisto = null; var vsechnyProdukty = [];',
+  ...['KATALOG_MESICE'].map(konstanta),
+  ...['jeVMesicich', 'textVelikosti', 'popisVelikosti', 'produktPolozky', 'vypocitatDopravu', 'escHtml', 'escAttr', 'spocitatObjednavku', 'souhrnObjednavkyHtml', 'qrPlatbaUrl', 'potvrzeniObjednavkyHtml', 'shrnutiUdajuHtml',
     'dobirkaMozna', 'jeVydejniMistoGls', 'jeVydejniMistoZasilkovny', 'chybaVydejnihoMista', 'vybraneVydejniMisto', 'adresaVydejnihoMista', 'platneNastaveniDopravy'].map(vytahnout)
 ].join('\n'), sandbox);
 const zavolat = (fn, ...args) => {

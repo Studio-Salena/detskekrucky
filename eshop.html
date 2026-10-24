@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dětské krůčky - Barefoot obuv</title>
+<link rel="icon" href="logo.jpg" type="image/jpeg">
 <!-- E-shop zatím není spuštěný: bez náhledového klíče přesměrovat na eshop-brzy.html.
      Náhled: eshop.html?nahled=VhnxYyqF (prohlížeč si ho zapamatuje). Ověření účtu z e-mailu (?overeni=) projde.
      PŘI SPUŠTĚNÍ E-SHOPU tenhle blok i meta robots odstranit. -->
@@ -903,6 +904,15 @@ body > header{background:var(--warm-white);border-bottom:1px solid var(--tan-lig
 .detail-velikosti .size-btn .stav{color:var(--sage-dark)}
 .detail-velikosti .size-btn .stav.dodavatel{color:#7d6650}
 .detail-velikosti .size-btn.selected .stav,.detail-velikosti .size-btn.selected .mm{color:#fff}
+.detail-velikosti .size-btn.vyprodano:disabled{opacity:1;background:#fdf1f0;border-color:#e9c2bd;cursor:not-allowed}
+.detail-velikosti .size-btn.vyprodano .vel{color:#b3261e}
+.detail-velikosti .size-btn .stav.vyprodano{color:#b3261e;font-weight:700}
+.detail-velikosti .size-btn .mm .nadmerek{display:block;font-weight:700;color:var(--sage-dark)}
+.detail-velikosti .size-btn .mm .nadmerek[hidden]{display:none}
+.detail-velikosti .size-btn .mm .nadmerek.velky,.nadmerek-velky{color:#b3261e;background:#fde2df;border-radius:4px;padding:0 4px}
+.detail-velikosti.mesice .size-btn{grid-template-columns:118px minmax(0,1fr) auto}
+.detail-velikosti .size-btn .mm .nadmerek.mala{color:var(--text-light);font-weight:400}
+.detail-velikosti .size-btn.selected .mm .nadmerek{color:#fff;background:none}
 .modal-add-btn{border-radius:var(--r-pill);box-shadow:none}
 .detail-nozicka{background:var(--warm-white);border:1px solid var(--tan-light);border-radius:var(--r-m)}
 .detail-nozicka h3,.detail-sekce h3{font-family:var(--font-text);font-weight:800;font-size:1.05rem;color:var(--text)}
@@ -1683,9 +1693,9 @@ async function nacistProdukty() {
           klic, slug: s.model_slug || '', nazev: (s.nazev || '').trim(), znacka: s.znacka,
           popis: s.popis || '', typ_nohy: s.typ_nohy || '',
           barefoot: s.barefoot ?? null, sirkaNohy: s.sirka_nohy || [], zapinani: s.zapinani || [], membrana: s.membrana ?? null,
-          pohlavi: s.pohlavi || null, nart: s.nart || [], dominantniPalec: s.dominantni_palec || null, material: s.material || null, procJsmeVybrali: s.proc_jsme_vybrali || [],
+          pohlavi: s.pohlavi || null, nart: s.nart || [], dominantniPalec: s.dominantni_palec || null, material: s.material || null, opatek: s.opatek || null, procJsmeVybrali: s.proc_jsme_vybrali || [],
           nadmerekMm: s.nadmerek_mm ?? null,
-          maxId: 0, _vyprodane: new Set(),
+          maxId: 0, _vyprodane: new Map(),
           kategorieCitac: {}, emoji: '', primaryImageUrl: '', primaryImageAlt: '', images: [], _seenObrazky: new Set(), velikosti: []
         };
       }
@@ -1706,7 +1716,7 @@ async function nacistProdukty() {
       // "U dodavatele" velikosti se zobrazí i bez fyzické skladové zásoby -
       // pocet_kusu u nich neznamená, kolik je reálně k mání, jen se sledují jinak.
       const jeUDodavatele = s.dostupnost === 'dodavatel';
-      if (s.velikost != null && !(s.pocet_kusu > 0 || jeUDodavatele)) p._vyprodane.add(s.velikost);
+      if (s.velikost != null && !(s.pocet_kusu > 0 || jeUDodavatele) && !p._vyprodane.has(s.velikost)) p._vyprodane.set(s.velikost, { delka_mm: s.delka_mm, sirka_mm: s.sirka_mm });
       if (s.velikost == null || !(s.pocet_kusu > 0 || jeUDodavatele)) return;
 
       // Občas vznikne omylem duplicitní řádek pro stejnou velikost (dvě různé
@@ -1728,7 +1738,8 @@ async function nacistProdukty() {
       delete p.kategorieCitac;
       delete p._seenObrazky;
       // Vyprodané velikosti se na kartě ukážou šedě (ne jako nabídka)
-      p.vyprodane = [...p._vyprodane].filter(v => !p.velikosti.some(x => x.velikost === v)).sort((a, b) => a - b);
+      p.vyprodane = [...p._vyprodane.keys()].filter(v => !p.velikosti.some(x => x.velikost === v)).sort((a, b) => a - b);
+      p.vyprodaneRozmery = Object.fromEntries(p.vyprodane.map(v => [v, p._vyprodane.get(v)]));
       delete p._vyprodane;
       p.velikosti.sort((a, b) => a.velikost - b.velikost);
       // Skutečný znak, ne HTML entita - fallback se escapuje (escHtml),
@@ -1876,15 +1887,15 @@ function hledaniOdpovida(p, hledat, nazevKategorie) {
   const slova = bezDiakritiky(hledat).split(/\s+/).filter(Boolean);
   if (!slova.length) return true;
   const text = bezDiakritiky(`${p.znacka || ''} ${p.nazev || ''} ${nazevKategorie || ''}`);
-  return slova.every(s => /^\d{1,2}$/.test(s) ? p.velikosti.some(v => v.velikost === Number(s)) || text.includes(s) : text.includes(s));
+  return slova.every(s => /^\d{1,2}$/.test(s) ? (!jeVMesicich(p) && p.velikosti.some(v => v.velikost === Number(s))) || text.includes(s) : text.includes(s));
 }
 
 function jeSkladem(v) { return v.dostupnost !== 'dodavatel'; }
 
 // --- Průvodce velikostí ---
-// Vnitřní délka boty má být o rezervu (nadměrek) delší než nožička - výchozí
-// z nastavení katalogu (12 mm), model může mít v adminu vlastní. Filtr
-// v katalogu bere boty s rezervou až o 10 mm větší.
+// Nadměrek = o kolik je vnitřní délka boty delší než nožička. Smí být nejvýš
+// tolik, kolik je v nastavení katalogu (12 mm), model může mít v adminu vlastní.
+// Větší nadměrek = bota je příliš velká.
 const NOHA_MIN = 70, NOHA_MAX = 300, NOHA_ROZPETI = 10;
 function rezervaPruvodce() {
   const r = nastaveniKatalogu && nastaveniKatalogu.rezervaMm;
@@ -1895,32 +1906,33 @@ function nadmerekBoty(p, vychozi) {
   return Number.isInteger(r) && r >= 0 && r <= 30 ? r : vychozi;
 }
 function platnaNoha(n) { return Number.isInteger(n) && n >= NOHA_MIN && n <= NOHA_MAX; }
-function velikostSediNaNohu(v, noha, rezerva) {
-  return !!v.delka_mm && v.delka_mm >= noha + rezerva && v.delka_mm <= noha + rezerva + NOHA_ROZPETI;
+function velikostSediNaNohu(v, noha, maxNadmerek) {
+  return !!v.delka_mm && v.delka_mm > noha && v.delka_mm - noha <= maxNadmerek;
 }
-// Doporučení z velikostí, které jde koupit: nejmenší s dostatečnou rezervou
-function doporucitVelikost(velikosti, noha, sirka, rezerva) {
+// Doporučení z velikostí, které jde koupit: největší s nadměrkem do maxima;
+// když taková není, nejmenší větší (s upozorněním na příliš velký nadměrek)
+function doporucitVelikost(velikosti, noha, sirka, maxNadmerek) {
   if (!platnaNoha(noha)) return { typ: 'neplatne' };
   const zmerene = (velikosti || []).filter(v => v.delka_mm > 0).sort((a, b) => a.delka_mm - b.delka_mm || a.velikost - b.velikost);
   if (!zmerene.length) return { typ: 'bez-rozmeru' };
-  const v = zmerene.find(x => x.delka_mm >= noha + rezerva);
+  const v = zmerene.filter(x => velikostSediNaNohu(x, noha, maxNadmerek)).pop() || zmerene.find(x => x.delka_mm > noha);
   if (!v) return { typ: 'mala', nejvetsi: zmerene[zmerene.length - 1].delka_mm };
   const sirkaOk = Number.isInteger(sirka) && sirka > 0;
   return {
     typ: 'ok', velikost: v.velikost, delka_mm: v.delka_mm, sirka_mm: v.sirka_mm || null,
     rezerva: v.delka_mm - noha,
-    velka: v.delka_mm - noha > rezerva + NOHA_ROZPETI,
+    velka: v.delka_mm - noha > maxNadmerek,
     uzka: sirkaOk && v.sirka_mm > 0 && v.sirka_mm < sirka,
     dodavatel: v.dostupnost === 'dodavatel'
   };
 }
-function vysledekPruvodceHtml(d, noha, sirka, rezerva) {
+function vysledekPruvodceHtml(d, noha, sirka, maxNadmerek) {
   const poradit = '<button type="button" class="detail-odkaz" onclick="poraditKProduktu()">Poradíme vám</button>';
   if (d.typ === 'neplatne') return `Zadejte délku nožičky v milimetrech (${NOHA_MIN}–${NOHA_MAX} mm). Jak měřit, najdete v návodu níže.`;
   if (d.typ === 'bez-rozmeru') return `U této boty zatím nemáme změřené vnitřní rozměry. ${poradit}`;
   if (d.typ === 'mala') return `<span class="varovani">Na nožičku ${Number(noha)} mm jsou u této boty všechny velikosti malé (největší má vnitřní délku ${Number(d.nejvetsi)} mm).</span> ${poradit}`;
-  let t = `<span class="doporuceni">Doporučujeme velikost ${escHtml(d.velikost)}</span> – vnitřní délka ${Number(d.delka_mm)} mm, tedy rezerva ${Number(d.rezerva)} mm na růst a pohyb prstů.`;
-  if (d.velka) t += ' <span class="varovani">Bota vychází spíš větší – menší velikost teď nemáme nebo nemá změřené rozměry.</span>';
+  if (d.velka) return `<span class="varovani">Velikost ${escHtml(d.velikost)} má vnitřní délku ${Number(d.delka_mm)} mm, nadměrek <strong class="nadmerek-velky">${Number(d.rezerva)} mm</strong> je příliš velký (víc než ${Number(maxNadmerek)} mm).</span> Menší velikost teď nemáme nebo nemá změřené rozměry. ${poradit}`;
+  let t = `<span class="doporuceni">Doporučujeme velikost ${escHtml(d.velikost)}</span> – vnitřní délka ${Number(d.delka_mm)} mm, tedy nadměrek ${Number(d.rezerva)} mm na růst a pohyb prstů.`;
   if (d.uzka) t += ` <span class="varovani">Pozor: vnitřní šířka ${Number(d.sirka_mm)} mm je menší než šířka nožičky (${Number(sirka)} mm), bota může být úzká.</span>`;
   if (d.dodavatel) t += ' Tato velikost je u dodavatele (7–14 dní).';
   return t;
@@ -1938,7 +1950,7 @@ function ulozNozicku(delka, sirka) {
 function produktOdpovida(p, stav, ctx, vynechat) {
   const krome = k => vynechat !== k;
   if (krome('kategorie') && stav.kategorie && p.kategorie !== stav.kategorie) return false;
-  if (krome('velikost') && stav.velikost && !p.velikosti.some(v => v.velikost === stav.velikost && (!stav.skladem || jeSkladem(v)))) return false;
+  if (krome('velikost') && stav.velikost && (jeVMesicich(p) || !p.velikosti.some(v => v.velikost === stav.velikost && (!stav.skladem || jeSkladem(v))))) return false;
   if (krome('noha') && stav.noha && !p.velikosti.some(v => velikostSediNaNohu(v, stav.noha, nadmerekBoty(p, ctx.rezerva ?? 12)) && (!stav.skladem || jeSkladem(v)))) return false;
   if (krome('skladem') && stav.skladem && !p.velikosti.some(jeSkladem)) return false;
   if (krome('sleva') && stav.sleva && !p.cena_puvodni) return false;
@@ -1946,7 +1958,7 @@ function produktOdpovida(p, stav, ctx, vynechat) {
   if (krome('znacka') && stav.znacka.length && !stav.znacka.includes((p.znacka || '').trim())) return false;
   if (krome('vek') && stav.vek.length) {
     const skupiny = (ctx.vekoveSkupiny || []).filter(s => stav.vek.includes(slugText(s.nazev)));
-    if (!skupiny.some(s => p.velikosti.some(v => v.velikost >= s.od && v.velikost <= s.do))) return false;
+    if (jeVMesicich(p) || !skupiny.some(s => p.velikosti.some(v => v.velikost >= s.od && v.velikost <= s.do))) return false;
   }
   if (krome('barefoot') && stav.barefoot && p.barefoot !== true) return false;
   if (krome('membrana') && stav.membrana && p.membrana !== true) return false;
@@ -1981,10 +1993,10 @@ function spocitatMoznosti(produkty, stav, ctx) {
   const pridat = (mapa, klic) => { mapa[klic] = (mapa[klic] || 0) + 1; };
   for (const p of produkty) {
     if (produktOdpovida(p, stav, ctx, 'kategorie')) pridat(pocty.kategorie, p.kategorie);
-    if (produktOdpovida(p, stav, ctx, 'velikost')) new Set(p.velikosti.filter(v => !stav.skladem || jeSkladem(v)).map(v => v.velikost)).forEach(v => pridat(pocty.velikost, v));
+    if (!jeVMesicich(p) && produktOdpovida(p, stav, ctx, 'velikost')) new Set(p.velikosti.filter(v => !stav.skladem || jeSkladem(v)).map(v => v.velikost)).forEach(v => pridat(pocty.velikost, v));
     if (produktOdpovida(p, stav, ctx, 'znacka')) pridat(pocty.znacka, (p.znacka || '').trim());
     if (produktOdpovida(p, stav, ctx, 'vek')) {
-      (ctx.vekoveSkupiny || []).forEach(s => { if (p.velikosti.some(v => v.velikost >= s.od && v.velikost <= s.do)) pridat(pocty.vek, slugText(s.nazev)); });
+      (ctx.vekoveSkupiny || []).forEach(s => { if (!jeVMesicich(p) && p.velikosti.some(v => v.velikost >= s.od && v.velikost <= s.do)) pridat(pocty.vek, slugText(s.nazev)); });
     }
     if (produktOdpovida(p, stav, ctx, 'sirka')) (p.sirkaNohy || []).forEach(x => pridat(pocty.sirka, x));
     if (produktOdpovida(p, stav, ctx, 'zapinani')) (p.zapinani || []).forEach(x => pridat(pocty.zapinani, x));
@@ -2253,9 +2265,9 @@ function filtryHtml(stav, pocty) {
   const rez = rezervaPruvodce();
   casti.push(skupina('Délka nožičky', `<div class="filtr-noha">
       <input type="number" inputmode="numeric" min="${NOHA_MIN}" max="${NOHA_MAX}" step="1" data-pole="noha" placeholder="např. 145" aria-label="Délka nožičky v mm" value="${stav.noha ?? ''}"><span>mm</span></div>
-      <p class="filtr-pozn">Ukážeme boty s velikostí o ${rez}–${rez + NOHA_ROZPETI} mm delší (u některých modelů podle střihu jinak). Jen boty se změřenými rozměry.</p>`));
+      <p class="filtr-pozn">Ukážeme boty, které mají velikost s nadměrkem do ${rez} mm (u některých modelů podle střihu jinak). Jen boty se změřenými rozměry.</p>`));
 
-  const velikosti = [...new Set([...vsechnyProdukty.flatMap(p => p.velikosti.map(v => v.velikost)), ...(stav.velikost ? [stav.velikost] : [])])].sort((a, b) => a - b);
+  const velikosti = [...new Set([...vsechnyProdukty.filter(p => !jeVMesicich(p)).flatMap(p => p.velikosti.map(v => v.velikost)), ...(stav.velikost ? [stav.velikost] : [])])].sort((a, b) => a - b);
   if (velikosti.length) {
     casti.push(skupina('Velikost', `<div class="filtr-velikosti">${velikosti.map(v =>
       `<button type="button" class="filtr-velikost" data-velikost="${v}" aria-pressed="${stav.velikost === v}"${!pocty.velikost[v] && stav.velikost !== v ? ' disabled' : ''} title="${pocty.velikost[v] || 0} bot">${v}</button>`).join('')}</div>`));
@@ -2311,8 +2323,8 @@ function kartaProduktuHtml(p, stav) {
   ].sort((a, b) => a.velikost - b.velikost);
   const MAX = 10;
   const chipy = velikosti.slice(0, MAX).map(v => {
-    const trida = v.vyprodano ? 'vyprodano' : (stav.velikost === v.velikost ? 'hledana' : '');
-    return `<span${trida ? ` class="${trida}"` : ''} title="${v.vyprodano ? 'Není skladem' : 'Skladem'}">${v.velikost}</span>`;
+    const trida = v.vyprodano ? 'vyprodano' : (stav.velikost === v.velikost && !jeVMesicich(p) ? 'hledana' : '');
+    return `<span${trida ? ` class="${trida}"` : ''} title="${v.vyprodano ? 'Není skladem' : 'Skladem'}">${escHtml(textVelikosti(p, v.velikost))}</span>`;
   }).join('') + (velikosti.length > MAX ? `<span>+${velikosti.length - MAX}</span>` : '');
   const skladem = p.velikosti.some(jeSkladem);
   return `<div class="product-card" data-klic="${escAttr(p.klic)}" onclick="openDetail(this.dataset.klic)">
@@ -2423,8 +2435,21 @@ function jeVychoziStav(stav) {
 }
 
 // Kategorie, které nejsou boty (stejný seznam jako KATEGORIE_BEZ_VLASTNOSTI v lib/modely.js)
-const KATALOG_BEZ_BOT = ['doplnky', 'pece-o-obuv'];
+const KATALOG_BEZ_BOT = ['doplnky', 'pece-o-obuv', 'detske-batuzky'];
 function jeBota(p) { return !KATALOG_BEZ_BOT.includes(p.kategorie); }
+
+// Capáčky mají místo velikosti věk v měsících (6 = 0–6 měsíců, 12 = 6–12 ...),
+// proto nejsou ve filtru Velikost ani ve věkových skupinách mezi botami
+const KATALOG_MESICE = ['capacky'];
+function jeVMesicich(p) { return !!p && KATALOG_MESICE.includes(p.kategorie); }
+function textVelikosti(p, v) {
+  if (!jeVMesicich(p)) return String(v);
+  const n = Number(v);
+  return n > 0 && n % 6 === 0 ? `${n - 6}–${n} měsíců` : `${n} ${n >= 2 && n <= 4 ? 'měsíce' : n === 1 ? 'měsíc' : 'měsíců'}`;
+}
+// "Vel. 24" u bot, "12–18 měsíců" u capáčků
+function popisVelikosti(p, v) { return jeVMesicich(p) ? textVelikosti(p, v) : 'vel. ' + v; }
+function produktPolozky(item) { return vsechnyProdukty.find(x => x.velikosti.some(v => v.produkt_id === item.id)); }
 
 // Nejprodávanější boty, které jsou právě v nabídce (skladem nebo u dodavatele)
 function oblibeneProdukty(slugy, produkty, pocet = 4) {
@@ -2635,30 +2660,40 @@ async function odeslatPoradnu() {
 const DETAIL_NART = { nizky: 'nízký', stredni: 'střední', vysoky: 'vysoký' };
 const DETAIL_MATERIAL = { kuze: 'kůže', textil: 'textil', syntetika: 'syntetika', kombinace: 'kombinace' };
 const DETAIL_PALEC = { vhodna: 'vhodná', nevhodna: 'nevhodná' };
+const DETAIL_OPATEK = { bez: 'bez opatku', mekky: 'měkký', zpevneny: 'zpevněný' };
 
 function popisVolby(mapa, hodnoty) {
   return (hodnoty || []).map(h => mapa[h]).filter(Boolean).join(' / ');
 }
 
-// Rozměr v mm jako centimetry s desetinnou čárkou (165 -> "16,5")
-function cm(mm) {
-  return (mm / 10).toLocaleString('cs-CZ', { maximumFractionDigits: 1 });
-}
-
-// Tabulka velikostí: skladem, u dodavatele i vyprodané (vyprodané nejdou vybrat)
+// Tabulka velikostí: skladem, u dodavatele i vyprodané (vyprodané jsou červeně
+// a nejdou vybrat). Rozměry v mm jen u bot, nadměrek k nim doplní průvodce.
 function velikostiDetailuHtml(p) {
   const radky = [
     ...p.velikosti.map(v => ({ ...v, vyprodano: false })),
-    ...(p.vyprodane || []).map(v => ({ velikost: v, vyprodano: true }))
+    ...(p.vyprodane || []).map(v => ({ velikost: v, ...((p.vyprodaneRozmery || {})[v] || {}), vyprodano: true }))
   ].sort((a, b) => a.velikost - b.velikost);
+  const bota = jeBota(p);
   return radky.map(v => {
     const stav = v.vyprodano ? ['vyprodano', 'Není skladem'] : v.dostupnost === 'dodavatel' ? ['dodavatel', 'U dodavatele (7–14 dní)'] : ['', 'Skladem'];
-    const mm = v.delka_mm && v.sirka_mm ? `vnitřní ${cm(v.delka_mm)} × ${cm(v.sirka_mm)} cm`
-      : v.delka_mm ? `vnitřní délka ${cm(v.delka_mm)} cm` : '';
+    const mm = !bota ? '' : v.delka_mm && v.sirka_mm ? `vnitřní ${Number(v.delka_mm)} × ${Number(v.sirka_mm)} mm`
+      : v.delka_mm ? `vnitřní délka ${Number(v.delka_mm)} mm` : '';
     const vel = Number(v.velikost);
-    return `<button type="button" class="size-btn" data-velikost="${vel}"${v.vyprodano ? ' disabled' : ` onclick="vybrVelikost(${vel},this)" aria-pressed="false"`} aria-label="Velikost ${vel}, ${stav[1]}${mm ? ', ' + mm : ''}">
-      <span class="vel">${vel}</span><span class="stav${stav[0] ? ' ' + stav[0] : ''}">${stav[1]}</span><span class="mm">${mm}</span></button>`;
+    return `<button type="button" class="size-btn${v.vyprodano ? ' vyprodano' : ''}" data-velikost="${vel}"${mm && v.delka_mm ? ` data-delka="${Number(v.delka_mm)}"` : ''}${v.vyprodano ? ' disabled' : ` onclick="vybrVelikost(${vel},this)" aria-pressed="false"`} aria-label="${jeVMesicich(p) ? escAttr(textVelikosti(p, vel)) : 'Velikost ' + vel}, ${stav[1]}${mm ? ', ' + mm : ''}">
+      <span class="vel">${escHtml(textVelikosti(p, vel))}</span><span class="stav${stav[0] ? ' ' + stav[0] : ''}">${stav[1]}</span><span class="mm">${mm}<span class="nadmerek" hidden></span></span></button>`;
   }).join('');
+}
+
+// Nadměrek u každé velikosti (i vyprodané) podle zadané nožičky, nad maximem zvýrazněný
+function oznacitNadmerky(noha, maxNadmerek) {
+  document.querySelectorAll('#detailSizes .size-btn[data-delka]').forEach(b => {
+    const el = b.querySelector('.nadmerek');
+    if (!platnaNoha(noha)) { el.hidden = true; return; }
+    const n = Number(b.dataset.delka) - noha;
+    el.hidden = false;
+    el.className = 'nadmerek' + (n > maxNadmerek ? ' velky' : n <= 0 ? ' mala' : '');
+    el.textContent = n > maxNadmerek ? `nadměrek ${n} mm – příliš velký` : n <= 0 ? 'malá' : `nadměrek ${n} mm`;
+  });
 }
 
 // "Pro jakou nožičku": vlastnosti z adminu (Modely bot) + dosavadní text o nožičce
@@ -2668,6 +2703,7 @@ function nozickaHtml(p) {
   if ((p.sirkaNohy || []).length) radky.push(['Šířka', popisVolby(KATALOG_SIRKA, p.sirkaNohy)]);
   if ((p.nart || []).length) radky.push(['Nárt', popisVolby(DETAIL_NART, p.nart)]);
   if (p.dominantniPalec && DETAIL_PALEC[p.dominantniPalec]) radky.push(['Dominantní palec', DETAIL_PALEC[p.dominantniPalec]]);
+  if (p.opatek && DETAIL_OPATEK[p.opatek]) radky.push(['Opatek', DETAIL_OPATEK[p.opatek]]);
   return '<h3>Pro jakou nožičku</h3>'
     + (radky.length ? `<dl>${radky.map(([k, v]) => `<div class="vlastnost"><dt>${escHtml(k)}</dt><dd>${escHtml(v)}</dd></div>`).join('')}</dl>` : '')
     + (p.typ_nohy ? `<p style="margin:0 0 8px">${escHtml(p.typ_nohy)}</p>` : '')
@@ -2679,6 +2715,7 @@ function parametryHtml(p, nazevKategorie) {
   const radky = [['Značka', p.znacka], ['Kategorie', nazevKategorie]];
   if (p.barefoot === true || p.barefoot === false) radky.push(['Barefoot', p.barefoot ? 'ano' : 'ne']);
   if (p.material && DETAIL_MATERIAL[p.material]) radky.push(['Materiál', DETAIL_MATERIAL[p.material]]);
+  if (p.opatek && DETAIL_OPATEK[p.opatek]) radky.push(['Opatek', DETAIL_OPATEK[p.opatek]]);
   if ((p.zapinani || []).length) radky.push(['Zapínání', popisVolby(KATALOG_ZAPINANI, p.zapinani)]);
   if (p.membrana === true || p.membrana === false) radky.push(['Membrána', p.membrana ? 'ano' : 'ne']);
   if ((p.sirkaNohy || []).length) radky.push(['Šířka', popisVolby(KATALOG_SIRKA, p.sirkaNohy)]);
@@ -2738,13 +2775,20 @@ function openDetail(klic, { zHistorie = false } = {}) {
   const skladEl = document.getElementById('detailSklad');
   skladEl.className = 'karta-sklad' + (skladem ? '' : ' dodavatel');
   skladEl.innerHTML = skladem ? '&#9679; Skladem' : '&#128666; U dodavatele (7–14 dní)';
+  const bota = jeBota(p);
   document.getElementById('detailSizes').innerHTML = velikostiDetailuHtml(p);
+  document.getElementById('detailSizes').classList.toggle('mesice', jeVMesicich(p));
+  document.getElementById('detailVelikostiNadpis').textContent = jeVMesicich(p) ? 'Vyberte věk:' : 'Vyberte velikost:';
+  // Batůžky, doplňky a péče o obuv: bez průvodce velikostí, měření a "Pro jakou nožičku"
+  document.getElementById('detailPruvodce').hidden = !bota;
+  document.getElementById('detailMereniBtn').hidden = !bota;
+  document.getElementById('detailNozicka').hidden = !bota;
   pripravitPruvodce();
   document.getElementById('detailRozmery').style.display = 'none';
   document.getElementById('detailDostupnost').style.display = 'none';
   document.getElementById('detailMereni').hidden = true;
   document.getElementById('detailMereniBtn').setAttribute('aria-expanded', 'false');
-  document.getElementById('detailNozicka').innerHTML = nozickaHtml(p);
+  document.getElementById('detailNozicka').innerHTML = bota ? nozickaHtml(p) : '';
 
   const proc = (p.procJsmeVybrali || []).filter(Boolean);
   document.getElementById('detailProcSekce').hidden = !proc.length;
@@ -2760,6 +2804,15 @@ function openDetail(klic, { zHistorie = false } = {}) {
   document.getElementById('detailListaVelikost').textContent = 'Vyberte velikost';
   document.getElementById('detailListaCena').textContent = document.getElementById('detailPrice').textContent;
   document.getElementById('detailLista').hidden = true;
+  // Batůžek či doplněk v jediném provedení: není co vybírat, rovnou vybrané
+  const jedina = !bota && p.velikosti.length === 1 && !(p.vyprodane || []).length;
+  document.getElementById('detailVelikostiNadpis').hidden = jedina;
+  document.getElementById('detailSizes').style.display = jedina ? 'none' : '';
+  if (jedina) {
+    vybrVelikost(p.velikosti[0].velikost, document.querySelector('#detailSizes .size-btn'));
+    document.getElementById('detailListaVelikost').textContent = '';
+    document.getElementById('detailDostupnost').style.display = 'none';
+  }
   modal.classList.add('open');
   modal.querySelector('.modal').scrollTop = 0;
 }
@@ -2922,6 +2975,7 @@ function pohybZoomGalerie(e, vynutit) {
 
 // Průvodce na stránce boty: předvyplní nožičku z filtru nebo zapamatovanou a hned doporučí
 function pripravitPruvodce() {
+  if (!jeBota(aktivniProdukt)) return;
   const n = nactiNozicku();
   const delka = (katalogStav && katalogStav.noha) || n.delka || null;
   document.getElementById('pruvodceDelka').value = delka ?? '';
@@ -2933,10 +2987,11 @@ function spustitPruvodce(vybrat) {
   if (!aktivniProdukt) return;
   const cislo = id => { const t = document.getElementById(id).value.trim(); return t === '' ? null : Math.round(Number(t)); };
   const noha = cislo('pruvodceDelka'), sirka = cislo('pruvodceSirka');
-  const rezerva = nadmerekBoty(aktivniProdukt, rezervaPruvodce());
-  const d = doporucitVelikost(aktivniProdukt.velikosti, noha, sirka, rezerva);
+  const maxNadmerek = nadmerekBoty(aktivniProdukt, rezervaPruvodce());
+  const d = doporucitVelikost(aktivniProdukt.velikosti, noha, sirka, maxNadmerek);
   document.querySelectorAll('#detailSizes .size-btn.doporucena').forEach(b => b.classList.remove('doporucena'));
-  document.getElementById('pruvodceVysledek').innerHTML = vysledekPruvodceHtml(d, noha, sirka, rezerva);
+  document.getElementById('pruvodceVysledek').innerHTML = vysledekPruvodceHtml(d, noha, sirka, maxNadmerek);
+  oznacitNadmerky(noha, maxNadmerek);
   if (d.typ === 'neplatne') return;
   ulozNozicku(noha, sirka);
   if (d.typ !== 'ok') return;
@@ -2957,7 +3012,7 @@ function vybrVelikost(vel, btn) {
   // velikosti se místo "od X Kč" ukáže přesná cena pro tu velikost.
   document.getElementById('detailPrice').textContent = (velData ? velData.cena : aktivniProdukt.cena) + ' Kč';
   document.getElementById('detailListaCena').textContent = document.getElementById('detailPrice').textContent;
-  document.getElementById('detailListaVelikost').textContent = 'Velikost ' + vel;
+  document.getElementById('detailListaVelikost').textContent = jeVMesicich(aktivniProdukt) ? textVelikosti(aktivniProdukt, vel) : 'Velikost ' + vel;
 
   const rozmeryEl = document.getElementById('detailRozmery');
   if (velData && (velData.delka_mm || velData.sirka_mm)) {
@@ -3048,7 +3103,7 @@ function zobrazitPridano(produkt, velData) {
   document.getElementById('pridanoPolozka').innerHTML = `
     <div class="pridano-foto">${obrazekProduktuHtml(produkt, '72px')}</div>
     <div><small>${escHtml(produkt.znacka)}</small><strong>${escHtml(produkt.nazev)}</strong>
-      <div>Velikost ${escHtml(velData.velikost)}</div><div class="product-price">${Number(velData.cena)} Kč</div></div>`;
+      <div>${jeVMesicich(produkt) ? escHtml(textVelikosti(produkt, velData.velikost)) : 'Velikost ' + escHtml(velData.velikost)}</div><div class="product-price">${Number(velData.cena)} Kč</div></div>`;
   openModal('modalPridano');
   document.getElementById('pridanoPokracovat').focus();
 }
@@ -3132,9 +3187,10 @@ function ulozitKosik() {
 // V košíku jde změnit velikost, když má model víc velikostí v nabídce
 function kosikVelikostHtml(item, idx) {
   const velikosti = velikostiProPolozku(item);
-  if (velikosti.length < 2 || !velikosti.some(v => String(v.velikost) === String(item.velikost))) return `Vel. ${escHtml(item.velikost)}`;
-  return `<label>Vel. <select class="cart-velikost" onchange="zmenitVelikostVKosiku(${Number(idx)}, this.value)" aria-label="Velikost ${escAttr(item.nazev)}">${velikosti.map(v =>
-    `<option value="${escAttr(v.velikost)}"${String(v.velikost) === String(item.velikost) ? ' selected' : ''}>${escHtml(v.velikost)}${v.dostupnost === 'dodavatel' ? ' (u dodavatele)' : ''}</option>`).join('')}</select></label>`;
+  const p = produktPolozky(item);
+  if (velikosti.length < 2 || !velikosti.some(v => String(v.velikost) === String(item.velikost))) return jeVMesicich(p) ? escHtml(textVelikosti(p, item.velikost)) : `Vel. ${escHtml(item.velikost)}`;
+  return `<label>${jeVMesicich(p) ? 'Věk' : 'Vel.'} <select class="cart-velikost" onchange="zmenitVelikostVKosiku(${Number(idx)}, this.value)" aria-label="Velikost ${escAttr(item.nazev)}">${velikosti.map(v =>
+    `<option value="${escAttr(v.velikost)}"${String(v.velikost) === String(item.velikost) ? ' selected' : ''}>${escHtml(textVelikosti(p, v.velikost))}${v.dostupnost === 'dodavatel' ? ' (u dodavatele)' : ''}</option>`).join('')}</select></label>`;
 }
 
 function renderKosik() {
@@ -3541,7 +3597,7 @@ function spocitatObjednavku(polozky, poukaz, doprava, platba) {
 function souhrnObjednavkyHtml(polozky, poukaz, doprava, platba) {
   const s = spocitatObjednavku(polozky, poukaz, doprava, platba);
   return `
-    ${polozky.map(i => `<div class="order-summary-item"><span>${escHtml(i.nazev)} vel. ${escHtml(i.velikost)} × ${Number(i.pocet)}</span><span>${i.cena * i.pocet} Kč</span></div>`).join('')}
+    ${polozky.map(i => `<div class="order-summary-item"><span>${escHtml(i.nazev)} ${escHtml(popisVelikosti(produktPolozky(i), i.velikost))} × ${Number(i.pocet)}</span><span>${i.cena * i.pocet} Kč</span></div>`).join('')}
     ${s.sleva > 0 ? `<div class="order-summary-item" style="color:var(--sage);font-weight:700"><span>Dárkový poukaz ${escHtml(poukaz.kod)}</span><span>−${s.sleva} Kč</span></div>` : ''}
     <div class="order-summary-item"><span>Doprava (${escHtml(DOPRAVA_NAZVY[doprava] || doprava)})</span><span>${s.dopravaCena === 0 ? 'Zdarma' : s.dopravaCena + ' Kč'}</span></div>
     ${s.priplatek > 0 ? `<div class="order-summary-item"><span>Dobírka (příplatek)</span><span>${s.priplatek} Kč</span></div>` : ''}

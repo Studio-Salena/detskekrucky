@@ -28,8 +28,8 @@ function vytahnoutKonstantu(nazev) {
 const sandbox = { URL, URLSearchParams };
 vm.createContext(sandbox);
 vm.runInContext([
-  ...['KATALOG_RAZENI', 'KATALOG_SIRKA', 'KATALOG_ZAPINANI'].map(vytahnoutKonstantu),
-  ...['escHtml', 'escAttr', 'jeBezpecnaHttpUrl', 'obrazekProduktuHtml', 'prazdnyStavKatalogu', 'bezDiakritiky', 'slugText',
+  ...['KATALOG_RAZENI', 'KATALOG_SIRKA', 'KATALOG_ZAPINANI', 'KATALOG_BEZ_BOT', 'KATALOG_MESICE'].map(vytahnoutKonstantu),
+  ...['jeBota', 'jeVMesicich', 'textVelikosti', 'popisVelikosti', 'escHtml', 'escAttr', 'jeBezpecnaHttpUrl', 'obrazekProduktuHtml', 'prazdnyStavKatalogu', 'bezDiakritiky', 'slugText',
     'stavZUrl', 'urlZeStavu', 'hledaniOdpovida', 'jeSkladem', 'produktOdpovida', 'filtrovatProdukty', 'seraditProdukty',
     'spocitatMoznosti', 'pocetProduktuText', 'stitkyKartyHtml', 'kartaProduktuHtml', 'drobeckyHtml'].map(vytahnout),
   // ziskatPozadiKategorie potřebuje globální kategorie - v testu stačí neutrální pozadí
@@ -165,28 +165,49 @@ test('eshop.html: starý filtr a neescapovaná karta jsou pryč, dlaždice kateg
 // ═══ Krok 2 - stránka produktu ═══
 
 const detail = new vm.Script([
-  ...['DETAIL_NART', 'DETAIL_MATERIAL', 'DETAIL_PALEC'].map(vytahnoutKonstantu),
-  ...['popisVolby', 'cm', 'velikostiDetailuHtml', 'nozickaHtml', 'parametryHtml', 'podobneProdukty', 'fotkyProduktu'].map(vytahnout)
+  ...['DETAIL_NART', 'DETAIL_MATERIAL', 'DETAIL_PALEC', 'DETAIL_OPATEK'].map(vytahnoutKonstantu),
+  ...['popisVolby', 'velikostiDetailuHtml', 'nozickaHtml', 'parametryHtml', 'podobneProdukty', 'fotkyProduktu'].map(vytahnout)
 ].join('\n'));
 detail.runInContext(sandbox);
 
 const BOTA = {
   ...PRODUKTY[0], typ_nohy: 'Na vyšší <nárt>', nart: ['stredni', 'vysoky'], dominantniPalec: 'vhodna', material: 'kuze',
+  opatek: 'mekky',
   velikosti: [{ velikost: 24, dostupnost: 'skladem', delka_mm: 165, sirka_mm: 65 }, { velikost: 25, dostupnost: 'dodavatel', delka_mm: 172 }],
-  vyprodane: [23]
+  vyprodane: [23], vyprodaneRozmery: { 23: { delka_mm: 158, sirka_mm: 63 } }
 };
 
-test('detail: tabulka velikostí s vyprodanou (nejde vybrat), u dodavatele a vnitřními rozměry v cm', () => {
+test('detail: tabulka velikostí s vyprodanou (nejde vybrat), u dodavatele a vnitřními rozměry v mm', () => {
   const h = run(`velikostiDetailuHtml(${JSON.stringify(BOTA)})`);
   const radky = h.split('</button>').filter(x => x.trim());
   assert.equal(radky.length, 3);
-  assert.match(radky[0], /data-velikost="23" disabled/);
+  assert.match(radky[0], /class="size-btn vyprodano" data-velikost="23" data-delka="158" disabled/);
+  assert.match(radky[0], /vnitřní 158 × 63 mm/, 'vyprodaná velikost ukazuje rozměry');
   assert.match(radky[0], /Není skladem/);
   assert.doesNotMatch(radky[0], /onclick/);
   assert.match(radky[1], /onclick="vybrVelikost\(24,this\)" aria-pressed="false"/);
-  assert.match(radky[1], /Skladem<\/span><span class="mm">vnitřní 16,5 × 6,5 cm/);
+  assert.match(radky[1], /Skladem<\/span><span class="mm">vnitřní 165 × 65 mm/);
   assert.match(radky[2], /U dodavatele \(7–14 dní\)/);
-  assert.match(radky[2], /vnitřní délka 17,2 cm/);
+  assert.match(radky[2], /vnitřní délka 172 mm/);
+});
+
+test('detail: batůžek bez rozměrů, capáčky s věkem v měsících', () => {
+  const batoh = run(`velikostiDetailuHtml(${JSON.stringify({ ...BOTA, kategorie: 'detske-batuzky' })})`);
+  assert.doesNotMatch(batoh, /vnitřní|data-delka/);
+  const capacky = run(`velikostiDetailuHtml(${JSON.stringify({ ...BOTA, kategorie: 'capacky', velikosti: [{ velikost: 12, dostupnost: 'skladem', delka_mm: 125 }], vyprodane: [] })})`);
+  assert.match(capacky, /<span class="vel">6–12 měsíců<\/span>/);
+  assert.equal(zavolat('textVelikosti', { kategorie: 'capacky' }, 6), '0–6 měsíců');
+  assert.equal(zavolat('textVelikosti', { kategorie: 'capacky' }, 2), '2 měsíce');
+  assert.equal(zavolat('textVelikosti', { kategorie: 'papuce' }, 18), '18');
+});
+
+test('capáčky nejsou ve filtru Velikost ani ve věku mezi botami', () => {
+  const cap = { kategorie: 'capacky', znacka: 'Capiki', nazev: 'Capáčky', cena: 500, velikosti: [vel(18)] };
+  const ctx = { vekoveSkupiny: [{ nazev: 'První krůčky', od: 17, do: 21 }], nazvyKategorii: {} };
+  assert.equal(zavolat('produktOdpovida', cap, stav({ velikost: 18 }), ctx), false);
+  assert.equal(zavolat('produktOdpovida', cap, stav({ vek: ['prvni-krucky'] }), ctx), false);
+  assert.equal(zavolat('produktOdpovida', cap, stav({ hledat: '18' }), ctx), false);
+  assert.equal(zavolat('produktOdpovida', cap, stav(), ctx), true);
 });
 
 test('detail: Pro jakou nožičku a parametry z vlastností modelu, text escapovaný', () => {
@@ -206,6 +227,8 @@ test('detail: Pro jakou nožičku a parametry z vlastností modelu, text escapov
   assert.match(p, /Kategorie<\/th><td>Celoročky/);
   assert.match(p, /Barefoot<\/th><td>ano/);
   assert.match(p, /Materiál<\/th><td>kůže/);
+  assert.match(p, /Opatek<\/th><td>měkký/);
+  assert.match(n, /<dt>Opatek<\/dt><dd>měkký<\/dd>/);
   assert.match(p, /Zapínání<\/th><td>suchý zip/);
   assert.match(p, /Membrána<\/th><td>ne/);
   const xss = run(`parametryHtml(${JSON.stringify({ ...BOTA, znacka: '<img src=x onerror=alert(1)>' })}, '<b>')`);
@@ -296,8 +319,8 @@ test('eshop.html: pruh „Dětské kroky s jistotou“ zůstává nad hlavičkou
 
 // ═══ Krok 6 - rychlý výběr nad katalogem ═══
 
-new vm.Script([vytahnoutKonstantu('KATALOG_BEZ_BOT'),
-  ...['jeBota', 'jeVychoziStav', 'oblibeneProdukty'].map(vytahnout)].join('\n')).runInContext(sandbox);
+new vm.Script([
+  ...['jeVychoziStav', 'oblibeneProdukty'].map(vytahnout)].join('\n')).runInContext(sandbox);
 
 test('rychlý výběr: jen ve výchozím zobrazení (řazení a otevřená bota nevadí)', () => {
   assert.equal(run(`jeVychoziStav(${JSON.stringify(stav())})`), true);

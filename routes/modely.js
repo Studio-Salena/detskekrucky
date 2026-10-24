@@ -177,7 +177,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-const SLOUPCE = ['znacka', 'nazev', 'kategorie', 'barefoot', 'sirka', 'nart', 'dominantni_palec', 'zapinani', 'membrana', 'material', 'pohlavi', 'proc_jsme_vybrali'];
+const SLOUPCE = ['znacka', 'nazev', 'kategorie', 'barefoot', 'sirka', 'nart', 'dominantni_palec', 'zapinani', 'membrana', 'material', 'opatek', 'pohlavi', 'proc_jsme_vybrali'];
 
 // Úprava modelu. Kategorie, značka a název se propíšou do všech jeho
 // produktů (velikostí) - e-shop i sklad je tak uvidí stejně.
@@ -213,7 +213,7 @@ router.patch('/:id', async (req, res) => {
       const kolize = await client.query('SELECT id FROM modely WHERE klic = $1 AND id <> $2', [novyKlic, id]);
       if (kolize.rows.length) {
         await client.query('ROLLBACK');
-        return res.status(409).json({ chyba: 'Model se stejnou značkou a názvem už existuje.' });
+        return res.status(409).json({ chyba: 'Model se stejnou značkou a názvem už existuje.', existujici_id: kolize.rows[0].id });
       }
       nastavit.klic = novyKlic;
     }
@@ -279,6 +279,39 @@ router.put('/:id/rozmery', async (req, res) => {
     await client.query('ROLLBACK').catch(() => {});
     console.error('Uložení rozměrů selhalo:', err.message);
     res.status(500).json({ chyba: 'Rozměry se nepodařilo uložit.' });
+  } finally {
+    client.release();
+  }
+});
+
+// Sloučení dvou modelů téže boty (např. „AUTUMN BLACK+“ a „AUTUMN BLACK+ G3110263-21“):
+// velikosti modelu :id se přesunou pod cílový model a převezmou jeho značku, název
+// a kategorii; model :id se smaže. Vlastnosti a adresa (slug) zůstanou cílového modelu.
+router.post('/:id/sloucit', async (req, res) => {
+  const id = Number(req.params.id);
+  const cil = req.body && req.body.do;
+  if (!Number.isInteger(id) || id <= 0 || !Number.isInteger(cil) || cil <= 0) return res.status(400).json({ chyba: 'Neplatné id modelu.' });
+  if (id === cil) return res.status(400).json({ chyba: 'Model nejde sloučit sám se sebou.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const modely = await client.query('SELECT id, znacka, nazev, kategorie FROM modely WHERE id = ANY($1::int[]) FOR UPDATE', [[id, cil]]);
+    const cilovy = modely.rows.find(m => m.id === cil);
+    if (modely.rows.length !== 2) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ chyba: 'Model nenalezen. Obnovte stránku a zkuste to znovu.' });
+    }
+    const presunuto = await client.query(
+      'UPDATE produkty SET model_id = $1, znacka = $2, nazev = $3, kategorie = COALESCE($4, kategorie) WHERE model_id = $5',
+      [cil, cilovy.znacka, cilovy.nazev, cilovy.kategorie, id]
+    );
+    await client.query('DELETE FROM modely WHERE id = $1', [id]);
+    await client.query('UPDATE modely SET upraveno = NOW() WHERE id = $1', [cil]);
+    await client.query('COMMIT');
+    res.json({ ok: true, presunuto: presunuto.rowCount, model_id: cil });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ chyba: err.message });
   } finally {
     client.release();
   }

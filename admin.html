@@ -173,6 +173,8 @@ body{background:var(--app-bg)}
 .detail-pole select{min-height:40px;padding:6px 8px;border:2px solid var(--tan-light);border-radius:10px;font-family:'Nunito',sans-serif;background:#fff}
 .detail-pozn{font-size:0.82rem;color:var(--text-light);margin:6px 0 0}
 .detail-fotky{display:flex;gap:8px;flex-wrap:wrap}
+.detail-fotka{display:flex;flex-direction:column;align-items:center;gap:4px}
+.detail-fotka small{font-size:0.7rem;color:var(--text-light)}
 .detail-fotky img{width:96px;height:96px;object-fit:contain;background:var(--app-bg);border:1px solid var(--app-line);border-radius:10px}
 .detail-fotky img.hlavni{border:2px solid var(--brown)}
 .detail-velikosti td,.detail-velikosti th{white-space:nowrap}
@@ -790,6 +792,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
             <option value="barefoot">barefoot</option>
             <option value="membrana">membránu</option>
             <option value="material">materiál</option>
+            <option value="opatek">opatek</option>
             <option value="dominantni_palec">dominantní palec</option>
             <option value="pohlavi" id="hromadnePohlaviVolba">pro koho</option>
           </select>
@@ -1656,9 +1659,9 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     <button class="btn btn-outline btn-sm" id="pridatVekovouSkupinuBtn" onclick="pridatVekovouSkupinu()">+ Přidat skupinu</button>
     <label style="display:flex;gap:8px;align-items:center;margin-top:16px;font-size:0.88rem"><input type="checkbox" id="nkPohlavi"> Rozlišovat holčička / chlapeček (přidá sloupec „Pro koho“)</label>
     <div class="form-group" style="margin-top:16px">
-      <label for="nkRezerva">Průvodce velikostí: výchozí nadměrek (mm)</label>
+      <label for="nkRezerva">Průvodce velikostí: maximální nadměrek (mm)</label>
       <input id="nkRezerva" class="form-input" type="number" min="0" max="30" step="1" style="max-width:120px">
-      <p style="font-size:0.8rem;color:var(--text-light);margin:4px 0 0">O kolik má být vnitřní délka boty delší než nožička. U barefoot bot se běžně doporučuje 10–15 mm. Platí pro všechny boty, které nemají v detailu produktu vyplněný vlastní nadměrek.</p>
+      <p style="font-size:0.8rem;color:var(--text-light);margin:4px 0 0">O kolik nejvýš smí být vnitřní délka boty delší než nožička (běžně 12 mm). E-shop doporučí největší velikost do tohoto nadměrku, větší nadměrek zvýrazní jako příliš velký. Platí pro všechny boty, které nemají v detailu produktu vyplněný vlastní nadměrek.</p>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modalNastaveniKatalogu')">Zrušit</button>
@@ -3389,6 +3392,9 @@ function vykreslitDetailModelu() {
   const proc = (m.proc_jsme_vybrali || []).filter(Boolean);
   const pole = (popis, html) => `<div class="detail-pole"><span class="detail-pole-popis">${popis}</span>${html}</div>`;
   const prvni = varianty[0];
+  // Fotky se ukládají k jedné velikosti - Spravovat fotky otevře tu, která jich má nejvíc
+  const pocetFotek = id => fotky.filter(f => f.produkt_id === id).length;
+  const fotkyVelikost = varianty.reduce((nej, v, i) => pocetFotek(v.produkt_id) > pocetFotek(varianty[nej].produkt_id) ? i : nej, 0);
   // nahrané fotky + starší fotky uložené jako odkaz u produktu (pole emoji)
   const vsechnyFotky = [...fotky, ...varianty.filter(v => /^https?:\/\//.test(v.emoji || '')).map(v => ({ url: v.emoji, alt: nazev }))]
     .filter((f, i, pole) => pole.findIndex(x => x.url === f.url) === i);
@@ -3418,6 +3424,7 @@ function vykreslitDetailModelu() {
           ${pole('Zapínání', vyberVice('zapinani', m.zapinani))}
           ${pole('Membrána', vyberAnoNe('membrana', m.membrana))}
           ${pole('Materiál', vyberJedna('material', m.material))}
+          ${pole('Opatek', vyberJedna('opatek', m.opatek))}
           ${pohlavi ? pole('Pro koho', vyberJedna('pohlavi', m.pohlavi)) : ''}`}
       </div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px">
@@ -3428,11 +3435,11 @@ function vykreslitDetailModelu() {
 
     <section class="detail-sekce">
       <div class="detail-sekce-hlavicka"><h4>Fotky</h4>
-        ${prvni ? `<button type="button" class="btn btn-outline btn-sm" onclick="akceVelikosti('produkt', 0)">📷 Spravovat fotky</button>` : ''}</div>
+        ${prvni ? `<button type="button" class="btn btn-outline btn-sm" onclick="akceVelikosti('produkt', ${fotkyVelikost})">📷 Spravovat fotky</button>` : ''}</div>
       ${vsechnyFotky.length
-        ? `<div class="detail-fotky">${vsechnyFotky.map(f => `<img src="${escAttr(f.url)}" alt="${escAttr(f.alt || nazev)}" loading="lazy"${f.is_primary ? ' class="hlavni"' : ''}>`).join('')}</div>`
+        ? `<div class="detail-fotky">${vsechnyFotky.map(f => `<div class="detail-fotka"><img src="${escAttr(f.url)}" alt="${escAttr(f.alt || nazev)}" loading="lazy"${f.is_primary ? ' class="hlavni"' : ''}>${f.id ? `<button type="button" class="btn btn-red btn-sm" title="Smazat fotku" aria-label="Smazat fotku" onclick="smazatFotkuModelu(${Number(f.produkt_id)}, ${Number(f.id)})">🗑️</button>` : '<small title="Odkaz uložený u produktu – smažete ho v ✏️ u velikosti (pole Fotka/emoji)">odkaz</small>'}</div>`).join('')}</div>`
         : '<p class="detail-pozn">Zatím bez fotek.</p>'}
-      ${prvni ? `<p class="detail-pozn">Nové fotky se ukládají k velikosti ${escH(prvni.velikost ?? '')}, na e-shopu je uvidí celý produkt.</p>` : ''}
+      ${prvni ? `<p class="detail-pozn">Nové fotky se ukládají k velikosti ${escH(varianty[fotkyVelikost].velikost ?? '')}, na e-shopu je uvidí celý produkt.</p>` : ''}
     </section>
 
     <section class="detail-sekce">
@@ -3464,7 +3471,7 @@ function vykreslitDetailModelu() {
       }).join('')}
       </tbody></table></div>
       ${bez ? '' : `<div class="detail-nadmerek">
-        <label for="detailNadmerek">Nadměrek (mm)</label>
+        <label for="detailNadmerek">Max. nadměrek (mm)</label>
         <input id="detailNadmerek" class="form-input" type="number" min="0" max="30" step="1" inputmode="numeric" value="${m.nadmerek_mm ?? ''}" placeholder="${Number(nastaveniKatalogu.rezervaMm ?? 12)}" oninput="oznacitZmenuRozmeru()">
         <span class="detail-pozn" style="margin:0">prázdné = výchozí ${Number(nastaveniKatalogu.rezervaMm ?? 12)} mm z nastavení katalogu</span>
       </div>`}
@@ -3480,8 +3487,17 @@ function vykreslitDetailModelu() {
         ${varianty.some(v => v.cena_puvodni) ? '<button type="button" class="btn btn-outline btn-sm" onclick="slevaDetailu(true)">Zrušit slevu</button>' : ''}
       </div>
       <p class="detail-pozn">Sleva se počítá z původní ceny – nová sleva tu starou nahradí. Platí na e-shopu i na prodejně; e-shop ukáže původní cenu přeškrtnutou se štítkem Sleva.</p>
-      <p class="detail-pozn">Délka a šířka = vnitřní rozměry boty v mm. Podle délky e-shop zákazníkům doporučuje velikost: vnitřní délka ≥ nožička + nadměrek (${m.nadmerek_mm != null ? `u tohoto modelu ${Number(m.nadmerek_mm)} mm` : `výchozí ${Number(nastaveniKatalogu.rezervaMm ?? 12)} mm`}). EAN, počty kusů, minimální stav a naskladnění jsou ve Skladu (tlačítko „📦 Otevřít ve skladu“).</p>
+      <p class="detail-pozn">Délka a šířka = vnitřní rozměry boty v mm. Podle délky e-shop zákazníkům doporučuje velikost: vnitřní délka je delší než nožička nejvýš o nadměrek (${m.nadmerek_mm != null ? `u tohoto modelu ${Number(m.nadmerek_mm)} mm` : `výchozí ${Number(nastaveniKatalogu.rezervaMm ?? 12)} mm`}). EAN, počty kusů, minimální stav a naskladnění jsou ve Skladu (tlačítko „📦 Otevřít ve skladu“).</p>
     </section>`;
+}
+
+async function smazatFotkuModelu(produktId, imageId) {
+  if (!confirm('Smazat tuto fotografii?')) return;
+  try {
+    const res = await adminFetch(API + '/produkty/' + produktId + '/images/' + imageId, { method: 'DELETE' });
+    if (!res.ok) { alert('Smazání se nepovedlo.'); return; }
+  } catch (e) { alert('Smazání se nepovedlo.'); return; }
+  nacistDetailModelu(detailModeluId);
 }
 
 // Sklad vyfiltrovaný na tento produkt (značka + název)
@@ -6754,7 +6770,7 @@ function vykreslitModely() {
   const pohlavi = !!nastaveniKatalogu.pohlavi;
   const vseVybrano = list.every(m => modelyVybrane.has(m.id));
   // Skupiny podle značky (Froddo, Beda...), seřazené podle abecedy; při hledání rozbalené
-  const sloupcu = pohlavi ? 13 : 12;
+  const sloupcu = pohlavi ? 14 : 13;
   const skupiny = new Map();
   list.forEach(m => {
     const klic = normalizovat((m.znacka || '').trim()) || '~';
@@ -6764,7 +6780,7 @@ function vykreslitModely() {
   const serazene = [...skupiny.entries()].sort((a, b) => a[0] === '~' ? 1 : b[0] === '~' ? -1 : a[1].nazev.localeCompare(b[1].nazev, 'cs'));
   const rozbalitVse = !!hledat;
   el.innerHTML = `<table onchange="oznacitZmenuModelu(event)"><thead><tr>
-      <th><input type="checkbox" data-vyber-vse aria-label="Vybrat všechny modely odpovídající filtru"${vseVybrano ? ' checked' : ''}></th><th>Model</th><th>Kategorie</th><th>Barefoot</th><th>Šířka</th><th>Nárt</th><th>Palec</th><th>Zapínání</th><th>Membrána</th><th>Materiál</th>${pohlavi ? '<th>Pro koho</th>' : ''}<th>Stav</th><th></th>
+      <th><input type="checkbox" data-vyber-vse aria-label="Vybrat všechny modely odpovídající filtru"${vseVybrano ? ' checked' : ''}></th><th>Model</th><th>Kategorie</th><th>Barefoot</th><th>Šířka</th><th>Nárt</th><th>Palec</th><th>Zapínání</th><th>Membrána</th><th>Materiál</th><th>Opatek</th>${pohlavi ? '<th>Pro koho</th>' : ''}<th>Stav</th><th></th>
     </tr></thead>${serazene.map(([klic, sk]) => {
       const rozbaleno = rozbalitVse || modelyRozbaleneZnacky.has(klic);
       const chybi = sk.modely.filter(m => !modelBezVlastnosti(m) && (!m.vyplneno || m.kategorie_ke_kontrole)).length;
@@ -6781,10 +6797,10 @@ function vykreslitModely() {
       const vel = m.velikosti.length ? (m.velikosti.length > 1 ? `${m.velikosti[0]}–${m.velikosti[m.velikosti.length - 1]}` : `${m.velikosti[0]}`) : '—';
       const bez = modelBezVlastnosti(m);
       const vlastnosti = bez
-        ? `<td colspan="${pohlavi ? 8 : 7}" style="color:var(--text-light);font-size:0.8rem">Není bota, vlastnosti se nevyplňují</td>`
+        ? `<td colspan="${pohlavi ? 9 : 8}" style="color:var(--text-light);font-size:0.8rem">Není bota, vlastnosti se nevyplňují</td>`
         : `<td>${vyberAnoNe('barefoot', m.barefoot)}</td><td>${vyberVice('sirka', m.sirka)}</td><td>${vyberVice('nart', m.nart)}</td>
            <td>${vyberJedna('dominantni_palec', m.dominantni_palec)}</td><td>${vyberVice('zapinani', m.zapinani)}</td>
-           <td>${vyberAnoNe('membrana', m.membrana)}</td><td>${vyberJedna('material', m.material)}</td>${pohlavi ? `<td>${vyberJedna('pohlavi', m.pohlavi)}</td>` : ''}`;
+           <td>${vyberAnoNe('membrana', m.membrana)}</td><td>${vyberJedna('material', m.material)}</td><td>${vyberJedna('opatek', m.opatek)}</td>${pohlavi ? `<td>${vyberJedna('pohlavi', m.pohlavi)}</td>` : ''}`;
       return `<tr data-model-id="${Number(m.id)}"${rozbaleno ? '' : ' hidden'}>
         <td><input type="checkbox" data-vyber value="${Number(m.id)}" aria-label="Vybrat model"${modelyVybrane.has(m.id) ? ' checked' : ''}></td>
         <td style="min-width:180px"><strong>${escH(m.znacka || '')}</strong> ${escH(m.nazev)}
@@ -6966,7 +6982,7 @@ async function poslatUpravuModelu(id, telo) {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(telo)
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.chyba || 'Uložení se nepodařilo.');
+  if (!res.ok) throw Object.assign(new Error(data.chyba || 'Uložení se nepodařilo.'), { existujiciId: data.existujici_id });
   const i = modelyData.modely.findIndex(m => m.id === id);
   if (i >= 0) {
     const puvodni = modelyData.modely[i];
@@ -7017,8 +7033,27 @@ async function ulozitUpravuModelu() {
     closeModal('modalUpravitModel');
     vykreslitModely();
   } catch (e) {
+    if (e.existujiciId && await sloucitModely(id, e.existujiciId)) return;
     msg.innerHTML = `<div class="error-msg">${escH(e.message)}</div>`;
   }
+}
+
+// Stejná bota založená dvakrát (jiný název) - přejmenováním na název druhé ji
+// sloučíme: velikosti a fotky přejdou pod ni, vlastnosti a adresa zůstanou její.
+async function sloucitModely(id, cilId) {
+  const cil = modelyData.modely.find(m => m.id === cilId);
+  const nazev = cil ? `${cil.znacka || ''} ${cil.nazev}`.trim() : 'stejným názvem';
+  if (!confirm(`Produkt „${nazev}“ už existuje.\n\nSloučit je do jednoho? Všechny velikosti a fotky přejdou pod „${nazev}“ a ponechají se jeho vlastnosti a text. Tento produkt zmizí.`)) return false;
+  const res = await adminFetch(API + '/modely/' + id + '/sloucit', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ do: cilId })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.chyba || 'Sloučení se nepodařilo.');
+  closeModal('modalUpravitModel');
+  await loadProdukty();
+  if (detailModeluId === id) otevritDetailModelu(cilId);
+  alert(`✅ Sloučeno (${Number(data.presunuto)} velikostí).`);
+  return true;
 }
 
 function radekVekoveSkupiny(s) {

@@ -111,7 +111,7 @@ test('seznam modelů: bez interního klíče, seřazené velikosti, stav vyplně
     const { status, body } = await volat('/');
     assert.equal(status, 200);
     assert.ok(body.volby.sirka.siroka);
-    assert.deepEqual(body.kategorieBezVlastnosti, ['doplnky', 'pece-o-obuv']);
+    assert.deepEqual(body.kategorieBezVlastnosti, ['doplnky', 'pece-o-obuv', 'detske-batuzky']);
     assert.equal(body.modely.length, 2);
     for (const m of body.modely) assert.equal('klic' in m, false);
     assert.deepEqual(body.modely[0].velikosti, [22, 25]);

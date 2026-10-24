@@ -57,7 +57,7 @@ router.get('/', async (req, res) => {
              imgs.obrazky,
              -- Model bot (lib/modely.js): adresa boty na e-shopu a vlastnosti pro filtry
              m.id AS model_id, m.slug AS model_slug, m.barefoot, m.sirka AS sirka_nohy, m.nart, m.dominantni_palec,
-             m.zapinani, m.membrana, m.material, m.pohlavi, m.proc_jsme_vybrali, m.nadmerek_mm
+             m.zapinani, m.membrana, m.material, m.opatek, m.pohlavi, m.proc_jsme_vybrali, m.nadmerek_mm
       FROM produkty p
       LEFT JOIN modely m ON m.id = p.model_id
       LEFT JOIN sklad s ON p.id = s.produkt_id
