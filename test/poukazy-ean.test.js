@@ -1,4 +1,4 @@
-// EAN dárkových poukazů podle druhu (21 prodej, 22 dar, 23 akce) a darované
+// EAN dárkových poukazů podle druhu (21 prodej, 22 dar) a darované
 // poukazy mimo tržby. Funkce se vytahuje ze skutečného routes/poukazy.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -30,7 +30,7 @@ function kontrolaSedi(ean) {
 }
 
 test('EAN poukazu: prefix podle druhu, 13 číslic, platná kontrolní číslice', () => {
-  for (const [druh, prefix] of [['prodej', '21'], ['dar', '22'], ['akce', '23']]) {
+  for (const [druh, prefix] of [['prodej', '21'], ['dar', '22']]) {
     for (let i = 0; i < 50; i++) {
       const ean = sandbox.vygenerovatEan(druh);
       assert.match(ean, /^\d{13}$/);
@@ -46,4 +46,9 @@ test('darovaný poukaz: bez platby a jeho útrata se nepočítá do tržeb', () 
   assert.match(ZDROJ, /\(dp\.vydano_prodej_id IS NOT NULL OR dp\.druh = 'dar'\) AS zapocitano_pri_vydani/);
   assert.match(ZDROJ, /ADD COLUMN IF NOT EXISTS druh TEXT NOT NULL DEFAULT 'prodej'/);
   assert.match(ADMIN, /<select id="pkDruh"/);
+});
+
+test('druh akce už neexistuje', () => {
+  assert.deepEqual(Object.keys(vm.runInContext('PREFIX_EAN', sandbox)), ['prodej', 'dar'], 'server jiný druh odmítne (POVOLENE_DRUHY)');
+  assert.doesNotMatch(ADMIN, /value="akce"/);
 });

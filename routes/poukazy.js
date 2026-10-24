@@ -10,9 +10,9 @@ const POVOLENE_HODNOTY = [500, 1000, 1500];
 // Vzhled tištěného poukazu - volí se při vydání, ať jde i později vytisknout stejně
 const POVOLENE_VZHLEDY = ['klasicky', 'vanocni'];
 // Druh poukazu: prodej (zaplacený), dar (daný zdarma - nepočítá se do tržeb ani
-// při vydání, ani při uplatnění) a akce (prázdný tištěný poukaz prodaný na akci).
-// Druh je vidět i z EAN: 21… prodej, 22… dar, 23… akce (starší poukazy mají 20…).
-const PREFIX_EAN = { prodej: '21', dar: '22', akce: '23' };
+// při vydání, ani při uplatnění). Druh je vidět i z EAN: 21… prodej, 22… dar
+// (starší poukazy mají 20…).
+const PREFIX_EAN = { prodej: '21', dar: '22' };
 const POVOLENE_DRUHY = Object.keys(PREFIX_EAN);
 
 async function initTabulky() {

@@ -1536,7 +1536,6 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <select id="pkDruh" onchange="prepnoutDruhPoukazu()">
         <option value="prodej">🛍️ Prodej (EAN 21…)</option>
         <option value="dar">🎁 Dar – zdarma, nepočítá se do tržeb (EAN 22…)</option>
-        <option value="akce">🎪 Akce – prázdný tištěný poukaz (EAN 23…)</option>
       </select>
       <div id="pkDruhPozn" style="font-size:0.78rem;color:var(--text-light);margin-top:4px"></div>
     </div>
@@ -1596,7 +1595,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
 <div class="modal-overlay" id="modalPrazdnyPoukaz">
   <div class="modal" style="max-width:480px">
     <h3>🖨️ Prázdné poukazy k tisku</h3>
-    <p style="font-size:0.85rem;color:var(--text-light);line-height:1.55;margin-bottom:14px">Poukazy na akci: vytisknou se <strong>bez EAN a data platnosti</strong> a nic se neukládá. Při prodeji poukaz vydejte tady v adminu (+ Vydat poukaz, druh <strong>🎪 Akce</strong> – EAN začne 23…), dopište datum platnosti a nalepte EAN štítek („🏷️ EAN na tiskárnu“ nebo „🏷️ Jen EAN“ v detailu poukazu). <strong>Dokud poukaz není vydaný v adminu, nejde uplatnit.</strong></p>
+    <p style="font-size:0.85rem;color:var(--text-light);line-height:1.55;margin-bottom:14px">Poukazy na akci: vytisknou se <strong>bez EAN a data platnosti</strong> a nic se neukládá. Při prodeji poukaz vydejte tady v adminu (+ Vydat poukaz), dopište datum platnosti a nalepte EAN štítek („🏷️ EAN na tiskárnu“ nebo „🏷️ Jen EAN“ v detailu poukazu). <strong>Dokud poukaz není vydaný v adminu, nejde uplatnit.</strong></p>
     <div class="form-group">
       <label for="ppVzhled">Vzhled poukazu</label>
       <select id="ppVzhled">
@@ -5616,8 +5615,8 @@ function otevritVydatPoukaz() {
   openModal('modalVydatPoukaz');
 }
 
-// Dar = bez platby (nepočítá se do tržeb), akce = prodej na akci, štítek s EAN 23…
-const DRUHY_POUKAZU = { prodej: '🛍️ Prodej', dar: '🎁 Dar', akce: '🎪 Akce' };
+// Dar = bez platby, nepočítá se do tržeb
+const DRUHY_POUKAZU = { prodej: '🛍️ Prodej', dar: '🎁 Dar' };
 function prepnoutDruhPoukazu() {
   const druh = document.getElementById('pkDruh').value;
   const dar = druh === 'dar';
@@ -5625,13 +5624,11 @@ function prepnoutDruhPoukazu() {
   document.getElementById('pkPlatbaSkupina').style.display = dar ? 'none' : '';
   if (dar) { document.getElementById('pkKde').value = 'prodejna'; document.getElementById('pkPlatba').value = ''; }
   else if (!document.getElementById('pkPlatba').value) prepnoutPoukazKde();
-  if (druh === 'akce') { document.getElementById('pkKde').value = 'prodejna'; prepnoutPoukazKde(); }
   document.getElementById('pkJmenoPopis').textContent = dar ? 'Komu je darovaný (nepovinné)' : 'Jméno kupujícího (nepovinné)';
   document.getElementById('pkEmailPopis').textContent = dar ? 'E-mail obdarovaného (nepovinné)' : 'E-mail kupujícího (nepovinné)';
   document.getElementById('pkDruhPozn').textContent = {
     prodej: 'Běžný prodej poukazu – peníze se započítají do tržeb.',
-    dar: 'Poukaz zdarma (soutěž, reklamace, poděkování…). Nezapočítá se do tržeb ani do zisku – ani když ho obdarovaný utratí.',
-    akce: 'Prázdný poukaz vytištěný předem a prodaný na akci – po vydání na něj nalepte EAN štítek (23…).'
+    dar: 'Poukaz zdarma (soutěž, reklamace, poděkování…). Nezapočítá se do tržeb ani do zisku – ani když ho obdarovaný utratí.'
   }[druh];
 }
 
