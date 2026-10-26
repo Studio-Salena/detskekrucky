@@ -44,11 +44,11 @@ const zavolat = (fn, ...args) => run(`${fn}(...${JSON.stringify(args)})`);
 
 const vel = (velikost, dostupnost = 'skladem') => ({ velikost, dostupnost });
 const PRODUKTY = [
-  { klic: 'm:a', slug: 'froddo-autumn', znacka: 'Froddo', nazev: 'Autumn Black+', kategorie: 'celorocky', cena: 1490, maxId: 10,
+  { klic: 'm:a', slug: 'froddo-autumn', znacka: 'Froddo', nazev: 'Autumn Black+', kategorie: 'celorocky', cena: 1490, minId: 10,
     velikosti: [vel(22), vel(24), vel(25)], vyprodane: [23], barefoot: true, sirkaNohy: ['siroka'], zapinani: ['suchy_zip'], membrana: false, primaryImageUrl: 'https://img/a.jpg' },
-  { klic: 'm:b', slug: 'beda-zuzi', znacka: 'Beda', nazev: 'Zuzi Žlutá', kategorie: 'papuce', cena: 690, maxId: 30,
+  { klic: 'm:b', slug: 'beda-zuzi', znacka: 'Beda', nazev: 'Zuzi Žlutá', kategorie: 'papuce', cena: 690, minId: 30,
     velikosti: [vel(20), vel(21, 'dodavatel')], vyprodane: [], barefoot: false, sirkaNohy: ['normalni', 'siroka'], zapinani: ['nazouvaci'], membrana: null },
-  { klic: 'm:c', slug: 'protetika-tery', znacka: 'Protetika', nazev: 'Tery', kategorie: 'celorocky', cena: 1090, maxId: 20,
+  { klic: 'm:c', slug: 'protetika-tery', znacka: 'Protetika', nazev: 'Tery', kategorie: 'celorocky', cena: 1090, minId: 20,
     velikosti: [vel(26, 'dodavatel'), vel(31)], vyprodane: [], barefoot: null, sirkaNohy: [], zapinani: [], membrana: true }
 ];
 const CTX = {
@@ -333,14 +333,14 @@ test('rychlý výběr: jen ve výchozím zobrazení (řazení a otevřená bota 
 test('novinky: naposledy přidané modely (podle prvního produktu), jen s fotkou, nejvýš 4', () => {
   const foto = 'https://img/x.jpg';
   const zbozi = [
-    { slug: 'stara-s-novou-velikosti', kategorie: 'celorocky', minId: 5, maxId: 99, primaryImageUrl: foto },
+    { slug: 'stara', kategorie: 'celorocky', minId: 5, primaryImageUrl: foto },
     { slug: 'nejnovejsi', kategorie: 'celorocky', minId: 50, primaryImageUrl: foto },
     { slug: 'bez-fotky', kategorie: 'celorocky', minId: 60 },
     { slug: 'legacy-emoji-url', kategorie: 'papuce', minId: 40, emoji: foto },
     { slug: 'starsi', kategorie: 'zimni', minId: 30, primaryImageUrl: foto },
     { slug: 'nejstarsi', kategorie: 'zimni', minId: 1, primaryImageUrl: foto }
   ];
-  assert.deepEqual(run(`novinkyProdukty(${JSON.stringify(zbozi)})`).map(p => p.slug), ['nejnovejsi', 'legacy-emoji-url', 'starsi', 'stara-s-novou-velikosti']);
+  assert.deepEqual(run(`novinkyProdukty(${JSON.stringify(zbozi)})`).map(p => p.slug), ['nejnovejsi', 'legacy-emoji-url', 'starsi', 'stara']);
   assert.deepEqual(run(`novinkyProdukty(${JSON.stringify(zbozi)}, 2)`).map(p => p.slug), ['nejnovejsi', 'legacy-emoji-url']);
   assert.deepEqual(run(`novinkyProdukty([])`), []);
 });

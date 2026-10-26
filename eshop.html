@@ -1694,13 +1694,12 @@ async function nacistProdukty() {
           barefoot: s.barefoot ?? null, sirkaNohy: s.sirka_nohy || [], zapinani: s.zapinani || [], membrana: s.membrana ?? null,
           pohlavi: s.pohlavi || null, nart: s.nart || [], dominantniPalec: s.dominantni_palec || null, material: s.material || null, opatek: s.opatek || null, procJsmeVybrali: s.proc_jsme_vybrali || [],
           nadmerekMm: s.nadmerek_mm ?? null,
-          maxId: 0, minId: Infinity, _vyprodane: new Map(),
+          minId: Infinity, _vyprodane: new Map(),
           kategorieCitac: {}, emoji: '', primaryImageUrl: '', primaryImageAlt: '', images: [], _seenObrazky: new Set(), velikosti: []
         };
       }
       const p = map[klic];
-      p.maxId = Math.max(p.maxId, s.id || 0);
-      // Nejstarší produkt_id = kdy model poprvé přibyl do skladu (Novinky);
+      // Nejstarší produkt_id = kdy model poprvé přibyl do skladu (Novinky a řazení Nejnovější);
       // nově doplněná velikost starého modelu ho tak novinkou neudělá
       if (s.id) p.minId = Math.min(p.minId, s.id);
       if (!p.emoji && s.emoji) p.emoji = s.emoji;
@@ -1982,7 +1981,7 @@ function seraditProdukty(produkty, razeni) {
   const maFoto = p => (jeBezpecnaHttpUrl(p.primaryImageUrl) || jeBezpecnaHttpUrl(p.emoji)) ? 0 : 1;
   const porovnat = {
     doporucene: (a, b) => maFoto(a.p) - maFoto(b.p) || a.i - b.i,
-    nejnovejsi: (a, b) => b.p.maxId - a.p.maxId || a.i - b.i,
+    nejnovejsi: (a, b) => b.p.minId - a.p.minId || a.i - b.i,
     nejlevnejsi: (a, b) => a.p.cena - b.p.cena || a.i - b.i,
     nejdrazsi: (a, b) => b.p.cena - a.p.cena || a.i - b.i
   }[razeni] || ((a, b) => a.i - b.i);
