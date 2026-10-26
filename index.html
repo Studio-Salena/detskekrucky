@@ -1668,7 +1668,7 @@ fetch('https://detskekrucky1.onrender.com/api/nastaveni/banner')
   })
   .catch(() => {});
 </script>
-<!-- OPENING BANNER -->
+<!-- OPENING BANNER - text se mění v adminu (Texty webu), prázdný = skrytý -->
 <div id="promo-banner" style="background:linear-gradient(90deg,#f7a8b8,#A58B71,#7A816C,#5ba8d4,#c3a6e8);background-size:300% 100%;animation:bannerShift 4s ease infinite;text-align:center;padding:10px 20px;font-weight:800;font-size:0.95rem;color:#fff;letter-spacing:0.08em;text-shadow:0 1px 3px rgba(0,0,0,0.2);">
   🦔 Potřebujete botičky či papučky pro své dětičky? 🦔👣 Přijďte vyzkoušet ty nejlepší kousky pro zdravé obouvání! 🦔
 </div>
@@ -2451,6 +2451,11 @@ document.querySelectorAll('nav a').forEach(a => {
     try {
       const res = await fetch('https://detskekrucky1.onrender.com/api/nastaveni/texty');
       const data = await res.json();
+      if (typeof data.webPruh === 'string') {
+        const pruh = document.getElementById('promo-banner');
+        pruh.textContent = data.webPruh;
+        pruh.hidden = !data.webPruh.trim();
+      }
       if (data.procBarefoot) {
         const karty = document.querySelectorAll('.philo-card');
         data.procBarefoot.forEach((karta, i) => {

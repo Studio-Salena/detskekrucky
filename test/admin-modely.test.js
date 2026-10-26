@@ -151,7 +151,7 @@ test('admin: doplňky bez vlastností, filtr nevyplněných, sloupec pohlaví a 
   assert.doesNotMatch(hledani, /data-model-id="1"/);
 });
 
-test('admin Texty webu: pruh e-shopu se načte (výchozí text, dokud není uložený) a uloží spolu s ostatními texty', async () => {
+test('admin Texty webu: pruhy e-shopu a webu se načtou (výchozí text, dokud není uložený) a uloží spolu s ostatními texty', async () => {
   const prvky = {};
   const el = id => (prvky[id] = prvky[id] || { value: '', innerHTML: '' });
   const odeslano = [];
@@ -166,19 +166,23 @@ test('admin Texty webu: pruh e-shopu se načte (výchozí text, dokud není ulo�
     clearTimeout: () => {}
   };
   vm.createContext(sandbox);
-  const konst = ADMIN_HTML.match(/const VYCHOZI_ESHOP_PRUH = [^;]+;/)[0];
+  const konst = ADMIN_HTML.match(/const VYCHOZI_ESHOP_PRUH = [^;]+;/)[0] + '\n' + ADMIN_HTML.match(/const VYCHOZI_WEB_PRUH = [^;]+;/)[0];
   vm.runInContext(`let textyWebuData = {}; const vychoziTrustBadges = []; ${konst}\n${vytahnoutFunkci('loadTexty')}\n${vytahnoutFunkci('ulozitTexty')}`, sandbox);
   await vm.runInContext('loadTexty()', sandbox);
   assert.match(prvky.txEshopPruh.value, /Dětské kroky s jistotou/);
+  assert.match(prvky.txWebPruh.value, /Potřebujete botičky či papučky/);
   prvky.txEshopPruh.value = '  Akce týdne  ';
+  prvky.txWebPruh.value = '';
   await vm.runInContext('ulozitTexty()', sandbox);
   assert.equal(odeslano[0].eshopPruh, 'Akce týdne');
+  assert.equal(odeslano[0].webPruh, '', 'prázdný pruh se uloží (= skrytý)');
   assert.deepEqual(odeslano[0].vyberteSi, [{ nadpis: 'X' }], 'ostatní texty zůstanou');
   // potvrzení i u tlačítka (je na konci dlouhé stránky), tlačítko zase aktivní
   assert.match(prvky.textyMsgDole.innerHTML, /Texty uloženy/);
   assert.match(prvky.textyMsg.innerHTML, /Texty uloženy/);
   assert.equal(prvky.textyUlozitBtn.disabled, false);
   assert.match(ADMIN_HTML, /id="txEshopPruh"[^>]*maxlength="300"/);
+  assert.match(ADMIN_HTML, /id="txWebPruh"[^>]*maxlength="300"/);
 });
 
 test('admin Modely: seskupení podle značky - sbalené skupiny, hledání bez diakritiky rozbalí, výběr celé značky', () => {

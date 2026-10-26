@@ -1082,6 +1082,12 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
   </div>
 
   <div class="card" style="margin-bottom:20px">
+    <h3 style="margin-bottom:16px">Pruh nahoře na webu</h3>
+    <p style="color:var(--text-light);font-size:0.85rem;margin-bottom:12px">Barevný pruh s textem hned pod hlavičkou webu (úvodní stránka). Když pole vyprázdníte, pruh se skryje.</p>
+    <textarea id="txWebPruh" rows="2" maxlength="300" style="width:100%;padding:6px;border:1px solid var(--tan-light);border-radius:6px;font-family:inherit;resize:vertical"></textarea>
+  </div>
+
+  <div class="card" style="margin-bottom:20px">
     <h3 style="margin-bottom:16px">Sekce „Proč barefoot?" (3 karty)</h3>
     <div id="txProcBarefoot" style="display:flex;flex-direction:column;gap:16px"></div>
   </div>
@@ -7673,6 +7679,7 @@ document.addEventListener('keydown', e => {
 // TEXTY WEBU
 let textyWebuData = {};
 const VYCHOZI_ESHOP_PRUH = '🦔 Dětské kroky s jistotou. Objevte kompletní sortiment a dopřejte dětem maximální pohodlí doma i venku. 🦔';
+const VYCHOZI_WEB_PRUH = '🦔 Potřebujete botičky či papučky pro své dětičky? 🦔👣 Přijďte vyzkoušet ty nejlepší kousky pro zdravé obouvání! 🦔';
 const vychoziTrustBadges = [
   { ikona:'🌿', nadpis:'Přírodní materiály', podnadpis:'Kůže, bavlna, textil' },
   { ikona:'👣', nadpis:'Zdravý vývoj', podnadpis:'Barefoot filozofie' },
@@ -7699,6 +7706,8 @@ async function loadTexty() {
 
     // Pruh nad hlavičkou e-shopu (dokud se neuloží, platí výchozí text z eshop.html)
     document.getElementById('txEshopPruh').value = typeof textyWebuData.eshopPruh === 'string' ? textyWebuData.eshopPruh : VYCHOZI_ESHOP_PRUH;
+    // Pruh pod hlavičkou webu (dokud se neuloží, platí výchozí text z index.html)
+    document.getElementById('txWebPruh').value = typeof textyWebuData.webPruh === 'string' ? textyWebuData.webPruh : VYCHOZI_WEB_PRUH;
 
     // Proč barefoot karty
     const kontBarefoot = document.getElementById('txProcBarefoot');
@@ -7832,7 +7841,8 @@ async function ulozitTexty() {
 
   // Zachovat i ostatní klíče (např. vyberteSi), server ukládá celý objekt
   const eshopPruh = document.getElementById('txEshopPruh').value.trim().slice(0, 300);
-  const payload = { ...textyWebuData, procBarefoot, trustBadges, mereniKroky, typyChodidel, eshopPruh };
+  const webPruh = document.getElementById('txWebPruh').value.trim().slice(0, 300);
+  const payload = { ...textyWebuData, procBarefoot, trustBadges, mereniKroky, typyChodidel, eshopPruh, webPruh };
 
   // Hláška se ukáže u tlačítka (je až na konci dlouhé stránky) i nahoře;
   // potvrzení po chvíli zmizí, chyba zůstane, dokud se neuloží znovu.
