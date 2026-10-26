@@ -35,7 +35,7 @@ Web a e-shop pro obchod s barefoot obuví pro děti (majitelka: Monika Škarpich
 - Platba: převod s QR, dobírka s příplatkem z nastavení dopravy (40 Kč, ne u osobního odběru, sloupec `objednavky.platba_priplatek`), na prodejně jen u osobního odběru
 - Administrace (hnědá, barvy webu): Přehled, E-shop (objednávky, zákazníci, vrácení, poukazy), Prodejna (pokladna/POS), Sklad, Sortiment (katalog), Rezervace, Reporty a Účetnictví, Web (texty), Nastavení (otevírací doba, doprava, systém)
 - Rezervační systém se správou slotů a e-mailovým potvrzením
-- Průvodce velikostí: na stránce boty doporučení podle délky nožičky – nadměrek = vnitřní délka − nožička, smí být nejvýš max. nadměrek (výchozí 12 mm v nastavení katalogu `rezervaMm`, model může mít vlastní `modely.nadmerek_mm`); doporučí největší velikost do maxima. Filtr `?noha=` v katalogu používá stejné maximum; rozměry velikostí se zadávají v adminu v detailu produktu (PUT /api/modely/:id/rozmery)
+- Průvodce velikostí: na stránce boty doporučení podle délky nožičky – nadměrek = vnitřní délka − nožička, musí být aspoň nadměrek z nastavení (výchozí 12 mm v nastavení katalogu `rezervaMm`, model může mít vlastní `modely.nadmerek_mm`); doporučí nejmenší velikost s tímto nadměrkem, menší jsou „malá“. Filtr `?noha=` v katalogu bere nadměrek až o 10 mm větší (`NOHA_ROZPETI`); rozměry velikostí se zadávají v adminu v detailu produktu (PUT /api/modely/:id/rozmery)
 
 ## Testy
 

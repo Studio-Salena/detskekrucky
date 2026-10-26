@@ -909,7 +909,6 @@ body > header{background:var(--warm-white);border-bottom:1px solid var(--tan-lig
 .detail-velikosti .size-btn .stav.vyprodano{color:#b3261e;font-weight:700}
 .detail-velikosti .size-btn .mm .nadmerek{display:block;font-weight:700;color:var(--sage-dark)}
 .detail-velikosti .size-btn .mm .nadmerek[hidden]{display:none}
-.detail-velikosti .size-btn .mm .nadmerek.velky,.nadmerek-velky{color:#b3261e;background:#fde2df;border-radius:4px;padding:0 4px}
 .detail-velikosti.mesice .size-btn{grid-template-columns:118px minmax(0,1fr) auto}
 .detail-velikosti .size-btn .mm .nadmerek.mala{color:var(--text-light);font-weight:400}
 .detail-velikosti .size-btn.selected .mm .nadmerek{color:#fff;background:none}
@@ -1893,9 +1892,9 @@ function hledaniOdpovida(p, hledat, nazevKategorie) {
 function jeSkladem(v) { return v.dostupnost !== 'dodavatel'; }
 
 // --- Průvodce velikostí ---
-// Nadměrek = o kolik je vnitřní délka boty delší než nožička. Smí být nejvýš
+// Nadměrek = o kolik je vnitřní délka boty delší než nožička. Musí být aspoň
 // tolik, kolik je v nastavení katalogu (12 mm), model může mít v adminu vlastní.
-// Větší nadměrek = bota je příliš velká.
+// Menší nadměrek = bota je malá. Filtr v katalogu bere nadměrek až o NOHA_ROZPETI větší.
 const NOHA_MIN = 70, NOHA_MAX = 300, NOHA_ROZPETI = 10;
 function rezervaPruvodce() {
   const r = nastaveniKatalogu && nastaveniKatalogu.rezervaMm;
@@ -1906,33 +1905,33 @@ function nadmerekBoty(p, vychozi) {
   return Number.isInteger(r) && r >= 0 && r <= 30 ? r : vychozi;
 }
 function platnaNoha(n) { return Number.isInteger(n) && n >= NOHA_MIN && n <= NOHA_MAX; }
-function velikostSediNaNohu(v, noha, maxNadmerek) {
-  return !!v.delka_mm && v.delka_mm > noha && v.delka_mm - noha <= maxNadmerek;
+// Pro filtr v katalogu: nadměrek aspoň minimum a nejvýš o NOHA_ROZPETI víc
+function velikostSediNaNohu(v, noha, nadmerek) {
+  return !!v.delka_mm && v.delka_mm - noha >= nadmerek && v.delka_mm - noha <= nadmerek + NOHA_ROZPETI;
 }
-// Doporučení z velikostí, které jde koupit: největší s nadměrkem do maxima;
-// když taková není, nejmenší větší (s upozorněním na příliš velký nadměrek)
-function doporucitVelikost(velikosti, noha, sirka, maxNadmerek) {
+// Doporučení z velikostí, které jde koupit: nejmenší s nadměrkem aspoň minimum
+function doporucitVelikost(velikosti, noha, sirka, nadmerek) {
   if (!platnaNoha(noha)) return { typ: 'neplatne' };
   const zmerene = (velikosti || []).filter(v => v.delka_mm > 0).sort((a, b) => a.delka_mm - b.delka_mm || a.velikost - b.velikost);
   if (!zmerene.length) return { typ: 'bez-rozmeru' };
-  const v = zmerene.filter(x => velikostSediNaNohu(x, noha, maxNadmerek)).pop() || zmerene.find(x => x.delka_mm > noha);
+  const v = zmerene.find(x => x.delka_mm - noha >= nadmerek);
   if (!v) return { typ: 'mala', nejvetsi: zmerene[zmerene.length - 1].delka_mm };
   const sirkaOk = Number.isInteger(sirka) && sirka > 0;
   return {
     typ: 'ok', velikost: v.velikost, delka_mm: v.delka_mm, sirka_mm: v.sirka_mm || null,
     rezerva: v.delka_mm - noha,
-    velka: v.delka_mm - noha > maxNadmerek,
+    velka: v.delka_mm - noha > nadmerek + NOHA_ROZPETI,
     uzka: sirkaOk && v.sirka_mm > 0 && v.sirka_mm < sirka,
     dodavatel: v.dostupnost === 'dodavatel'
   };
 }
-function vysledekPruvodceHtml(d, noha, sirka, maxNadmerek) {
+function vysledekPruvodceHtml(d, noha, sirka, nadmerek) {
   const poradit = '<button type="button" class="detail-odkaz" onclick="poraditKProduktu()">Poradíme vám</button>';
   if (d.typ === 'neplatne') return `Zadejte délku nožičky v milimetrech (${NOHA_MIN}–${NOHA_MAX} mm). Jak měřit, najdete v návodu níže.`;
   if (d.typ === 'bez-rozmeru') return `U této boty zatím nemáme změřené vnitřní rozměry. ${poradit}`;
-  if (d.typ === 'mala') return `<span class="varovani">Na nožičku ${Number(noha)} mm jsou u této boty všechny velikosti malé (největší má vnitřní délku ${Number(d.nejvetsi)} mm).</span> ${poradit}`;
-  if (d.velka) return `<span class="varovani">Velikost ${escHtml(d.velikost)} má vnitřní délku ${Number(d.delka_mm)} mm, nadměrek <strong class="nadmerek-velky">${Number(d.rezerva)} mm</strong> je příliš velký (víc než ${Number(maxNadmerek)} mm).</span> Menší velikost teď nemáme nebo nemá změřené rozměry. ${poradit}`;
+  if (d.typ === 'mala') return `<span class="varovani">Na nožičku ${Number(noha)} mm potřebujete vnitřní délku aspoň ${Number(noha) + Number(nadmerek)} mm (nadměrek ${Number(nadmerek)} mm). Velikosti, které máme, jsou malé (největší má ${Number(d.nejvetsi)} mm).</span> ${poradit}`;
   let t = `<span class="doporuceni">Doporučujeme velikost ${escHtml(d.velikost)}</span> – vnitřní délka ${Number(d.delka_mm)} mm, tedy nadměrek ${Number(d.rezerva)} mm na růst a pohyb prstů.`;
+  if (d.velka) t += ` Bota bude spíš větší, menší vhodná velikost teď není skladem. ${poradit}`;
   if (d.uzka) t += ` <span class="varovani">Pozor: vnitřní šířka ${Number(d.sirka_mm)} mm je menší než šířka nožičky (${Number(sirka)} mm), bota může být úzká.</span>`;
   if (d.dodavatel) t += ' Tato velikost je u dodavatele (7–14 dní).';
   return t;
@@ -2265,7 +2264,7 @@ function filtryHtml(stav, pocty) {
   const rez = rezervaPruvodce();
   casti.push(skupina('Délka nožičky', `<div class="filtr-noha">
       <input type="number" inputmode="numeric" min="${NOHA_MIN}" max="${NOHA_MAX}" step="1" data-pole="noha" placeholder="např. 145" aria-label="Délka nožičky v mm" value="${stav.noha ?? ''}"><span>mm</span></div>
-      <p class="filtr-pozn">Ukážeme boty, které mají velikost s nadměrkem do ${rez} mm (u některých modelů podle střihu jinak). Jen boty se změřenými rozměry.</p>`));
+      <p class="filtr-pozn">Ukážeme boty, které mají velikost s nadměrkem ${rez}–${rez + NOHA_ROZPETI} mm (u některých modelů podle střihu jinak). Jen boty se změřenými rozměry.</p>`));
 
   const velikosti = [...new Set([...vsechnyProdukty.filter(p => !jeVMesicich(p)).flatMap(p => p.velikosti.map(v => v.velikost)), ...(stav.velikost ? [stav.velikost] : [])])].sort((a, b) => a - b);
   if (velikosti.length) {
@@ -2684,15 +2683,15 @@ function velikostiDetailuHtml(p) {
   }).join('');
 }
 
-// Nadměrek u každé velikosti (i vyprodané) podle zadané nožičky, nad maximem zvýrazněný
-function oznacitNadmerky(noha, maxNadmerek) {
+// Nadměrek u každé velikosti (i vyprodané) podle zadané nožičky, pod minimem „malá“
+function oznacitNadmerky(noha, nadmerek) {
   document.querySelectorAll('#detailSizes .size-btn[data-delka]').forEach(b => {
     const el = b.querySelector('.nadmerek');
     if (!platnaNoha(noha)) { el.hidden = true; return; }
     const n = Number(b.dataset.delka) - noha;
     el.hidden = false;
-    el.className = 'nadmerek' + (n > maxNadmerek ? ' velky' : n <= 0 ? ' mala' : '');
-    el.textContent = n > maxNadmerek ? `nadměrek ${n} mm – příliš velký` : n <= 0 ? 'malá' : `nadměrek ${n} mm`;
+    el.className = 'nadmerek' + (n < nadmerek ? ' mala' : '');
+    el.textContent = n < nadmerek ? 'malá' : `nadměrek ${n} mm`;
   });
 }
 
@@ -2987,11 +2986,11 @@ function spustitPruvodce(vybrat) {
   if (!aktivniProdukt) return;
   const cislo = id => { const t = document.getElementById(id).value.trim(); return t === '' ? null : Math.round(Number(t)); };
   const noha = cislo('pruvodceDelka'), sirka = cislo('pruvodceSirka');
-  const maxNadmerek = nadmerekBoty(aktivniProdukt, rezervaPruvodce());
-  const d = doporucitVelikost(aktivniProdukt.velikosti, noha, sirka, maxNadmerek);
+  const nadmerek = nadmerekBoty(aktivniProdukt, rezervaPruvodce());
+  const d = doporucitVelikost(aktivniProdukt.velikosti, noha, sirka, nadmerek);
   document.querySelectorAll('#detailSizes .size-btn.doporucena').forEach(b => b.classList.remove('doporucena'));
-  document.getElementById('pruvodceVysledek').innerHTML = vysledekPruvodceHtml(d, noha, sirka, maxNadmerek);
-  oznacitNadmerky(noha, maxNadmerek);
+  document.getElementById('pruvodceVysledek').innerHTML = vysledekPruvodceHtml(d, noha, sirka, nadmerek);
+  oznacitNadmerky(noha, nadmerek);
   if (d.typ === 'neplatne') return;
   ulozNozicku(noha, sirka);
   if (d.typ !== 'ok') return;
