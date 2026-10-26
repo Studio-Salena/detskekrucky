@@ -320,7 +320,7 @@ test('eshop.html: pruh „Dětské kroky s jistotou“ zůstává nad hlavičkou
 // ═══ Krok 6 - rychlý výběr nad katalogem ═══
 
 new vm.Script([
-  ...['jeVychoziStav', 'oblibeneProdukty'].map(vytahnout)].join('\n')).runInContext(sandbox);
+  ...['jeVychoziStav', 'novinkyProdukty'].map(vytahnout)].join('\n')).runInContext(sandbox);
 
 test('rychlý výběr: jen ve výchozím zobrazení (řazení a otevřená bota nevadí)', () => {
   assert.equal(run(`jeVychoziStav(${JSON.stringify(stav())})`), true);
@@ -330,18 +330,34 @@ test('rychlý výběr: jen ve výchozím zobrazení (řazení a otevřená bota 
   }
 });
 
-test('nejčastěji vybíráte: pořadí ze serveru, jen boty v nabídce, nejvýš 4', () => {
-  const slugy = ['neni-skladem', 'protetika-tery', 'froddo-autumn', 'beda-zuzi', 'dalsi'];
-  assert.deepEqual(run(`oblibeneProdukty(${JSON.stringify(slugy)}, ${JSON.stringify(PRODUKTY)})`).map(p => p.slug), ['protetika-tery', 'froddo-autumn', 'beda-zuzi']);
-  assert.deepEqual(run(`oblibeneProdukty(${JSON.stringify(slugy)}, ${JSON.stringify(PRODUKTY)}, 2)`).map(p => p.slug), ['protetika-tery', 'froddo-autumn']);
-  assert.deepEqual(run(`oblibeneProdukty(null, ${JSON.stringify(PRODUKTY)})`), []);
+test('novinky: naposledy přidané modely (podle prvního produktu), jen s fotkou, nejvýš 4', () => {
+  const foto = 'https://img/x.jpg';
+  const zbozi = [
+    { slug: 'stara-s-novou-velikosti', kategorie: 'celorocky', minId: 5, maxId: 99, primaryImageUrl: foto },
+    { slug: 'nejnovejsi', kategorie: 'celorocky', minId: 50, primaryImageUrl: foto },
+    { slug: 'bez-fotky', kategorie: 'celorocky', minId: 60 },
+    { slug: 'legacy-emoji-url', kategorie: 'papuce', minId: 40, emoji: foto },
+    { slug: 'starsi', kategorie: 'zimni', minId: 30, primaryImageUrl: foto },
+    { slug: 'nejstarsi', kategorie: 'zimni', minId: 1, primaryImageUrl: foto }
+  ];
+  assert.deepEqual(run(`novinkyProdukty(${JSON.stringify(zbozi)})`).map(p => p.slug), ['nejnovejsi', 'legacy-emoji-url', 'starsi', 'stara-s-novou-velikosti']);
+  assert.deepEqual(run(`novinkyProdukty(${JSON.stringify(zbozi)}, 2)`).map(p => p.slug), ['nejnovejsi', 'legacy-emoji-url']);
+  assert.deepEqual(run(`novinkyProdukty([])`), []);
 });
 
-test('nejčastěji vybíráte: jen boty, ne doplňky ani péče o obuv', () => {
-  const zbozi = [...PRODUKTY,
-    { klic: 'p', slug: 'voxx-ponozky', kategorie: 'doplnky', velikosti: [{ velikost: 25 }] },
-    { klic: 'c', slug: 'capiki', kategorie: 'capacky', velikosti: [{ velikost: 18 }] }];
-  assert.deepEqual(run(`oblibeneProdukty(['voxx-ponozky', 'beda-zuzi', 'capiki'], ${JSON.stringify(zbozi)})`).map(p => p.slug), ['beda-zuzi', 'capiki']);
+test('novinky: jen boty, ne doplňky ani péče o obuv (capáčky ano)', () => {
+  const foto = 'https://img/x.jpg';
+  const zbozi = [
+    { slug: 'voxx-ponozky', kategorie: 'doplnky', minId: 90, primaryImageUrl: foto },
+    { slug: 'kreme', kategorie: 'pece-o-obuv', minId: 80, primaryImageUrl: foto },
+    { slug: 'capiki', kategorie: 'capacky', minId: 70, primaryImageUrl: foto },
+    { slug: 'beda-zuzi', kategorie: 'papuce', minId: 10, primaryImageUrl: foto }];
+  assert.deepEqual(run(`novinkyProdukty(${JSON.stringify(zbozi)})`).map(p => p.slug), ['capiki', 'beda-zuzi']);
+});
+
+test('eshop.html: blok Novinky místo „Nejčastěji vybíráte“, prodeje se z e-shopu nenačítají', () => {
+  assert.match(ESHOP_HTML, /<div id="novinkyBlok" hidden>\s*<h3>Novinky<\/h3>/);
+  assert.doesNotMatch(ESHOP_HTML, /Nejčastěji vybíráte|\/modely\/oblibene/);
 });
 
 // ═══ Dívky / chlapci ═══
@@ -375,7 +391,7 @@ test('facelift: štítky pod fotkou, jednotný vzhled, nejvýš dva; fotka bez b
 test('facelift: Cormorant se nepoužívá, nadpis katalogu Nunito a podnadpis Dancing Script, řádek důvěry nad tlačítkem objednávky', () => {
   // Cormorant se zatím načítá (majitelka ho nechce mazat), ale nikde se nepoužívá
   assert.doesNotMatch(ESHOP_HTML, /font-family:\s*'Cormorant'/);
-  // Hlavní nadpis katalogu čitelným písmem, „Nejčastěji vybíráte“ jako akcent v písmu značky
+  // Hlavní nadpis katalogu čitelným písmem, „Novinky“ jako akcent v písmu značky
   assert.match(ESHOP_HTML, /\.katalog-nadpis\{font-family:var\(--font-text\)/);
   assert.match(ESHOP_HTML, /\.katalog-uvod h3\{font-family:var\(--font-brand\)/);
   const duvera = ESHOP_HTML.indexOf('<p class="duvera">Platba převodem nebo na prodejně · Vrácení do 14 dnů · Poradíme na 773 517 733</p>');

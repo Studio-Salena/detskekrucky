@@ -260,8 +260,8 @@ footer.paticka .footer-copy{text-align:center;border-top:1px solid rgba(255,255,
 .pro-koho a span{font-size:2rem}
 .pro-koho a small{font-weight:400;color:var(--text-light);font-size:0.78rem}
 .pro-koho a:hover,.pro-koho a:focus-visible{border-color:var(--brown);color:var(--brown)}
-#proKohoBlok[hidden],#oblibeneBlok[hidden]{display:none}
-@media(max-width:768px){#oblibene{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:12px;padding-bottom:6px}#oblibene .product-card{flex:0 0 62%;scroll-snap-align:start}}
+#proKohoBlok[hidden],#novinkyBlok[hidden]{display:none}
+@media(max-width:768px){#novinky{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:12px;padding-bottom:6px}#novinky .product-card{flex:0 0 62%;scroll-snap-align:start}}
 
 /* KATALOG (krok 1): filtry vlevo, produkty vpravo; na mobilu filtry v panelu přes obrazovku */
 .drobecky{max-width:1400px;margin:0 auto 10px;font-size:0.82rem;color:var(--text-light);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
@@ -1135,9 +1135,9 @@ body:has(.katalog-filtry.open) #back-to-top{display:none}
       <h3>Pro koho vybíráte?</h3>
       <div class="pro-koho" id="proKoho"></div>
     </div>
-    <div id="oblibeneBlok" hidden>
-      <h3>Nejčastěji vybíráte</h3>
-      <div class="detail-podobne" id="oblibene"></div>
+    <div id="novinkyBlok" hidden>
+      <h3>Novinky</h3>
+      <div class="detail-podobne" id="novinky"></div>
     </div>
   </div>
   <div class="katalog">
@@ -1694,12 +1694,15 @@ async function nacistProdukty() {
           barefoot: s.barefoot ?? null, sirkaNohy: s.sirka_nohy || [], zapinani: s.zapinani || [], membrana: s.membrana ?? null,
           pohlavi: s.pohlavi || null, nart: s.nart || [], dominantniPalec: s.dominantni_palec || null, material: s.material || null, opatek: s.opatek || null, procJsmeVybrali: s.proc_jsme_vybrali || [],
           nadmerekMm: s.nadmerek_mm ?? null,
-          maxId: 0, _vyprodane: new Map(),
+          maxId: 0, minId: Infinity, _vyprodane: new Map(),
           kategorieCitac: {}, emoji: '', primaryImageUrl: '', primaryImageAlt: '', images: [], _seenObrazky: new Set(), velikosti: []
         };
       }
       const p = map[klic];
       p.maxId = Math.max(p.maxId, s.id || 0);
+      // Nejstarší produkt_id = kdy model poprvé přibyl do skladu (Novinky);
+      // nově doplněná velikost starého modelu ho tak novinkou neudělá
+      if (s.id) p.minId = Math.min(p.minId, s.id);
       if (!p.emoji && s.emoji) p.emoji = s.emoji;
       // Model bot má v DB většinou víc produkt_id (jeden na velikost, viz
       // komentář výše) - hlavní fotka nahraná admin.html u KTERÉHOKOLIV z
@@ -2426,8 +2429,6 @@ function vykreslitKatalog() {
 }
 
 // ═══ Rychlý výběr nad katalogem (krok 6) ═══
-let oblibeneSlugy = [];
-
 // Výchozí zobrazení = bez filtrů a hledání (řazení a otevřená bota nevadí)
 function jeVychoziStav(stav) {
   return urlZeStavu({ ...stav, razeni: 'doporucene', produkt: '' }) === '';
@@ -2450,10 +2451,13 @@ function textVelikosti(p, v) {
 function popisVelikosti(p, v) { return jeVMesicich(p) ? textVelikosti(p, v) : 'vel. ' + v; }
 function produktPolozky(item) { return vsechnyProdukty.find(x => x.velikosti.some(v => v.produkt_id === item.id)); }
 
-// Nejprodávanější boty, které jsou právě v nabídce (skladem nebo u dodavatele)
-function oblibeneProdukty(slugy, produkty, pocet = 4) {
-  const podleSlugu = new Map(produkty.filter(p => p.slug && jeBota(p)).map(p => [p.slug, p]));
-  return (slugy || []).map(s => podleSlugu.get(s)).filter(Boolean).slice(0, pocet);
+// Naposledy přidané boty, které jsou právě v nabídce (skladem nebo u dodavatele);
+// jen s fotkou, ať v Novinkách nevisí bota, které se fotka ještě nenahrála
+function novinkyProdukty(produkty, pocet = 4) {
+  return produkty
+    .filter(p => jeBota(p) && (jeBezpecnaHttpUrl(p.primaryImageUrl) || jeBezpecnaHttpUrl(p.emoji)))
+    .sort((a, b) => b.minId - a.minId)
+    .slice(0, pocet);
 }
 
 
@@ -2469,10 +2473,10 @@ function vykreslitUvodKatalogu(stav) {
     const s = { ...prazdnyStavKatalogu(), pro: k };
     return `<a href="eshop.html${escAttr(urlZeStavu(s))}" data-stav="${escAttr(JSON.stringify(s))}"><span aria-hidden="true">${k === 'divky' ? '&#128103;' : '&#128102;'}</span>${KATALOG_PRO[k].nazev}<small>${pocetProduktuText(pocty[k])}</small></a>`;
   }).join('');
-  const oblibene = oblibeneProdukty(oblibeneSlugy, vsechnyProdukty);
-  // Méně než 3 boty nemá smysl ukazovat jako "nejčastěji vybírané"
-  document.getElementById('oblibeneBlok').hidden = oblibene.length < 3;
-  document.getElementById('oblibene').innerHTML = oblibene.length < 3 ? '' : oblibene.map(p => kartaProduktuHtml(p, stav)).join('');
+  const novinky = novinkyProdukty(vsechnyProdukty);
+  // Méně než 3 boty nemá smysl ukazovat jako samostatný blok
+  document.getElementById('novinkyBlok').hidden = novinky.length < 3;
+  document.getElementById('novinky').innerHTML = novinky.length < 3 ? '' : novinky.map(p => kartaProduktuHtml(p, stav)).join('');
 }
 
 function zobrazitDalsi() {
@@ -3890,13 +3894,6 @@ fetch(API + '/nastaveni/texty').then(r => r.ok ? r.json() : null).then(data => {
     pruh.hidden = !data.eshopPruh.trim();
   }
   if (Array.isArray(data.mereniKroky)) mereniKroky = data.mereniKroky;
-}).catch(() => {});
-// Nejprodávanější boty pro blok "Nejčastěji vybíráte"
-fetch(API + '/modely/oblibene').then(r => r.ok ? r.json() : null).then(data => {
-  if (Array.isArray(data)) {
-    oblibeneSlugy = data.filter(s => typeof s === 'string');
-    if (produktyNacteny) vykreslitKatalog();
-  }
 }).catch(() => {});
 // Věkové skupiny nastavené v adminu (Modely bot -> Věk a pohlaví)
 fetch(API + '/modely/nastaveni-katalogu').then(r => r.ok ? r.json() : null).then(data => {
