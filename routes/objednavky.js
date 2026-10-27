@@ -354,7 +354,7 @@ router.post('/', async (req, res) => {
     // Uplatnit dárkový poukaz (pokud je zadaný) - stejná transakce jako sklad,
     // ať se poukaz odečte, jen když se objednávka opravdu založí (a naopak).
     // FOR UPDATE zamkne řádek poukazu, aby ho nešlo dvakrát souběžně přečerpat.
-    let poukaz_id = null, sleva = 0;
+    let poukaz_id = null, sleva = 0, poukazZustatek = 0, poukazZbyva = null;
     if (poukaz_kod) {
       const kodNorm = String(poukaz_kod).trim().toUpperCase();
       const poukazRes = await client.query(
@@ -375,14 +375,23 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ chyba: 'Platnost poukazu vypršela.' });
       }
       poukaz_id = poukaz.id;
-      sleva = Math.min(Number(poukaz.zustatek), mezisoucet);
+      poukazZustatek = Number(poukaz.zustatek);
+      poukazZbyva = { platnost_do: poukaz.platnost_do };
     }
 
-    // Doprava - podle zvoleného způsobu (po odečtení poukazu), osobní odběr je vždy zdarma
-    const dopravaCena = vypocitatCenuDopravy(nastaveniDopravy, doprava, mezisoucet - sleva);
+    // Doprava - podle zvoleného způsobu, osobní odběr je vždy zdarma. Hranice
+    // dopravy zdarma se počítá ze zboží po odečtení poukazu.
+    const dopravaCena = vypocitatCenuDopravy(nastaveniDopravy, doprava, mezisoucet - Math.min(poukazZustatek, mezisoucet));
     // Příplatek za dobírku se platí vždy (i při dopravě zdarma)
     const platbaPriplatek = priplatekPlatby(nastaveniDopravy, doprava, platba);
+    // Poukaz platí i dopravu a příplatek; co z něj zbude, zůstává na poukazu
+    sleva = Math.min(poukazZustatek, mezisoucet + dopravaCena + platbaPriplatek);
     celkem = mezisoucet - sleva + dopravaCena + platbaPriplatek;
+    if (poukaz_id && celkem === 0 && platba === 'dobirka') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ chyba: 'Objednávku celou uhradí poukaz – dobírka tu nedává smysl. Zvolte prosím jinou platbu.' });
+    }
+    if (poukazZbyva) poukazZbyva.zustatek = poukazZustatek - sleva;
 
     // Vytvorit objednavku
     const objednavka = await client.query(
@@ -459,6 +468,7 @@ try {
     platba,
     polozky: polozkySkutecne,
     sleva,
+    poukaz_zbyva: poukazZbyva,
     doprava_cena: dopravaCena,
     platba_priplatek: platbaPriplatek,
     vydejni_misto: vydejniMisto,
@@ -469,7 +479,7 @@ try {
   console.error('Chyba pri odesilani emailu:', emailErr.message);
 }
 
-res.json({ zprava: 'Objednavka uspesne vytvorena', objednavka_id, cislo, celkem });
+res.json({ zprava: 'Objednavka uspesne vytvorena', objednavka_id, cislo, celkem, poukaz_zbyva: poukazZbyva });
 
 // Upozornění majitelce se posílá až po odpovědi zákazníkovi, ať prodleva/chyba
 // s odesláním objednávku nezablokuje (stejný vzor jako u rezervací).

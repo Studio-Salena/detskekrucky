@@ -104,6 +104,13 @@ function tlacitkoHtml(href, text) {
 }
 // Tlačítko „Odstoupit od smlouvy“ (§ 1830a obč. zák.) v potvrzení objednávky -
 // otevře online odstoupení v e-shopu s předvyplněným číslem objednávky
+// Kolik zůstalo na dárkovém poukazu po objednávce - ať zákazník ví, že zbytek nepropadá
+function zbytekPoukazuHtml(poukaz) {
+  if (!poukaz || !(Number(poukaz.zustatek) > 0)) return '';
+  const platnost = poukaz.platnost_do ? new Date(poukaz.platnost_do).toLocaleDateString('cs-CZ') : '';
+  return `<p style="margin:16px 0 0 0;padding:12px 16px;background:${BARVA_POZADI_BOX};border:1px solid ${BARVA_RAMECEK};border-radius:8px;font-size:14px">🎁 Na dárkovém poukazu vám zůstává <strong>${Number(poukaz.zustatek)} Kč</strong>${platnost ? ` (platí do ${escH(platnost)})` : ''} – můžete je využít při dalším nákupu v e-shopu i na prodejně.</p>`;
+}
+
 function tlacitkoOdstoupeniHtml(cislo) {
   return `
     <div style="${STYL_BOX};margin-top:24px">
@@ -213,7 +220,11 @@ async function odeslat_potvrzeni(objednavka) {
 
   const adresa = [objednavka.ulice, [objednavka.psc, objednavka.mesto].filter(Boolean).join(' ')].filter(Boolean).map(escH).join(', ');
 
-  const platebniBox = objednavka.platba === 'prevod' ? `
+  const uhrazenoPoukazem = Number(objednavka.sleva) > 0 && Number(objednavka.celkem) <= 0;
+  const platebniBox = uhrazenoPoukazem ? `
+    <table role="presentation" style="width:100%;background:#FFF9F5;border-left:4px solid ${BARVA_ZNACKA};border-radius:0 8px 8px 0;margin-bottom:24px">
+      <tr><td style="padding:16px 20px;font-size:14px"><strong>Objednávka je celá uhrazená dárkovým poukazem</strong> – nic dalšího neplatíte.</td></tr>
+    </table>` : objednavka.platba === 'prevod' ? `
     <table role="presentation" style="width:100%;background:#FFF9F5;border-left:4px solid ${BARVA_ZNACKA};border-radius:0 8px 8px 0;margin-bottom:24px">
       <tr>
         <td style="padding:16px 20px;vertical-align:top">
@@ -251,7 +262,9 @@ async function odeslat_potvrzeni(objednavka) {
             ? 'Ozveme se, jakmile bude objednávka připravená k vyzvednutí.'
             : objednavka.platba === 'dobirka'
               ? 'Zboží skladem odešleme do 2 pracovních dnů, zboží „u dodavatele“ do 7–14 dnů. Zaplatíte při převzetí zásilky.'
-              : 'Zboží skladem odešleme do 2 pracovních dnů od připsání platby, zboží „u dodavatele“ do 7–14 dnů.'}</p>
+              : uhrazenoPoukazem
+                ? 'Zboží skladem odešleme do 2 pracovních dnů, zboží „u dodavatele“ do 7–14 dnů.'
+                : 'Zboží skladem odešleme do 2 pracovních dnů od připsání platby, zboží „u dodavatele“ do 7–14 dnů.'}</p>
         </td>
       </tr>
     </table>
@@ -269,12 +282,13 @@ async function odeslat_potvrzeni(objednavka) {
       </thead>
       <tbody>
         ${polozky_html}
-        ${objednavka.sleva > 0 ? `<tr><td colspan="3" style="padding:10px 8px;font-size:14px">Poukaz (sleva)</td><td style="padding:10px 8px;font-size:14px;text-align:right;color:#5a8a5a">−${objednavka.sleva} Kč</td></tr>` : ''}
         <tr><td colspan="3" style="padding:10px 8px;font-size:14px">${escH(dopravaLabel)} (doprava)</td><td style="padding:10px 8px;font-size:14px;text-align:right">${dopravaCena === 0 ? 'Zdarma' : dopravaCena + ' Kč'}</td></tr>
         ${priplatek > 0 ? `<tr><td colspan="3" style="padding:10px 8px;font-size:14px">Dobírka (příplatek)</td><td style="padding:10px 8px;font-size:14px;text-align:right">${priplatek} Kč</td></tr>` : ''}
+        ${objednavka.sleva > 0 ? `<tr><td colspan="3" style="padding:10px 8px;font-size:14px">Dárkový poukaz</td><td style="padding:10px 8px;font-size:14px;text-align:right;color:#5a8a5a">−${objednavka.sleva} Kč</td></tr>` : ''}
         <tr><td colspan="3" style="padding:14px 8px 0 8px;font-size:15px;font-weight:bold;color:${BARVA_ZNACKA};border-top:2px solid ${BARVA_ZNACKA_TMAVA}">CELKEM K ÚHRADĚ</td><td style="padding:14px 8px 0 8px;font-size:15px;font-weight:bold;color:${BARVA_ZNACKA};text-align:right;border-top:2px solid ${BARVA_ZNACKA_TMAVA}">${objednavka.celkem} Kč</td></tr>
       </tbody>
     </table>
+    ${zbytekPoukazuHtml(objednavka.poukaz_zbyva)}
     ${tlacitkoOdstoupeniHtml(cisloZobrazit)}
     ${pravniCastPotvrzeni()}`;
 

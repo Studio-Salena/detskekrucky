@@ -3619,37 +3619,40 @@ function dobirkaMozna(doprava) {
   return Number.isInteger(nastaveniDopravy.dobirka) && !!m && !m.vzdyZdarma;
 }
 
-// Součty objednávky - stejné pravidlo jako server (doprava zdarma od 2 000 Kč po slevě,
-// příplatek za dobírku vždy)
+// Součty objednávky - stejné pravidlo jako server (doprava zdarma od 2 000 Kč za zboží
+// po odečtení poukazu, příplatek za dobírku vždy, poukaz platí i dopravu a příplatek)
 function spocitatObjednavku(polozky, poukaz, doprava, platba) {
   const mezisoucet = polozky.reduce((s, i) => s + i.cena * i.pocet, 0);
-  const sleva = poukaz ? Math.min(poukaz.zustatek, mezisoucet) : 0;
-  const dopravaCena = vypocitatDopravu(doprava, mezisoucet - sleva);
+  const zustatek = poukaz ? Number(poukaz.zustatek) : 0;
+  const dopravaCena = vypocitatDopravu(doprava, mezisoucet - Math.min(zustatek, mezisoucet));
   const priplatek = platba === 'dobirka' && dobirkaMozna(doprava) ? nastaveniDopravy.dobirka : 0;
-  return { mezisoucet, sleva, dopravaCena, priplatek, celkem: mezisoucet - sleva + dopravaCena + priplatek };
+  const sleva = Math.min(zustatek, mezisoucet + dopravaCena + priplatek);
+  return { mezisoucet, sleva, dopravaCena, priplatek, celkem: mezisoucet - sleva + dopravaCena + priplatek, zbyva: zustatek - sleva };
 }
 
 function souhrnObjednavkyHtml(polozky, poukaz, doprava, platba) {
   const s = spocitatObjednavku(polozky, poukaz, doprava, platba);
   return `
     ${polozky.map(i => `<div class="order-summary-item"><span>${escHtml(i.nazev)} ${escHtml(popisVelikosti(produktPolozky(i), i.velikost))} × ${Number(i.pocet)}</span><span>${i.cena * i.pocet} Kč</span></div>`).join('')}
-    ${s.sleva > 0 ? `<div class="order-summary-item" style="color:var(--sage);font-weight:700"><span>Dárkový poukaz ${escHtml(poukaz.kod)}</span><span>−${s.sleva} Kč</span></div>` : ''}
     <div class="order-summary-item"><span>Doprava (${escHtml(DOPRAVA_NAZVY[doprava] || doprava)})</span><span>${s.dopravaCena === 0 ? 'Zdarma' : s.dopravaCena + ' Kč'}</span></div>
     ${s.priplatek > 0 ? `<div class="order-summary-item"><span>Dobírka (příplatek)</span><span>${s.priplatek} Kč</span></div>` : ''}
-    <div class="order-summary-total"><span>Celkem</span><span>${s.celkem} Kč</span></div>`;
+    ${s.sleva > 0 ? `<div class="order-summary-item" style="color:var(--sage);font-weight:700"><span>Dárkový poukaz ${escHtml(poukaz.kod)}</span><span>−${s.sleva} Kč</span></div>` : ''}
+    <div class="order-summary-total"><span>Celkem</span><span>${s.celkem} Kč</span></div>
+    ${s.sleva > 0 && s.zbyva > 0 ? `<div class="order-summary-item" style="font-size:0.85em"><span>Na poukazu vám zůstane ${s.zbyva} Kč – využijete je příště v e-shopu i na prodejně.</span></div>` : ''}`;
 }
 
 function vykreslitSouhrnObjednavky() {
   const doprava = zvolenaDoprava();
-  const { mezisoucet, sleva } = spocitatObjednavku(kosik, uplatnenyPoukaz, doprava);
+  const { mezisoucet, celkem } = spocitatObjednavku(kosik, uplatnenyPoukaz, doprava);
+  const slevaZbozi = uplatnenyPoukaz ? Math.min(Number(uplatnenyPoukaz.zustatek), mezisoucet) : 0;
   // Ceny u voleb dopravy podle aktuálního košíku (zdarma od 2 000 Kč)
   document.querySelectorAll('[data-doprava-cena]').forEach(el => {
-    const cena = vypocitatDopravu(el.dataset.dopravaCena, mezisoucet - sleva);
+    const cena = vypocitatDopravu(el.dataset.dopravaCena, mezisoucet - slevaZbozi);
     el.textContent = cena === 0 ? 'zdarma' : cena + ' Kč';
   });
-  // Dobírka jen u zasílaných zásilek s příplatkem - jinak zpět na převod
+  // Dobírka jen u zasílaných zásilek s příplatkem a když je co platit - jinak zpět na převod
   const dobirka = document.getElementById('volbaDobirka');
-  dobirka.hidden = !dobirkaMozna(doprava);
+  dobirka.hidden = !dobirkaMozna(doprava) || (!!uplatnenyPoukaz && celkem === 0);
   document.getElementById('dobirkaCena').textContent = dobirka.hidden ? '' : '+' + nastaveniDopravy.dobirka + ' Kč';
   if (dobirka.hidden && zvolenaPlatba() === 'dobirka') document.querySelector('#chPlatba input[value="prevod"]').checked = true;
   document.getElementById('orderSummary').innerHTML = souhrnObjednavkyHtml(kosik, uplatnenyPoukaz, doprava, zvolenaPlatba());
@@ -3732,9 +3735,12 @@ function prejitNaKrok(krok) {
 }
 
 // Potvrzení po odeslání: číslo objednávky a u převodu platební údaje s VS
-function potvrzeniObjednavkyHtml({ cislo, celkem, email, platba }) {
+function potvrzeniObjednavkyHtml({ cislo, celkem, email, platba, poukazZbyva }) {
   const vs = /^\d{1,10}$/.test(String(cislo)) ? String(cislo) : '';
-  const prevod = platba === 'prevod' ? `
+  const uhrazeno = Number(celkem) <= 0;
+  const zbytek = poukazZbyva && Number(poukazZbyva.zustatek) > 0
+    ? `<p>🎁 Na dárkovém poukazu vám zůstává <strong>${Number(poukazZbyva.zustatek)} Kč</strong>${poukazZbyva.platnost_do ? ` (platí do ${escHtml(new Date(poukazZbyva.platnost_do).toLocaleDateString('cs-CZ'))})` : ''} – využijete je příště v e-shopu i na prodejně.</p>` : '';
+  const prevod = uhrazeno ? '<p><strong>Objednávka je celá uhrazená dárkovým poukazem</strong> – nic dalšího neplatíte.</p>' : platba === 'prevod' ? `
     <div class="potvrzeni-platba">
       <strong>Platba převodem</strong>
       <div>Účet: <strong>2003533776/2010</strong></div>
@@ -3748,7 +3754,8 @@ function potvrzeniObjednavkyHtml({ cislo, celkem, email, platba }) {
     <p>Děkujeme za objednávku.${cislo ? ` Číslo objednávky: <strong>${escHtml(cislo)}</strong>` : ''}</p>
     <p>Potvrzení jsme poslali na <strong>${escHtml(email)}</strong>.</p>
     ${prevod}
-    ${platba === 'na_prodejne' ? '<p>Zaplatíte při vyzvednutí na prodejně (hotově, kartou nebo QR kódem). Ozveme se, až bude objednávka připravená.</p>' : ''}
+    ${zbytek}
+    ${platba === 'na_prodejne' && !uhrazeno ? '<p>Zaplatíte při vyzvednutí na prodejně (hotově, kartou nebo QR kódem). Ozveme se, až bude objednávka připravená.</p>' : ''}
     ${platba === 'dobirka' ? `<p>Platba na dobírku: částku <strong>${Number(celkem)} Kč</strong> zaplatíte při převzetí zásilky.</p>` : ''}
     <div id="potvrzeniUcet"></div>
     <button type="button" class="submit-btn" onclick="closeModal('modalCheckout')">Zpět do e-shopu</button>`;
@@ -3857,7 +3864,7 @@ async function odeslatObjednavku() {
       uplatnenyPoukaz = null;
       // Potvrzení zůstane otevřené (číslo objednávky, u převodu platba s VS),
       // dokud ho zákaznice sama nezavře. Částka je ta, kterou spočítal server.
-      document.getElementById('potvrzeniObjednavky').innerHTML = potvrzeniObjednavkyHtml({ cislo: data.cislo, celkem: data.celkem, email, platba });
+      document.getElementById('potvrzeniObjednavky').innerHTML = potvrzeniObjednavkyHtml({ cislo: data.cislo, celkem: data.celkem, email, platba, poukazZbyva: data.poukaz_zbyva });
       prejitNaKrok(4);
       document.getElementById('chSouhlas').checked = false;
       btn.disabled = false;

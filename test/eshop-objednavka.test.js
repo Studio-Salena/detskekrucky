@@ -39,15 +39,15 @@ const zavolat = (fn, ...args) => {
 const POLOZKY = [{ nazev: 'Bota A', velikost: 24, pocet: 2, cena: 800 }, { nazev: 'Bota B', velikost: 25, pocet: 1, cena: 500 }];
 
 test('součty: doprava zdarma od 2 000 Kč počítáno po slevě poukazu (stejně jako server)', () => {
-  assert.deepEqual(zavolat('spocitatObjednavku', POLOZKY, null, 'zasilkovna'), { mezisoucet: 2100, sleva: 0, dopravaCena: 0, priplatek: 0, celkem: 2100 });
-  assert.deepEqual(zavolat('spocitatObjednavku', POLOZKY, { zustatek: 500 }, 'ceska_posta'), { mezisoucet: 2100, sleva: 500, dopravaCena: 89, priplatek: 0, celkem: 1689 });
-  assert.deepEqual(zavolat('spocitatObjednavku', POLOZKY, { zustatek: 5000 }, 'zasilkovna'), { mezisoucet: 2100, sleva: 2100, dopravaCena: 79, priplatek: 0, celkem: 79 });
+  assert.deepEqual(zavolat('spocitatObjednavku', POLOZKY, null, 'zasilkovna'), { mezisoucet: 2100, sleva: 0, dopravaCena: 0, priplatek: 0, celkem: 2100, zbyva: 0 });
+  assert.deepEqual(zavolat('spocitatObjednavku', POLOZKY, { zustatek: 500 }, 'ceska_posta'), { mezisoucet: 2100, sleva: 500, dopravaCena: 89, priplatek: 0, celkem: 1689, zbyva: 0 });
+  assert.deepEqual(zavolat('spocitatObjednavku', POLOZKY, { zustatek: 5000 }, 'zasilkovna'), { mezisoucet: 2100, sleva: 2179, dopravaCena: 79, priplatek: 0, celkem: 0, zbyva: 2821 });
   assert.equal(zavolat('spocitatObjednavku', [POLOZKY[1]], null, 'osobni_odber').celkem, 500);
 });
 
 test('dobírka: příplatek z nastavení (i při dopravě zdarma), ne u osobního odběru, bez příplatku se nenabízí', () => {
   vm.runInContext('nastaveniDopravy = { ...DOPRAVA_VYCHOZI, dobirka: 40 };', sandbox);
-  assert.deepEqual(zavolat('spocitatObjednavku', POLOZKY, null, 'zasilkovna', 'dobirka'), { mezisoucet: 2100, sleva: 0, dopravaCena: 0, priplatek: 40, celkem: 2140 });
+  assert.deepEqual(zavolat('spocitatObjednavku', POLOZKY, null, 'zasilkovna', 'dobirka'), { mezisoucet: 2100, sleva: 0, dopravaCena: 0, priplatek: 40, celkem: 2140, zbyva: 0 });
   assert.equal(zavolat('spocitatObjednavku', [POLOZKY[1]], null, 'zasilkovna', 'dobirka').celkem, 619);
   assert.equal(zavolat('spocitatObjednavku', [POLOZKY[1]], null, 'zasilkovna', 'prevod').celkem, 579);
   assert.equal(zavolat('dobirkaMozna', 'osobni_odber'), false);
@@ -67,6 +67,28 @@ test('souhrn: položky, poukaz, doprava, celkem; názvy a kód poukazu escapovan
   assert.match(h, /−100 Kč/);
   assert.match(h, /Doprava \(Zásilkovna\)<\/span><span>79 Kč/);
   assert.match(h, /Celkem<\/span><span>479 Kč/);
+});
+
+test('poukaz platí i dopravu a příplatek, zbytek zůstává na poukazu a zákazník ho vidí', () => {
+  vm.runInContext('nastaveniDopravy = { ...DOPRAVA_VYCHOZI, dobirka: 40 };', sandbox);
+  // 500 Kč boty + 79 doprava + 40 dobírka = 619, poukaz 600 -> doplatek 19
+  assert.deepEqual(zavolat('spocitatObjednavku', [POLOZKY[1]], { zustatek: 600 }, 'zasilkovna', 'dobirka'), { mezisoucet: 500, sleva: 600, dopravaCena: 79, priplatek: 40, celkem: 19, zbyva: 0 });
+  // poukaz 1000 na boty za 500 + Zásilkovnu: nic se neplatí, 421 Kč zůstává
+  const s = zavolat('spocitatObjednavku', [POLOZKY[1]], { zustatek: 1000 }, 'zasilkovna', 'prevod');
+  assert.deepEqual([s.sleva, s.celkem, s.zbyva], [579, 0, 421]);
+  assert.match(zavolat('souhrnObjednavkyHtml', [POLOZKY[1]], { zustatek: 1000, kod: 'K1' }, 'zasilkovna', 'prevod'), /Na poukazu vám zůstane 421 Kč/);
+  assert.doesNotMatch(zavolat('souhrnObjednavkyHtml', [POLOZKY[1]], { zustatek: 100, kod: 'K1' }, 'zasilkovna', 'prevod'), /zůstane/);
+  vm.runInContext('nastaveniDopravy = DOPRAVA_VYCHOZI;', sandbox);
+});
+
+test('potvrzení: objednávka celá zaplacená poukazem je bez QR, zbytek poukazu s platností', () => {
+  const h = zavolat('potvrzeniObjednavkyHtml', { cislo: '261012', celkem: 0, email: 'a@b.cz', platba: 'prevod', poukazZbyva: { zustatek: 421, platnost_do: '2027-12-31T00:00:00.000Z' } });
+  assert.match(h, /celá uhrazená dárkovým poukazem/);
+  assert.doesNotMatch(h, /Variabilní symbol|QR/);
+  assert.match(h, /zůstává <strong>421 Kč<\/strong> \(platí do 31\. 12\. 2027\)/);
+  const castecne = zavolat('potvrzeniObjednavkyHtml', { cislo: '261012', celkem: 100, email: 'a@b.cz', platba: 'prevod', poukazZbyva: { zustatek: 0 } });
+  assert.match(castecne, /Variabilní symbol/);
+  assert.doesNotMatch(castecne, /zůstává/);
 });
 
 test('QR platba: variabilní symbol jen z čísla objednávky, jinak bez VS', () => {

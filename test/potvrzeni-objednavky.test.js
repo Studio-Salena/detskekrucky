@@ -187,6 +187,50 @@ test('B1 test 6 + 7: objednávka dál projde a potvrzení dostane údaje této o
   assert.notEqual(o.jmeno, 'Cizí Profil');
 });
 
+test('poukaz: platí i dopravu, zbytek zůstává na poukazu a jde do potvrzení; dobírka při plné úhradě poukazem neprojde', async () => {
+  const argumenty = [];
+  const { handler, stav } = pripravitObjednavku(argumenty);
+  stav.poukazy.push({ id: 7, kod: 'DK1000', ean: null, zustatek: 1000, stav: 'aktivni', platnost_do: '2027-12-31' });
+  const body = {
+    jmeno: 'Jana Nováková', email: 'jana@example.com', telefon: '777 123 456',
+    ulice: 'Hlavní 1', mesto: 'Hulín', psc: '768 24', doprava: 'zasilkovna', poznamka: '',
+    polozky: [{ produkt_id: 1, velikost: 24, pocet: 1, cena: 1 }], poukaz_kod: 'dk1000'
+  };
+  const dobirka = vytvoritRes();
+  await handler({ ip: '10.0.0.42', body: { ...body, platba: 'dobirka' } }, dobirka);
+  assert.equal(dobirka.statusCode, 400);
+  assert.equal(stav.poukazy[0].zustatek, 1000, 'odmítnutá objednávka poukaz nečerpá');
+
+  const res = vytvoritRes();
+  await handler({ ip: '10.0.0.43', body: { ...body, platba: 'prevod' } }, res);
+  assert.equal(res.statusCode, 200);
+  // 500 Kč boty + 79 Kč Zásilkovna = 579 Kč, vše z poukazu
+  assert.equal(res.body.celkem, 0);
+  assert.equal(stav.poukazy[0].zustatek, 421);
+  assert.equal(stav.poukazy[0].stav, 'aktivni');
+  assert.deepEqual(res.body.poukaz_zbyva, { platnost_do: '2027-12-31', zustatek: 421 });
+  assert.equal(argumenty[0].sleva, 579);
+  assert.deepEqual(argumenty[0].poukaz_zbyva, { platnost_do: '2027-12-31', zustatek: 421 });
+});
+
+test('e-mail: plná úhrada poukazem bez QR a platebních údajů, zbytek poukazu s platností', async () => {
+  const { html } = await vyrenderovatPotvrzeni({ ...OBJEDNAVKA, celkem: 0, sleva: 1369, doprava_cena: 79, poukaz_zbyva: { zustatek: 421, platnost_do: '2027-12-31' } });
+  const t = text(html);
+  assert.ok(t.includes('Objednávka je celá uhrazená dárkovým poukazem'));
+  assert.doesNotMatch(html, /QR platba|Variabilní symbol/);
+  assert.match(t, /Na dárkovém poukazu vám zůstává 421 Kč \(platí do 31\. 12\. 2027\)/);
+  assert.doesNotMatch(t, /od připsání platby, zboží/);
+  const bez = text((await vyrenderovatPotvrzeni()).html);
+  assert.doesNotMatch(bez, /Na dárkovém poukazu vám zůstává/);
+});
+
+test('VOP: pravidla dárkových poukazů (čerpání po částech, i doprava, zůstatek, ne za hotovost)', () => {
+  const vop = textStranky(VOP_HTML);
+  assert.match(vop, /Hodnotu poukazu není nutné vyčerpat najednou/);
+  assert.match(vop, /Poukazem lze uhradit zboží, dopravu i příplatek za dobírku/);
+  assert.match(vop, /Poukaz nelze vyměnit za hotovost/);
+});
+
 // Krok B1.1 - původní obal ani "nepoužité" nesmí být podmínkou odstoupení;
 // zůstává jen zákonná odpovědnost za snížení hodnoty (§ 1833, vzor NV 29/2023 pokyn [6] c).
 const SNIZENI_HODNOTY = 'Odpovídáte pouze za snížení hodnoty zboží, které vzniklo v důsledku nakládání s tímto zbožím jinak, než je nutné k obeznámení se s povahou, vlastnostmi a funkčností zboží.';
