@@ -420,15 +420,6 @@ app.patch('/api/rezervace/:id/stav', vyzadovatAdmina, async (req, res) => {
   } catch(e) { await client.query('ROLLBACK'); res.status(500).json({ chyba: e.message }); }
   finally { client.release(); }
 });
-// Banner
-let banner = {};
-app.get('/api/nastaveni/banner', (req, res) => {
-  res.json(banner);
-});
-app.post('/api/nastaveni/banner', vyzadovatAdmina, (req, res) => {
-  banner = req.body;
-  res.json({ ok: true });
-});
 
 // Požadavky až po doběhnutí startovních migrací (lib/startServeru.js)
 vsePripraveno().then(vcas => {

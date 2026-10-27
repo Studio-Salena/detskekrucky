@@ -3901,15 +3901,6 @@ async function loadNastaveni() {
       document.getElementById('hod-ne').value = data.nedele || '';
     }
   } catch(e) { console.log('Nastavení nenačteno'); }
-  try {
-    const r2 = await adminFetch(API + '/nastaveni/banner');
-    if (r2.ok) {
-      const b = await r2.json();
-      document.getElementById('banner-text').value = b.text || '';
-      document.getElementById('banner-barva').value = b.barva || 'zelena';
-      document.getElementById('banner-aktivni').value = b.aktivni || 'ne';
-    }
-  } catch(e) {}
 }
 
 // NASTAVENÍ - Doprava (ceny a zapnutí způsobů dopravy, stav GLS API)
@@ -4027,25 +4018,6 @@ async function ulozitOteviracku() {
     }
   } catch(e) {
     document.getElementById('nastaveni-msg').textContent = '❌ Chyba při ukládání';
-  }
-}async function ulozitBanner() {
-  const data = {
-    text: document.getElementById('banner-text').value,
-    barva: document.getElementById('banner-barva').value,
-    aktivni: document.getElementById('banner-aktivni').value
-  };
-  try {
-    const r = await adminFetch(API + '/nastaveni/banner', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    if (r.ok) {
-      document.getElementById('banner-msg').textContent = '✅ Banner uložen!';
-      setTimeout(() => document.getElementById('banner-msg').textContent = '', 3000);
-    }
-  } catch(e) {
-    document.getElementById('banner-msg').textContent = '❌ Chyba při ukládání';
   }
 }
 // MESICE_NAZVY je definované u měsíčních uzávěrek prodejny
