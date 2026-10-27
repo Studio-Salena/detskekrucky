@@ -259,6 +259,38 @@ router.post('/pouzit', vyzadovatAdmina, async (req, res) => {
   }
 });
 
+// POST /api/poukazy/:id/pripsat – vrátit částku zpět na poukaz (odstoupení od smlouvy,
+// vrácení zboží zaplaceného poukazem). Zapíše se jako záporné uplatnění, ať v reportu
+// sedí "uplatněno". Víc, než je hodnota poukazu, připsat nejde (vrací se jen utracené).
+router.post('/:id/pripsat', vyzadovatAdmina, async (req, res) => {
+  const castka = Number(req.body && req.body.castka);
+  if (!Number.isInteger(castka) || castka <= 0) return res.status(400).json({ chyba: 'Zadejte kladnou částku v celých korunách.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const nalezeny = await client.query('SELECT * FROM darkove_poukazy WHERE id=$1 FOR UPDATE', [req.params.id]);
+    if (!nalezeny.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ chyba: 'Poukaz nenalezen.' }); }
+    const poukaz = nalezeny.rows[0];
+    if (poukaz.stav === 'zruseny') { await client.query('ROLLBACK'); return res.status(400).json({ chyba: 'Poukaz je zrušený.' }); }
+    const novyZustatek = Number(poukaz.zustatek) + castka;
+    if (novyZustatek > Number(poukaz.hodnota)) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ chyba: `Připsat jde nejvýš ${Number(poukaz.hodnota) - Number(poukaz.zustatek)} Kč (zůstatek nesmí přesáhnout hodnotu poukazu).` });
+    }
+    const upraveny = (await client.query(
+      "UPDATE darkove_poukazy SET zustatek=$1, stav='aktivni' WHERE id=$2 RETURNING *", [novyZustatek, poukaz.id]
+    )).rows[0];
+    await client.query('INSERT INTO poukazy_pouziti (poukaz_id, castka) VALUES ($1,$2)', [poukaz.id, -castka]);
+    await client.query('COMMIT');
+    res.json(upraveny);
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ chyba: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // PATCH /api/poukazy/:id/dar – dodatečně označit už vydaný poukaz jako dar. EAN zůstává
 // (poukaz už může být vytištěný). Pokud k němu vznikl záznam prodeje, smaže se, ať
 // se do tržeb nepočítá ani vydání; útrata se pak vyřadí přes druh 'dar' (pouziti/vse).

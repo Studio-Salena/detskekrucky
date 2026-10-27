@@ -380,6 +380,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
 .pos-okno label{font-size:0.75rem;font-weight:700;color:var(--text-light)}
 .pos-hlavicka-polozek{display:grid;grid-template-columns:2fr 1fr 0.6fr 0.9fr 34px;gap:6px;font-size:0.7rem;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-light);padding:0 2px 4px;border-bottom:1px solid var(--app-line);margin-bottom:6px}
 .pos-polozky{flex:1;min-height:90px;overflow-y:auto;padding-right:4px}
+.pos-polozky:empty::before{content:'Naskenujte EAN – zboží se přidá samo.';display:block;padding:24px 8px;text-align:center;color:var(--text-light);font-size:0.9rem}
 .pos-okno .polozka-grid{grid-template-columns:2fr 1fr 0.6fr 0.9fr 34px;gap:6px;margin-bottom:5px;align-items:center}
 .pos-okno .polozka-row label{display:none}
 .pos-okno .polozka-row .btn-sm{width:34px;padding:0;justify-content:center}
@@ -1443,15 +1444,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         </div>
 
         <div class="pos-hlavicka-polozek" aria-hidden="true"><span>Produkt</span><span>Velikost</span><span>Ks</span><span>Cena Kč</span><span></span></div>
-        <div id="prodejnaPolozky" class="pos-polozky">
-          <div class="polozka-row polozka-grid">
-            <div class="form-group" style="margin:0"><label>Produkt</label><select class="prod-select" onchange="nacistVelikostiProdejna(this)" aria-label="Produkt"><option value="">Vyberte...</option></select></div>
-            <div class="form-group" style="margin:0"><label>Velikost</label><select class="vel-select" aria-label="Velikost"><option value="">-</option></select></div>
-            <div class="form-group" style="margin:0"><label>Ks</label><input type="number" class="pocet-input" value="1" min="1" aria-label="Počet kusů"></div>
-            <div class="form-group" style="margin:0"><label>Cena Kč</label><input type="number" class="cena-input" placeholder="0" aria-label="Cena v Kč"></div>
-            <button class="btn btn-red btn-sm" style="margin-bottom:0;align-self:end" onclick="this.closest('.polozka-row').remove();prepocitatCelkem()" aria-label="Odebrat položku">✕</button>
-          </div>
-        </div>
+        <div id="prodejnaPolozky" class="pos-polozky"></div>
         <button class="btn btn-outline pos-pridat" onclick="pridatPolozku()">+ Přidat položku</button>
       </section>
 
@@ -5138,13 +5131,15 @@ async function ulozitProdejnaProdat() {
     const velSel = row.querySelector('.vel-select');
     const pocet = parseInt(row.querySelector('.pocet-input')?.value)||0;
     const cena = parseInt(row.querySelector('.cena-input')?.value)||0;
+    // Nevyplněný řádek (přidaný omylem) prodej neblokuje - prostě se přeskočí
+    if (!prodSel.value && !cena) return;
     if (!prodSel.value || !velSel.value || pocet<=0) { ok=false; return; }
     const nazev = prodSel.options[prodSel.selectedIndex]?.text || '';
     polozky.push({produkt_id:parseInt(prodSel.value), nazev, velikost:parseInt(velSel.value), pocet, cena});
   });
 
   if (!ok || !polozky.length) {
-    document.getElementById('prodejnaMsg').innerHTML = '<div class="error-msg">Vyplňte všechny položky.</div>';
+    document.getElementById('prodejnaMsg').innerHTML = `<div class="error-msg">${polozky.length || !ok ? 'Vyplňte u všech položek produkt a velikost.' : 'Přidejte zboží – naskenujte EAN nebo klikněte na + Přidat položku.'}</div>`;
     return;
   }
 
@@ -5246,14 +5241,7 @@ async function ulozitProdejnaProdat() {
   document.getElementById('prodejnaHotovostPrijato').value = '';
   prepnoutPoukazPole();
   document.getElementById('prodejnaMsg').innerHTML = '';
-  document.getElementById('prodejnaPolozky').innerHTML = `
-    <div class="polozka-row polozka-grid">
-      <div class="form-group" style="margin:0"><label>Produkt</label><select class="prod-select" onchange="nacistVelikostiProdejna(this)"><option value="">Vyberte...</option></select></div>
-      <div class="form-group" style="margin:0"><label>Velikost</label><select class="vel-select"><option value="">-</option></select></div>
-      <div class="form-group" style="margin:0"><label>Ks</label><input type="number" class="pocet-input" value="1" min="1"></div>
-      <div class="form-group" style="margin:0"><label>Cena Kč</label><input type="number" class="cena-input" placeholder="0"></div>
-      <button class="btn btn-red btn-sm" style="align-self:end" onclick="this.closest('.polozka-row').remove();prepocitatCelkem()">✕</button>
-    </div>`;
+  document.getElementById('prodejnaPolozky').innerHTML = '';
   nacistSkladProProdejna();
   prepocitatCelkem();
 }
@@ -5700,6 +5688,7 @@ async function loadPoukazy() {
           <td>${new Date(p.platnost_do) < new Date() && p.stav==='aktivni' ? '<span class="badge badge-zruseno">⏰ Expirovaný</span>' : (stavPopisek[p.stav]||p.stav)}</td>
           <td style="display:flex;gap:4px">
             <button class="btn btn-outline btn-sm" onclick="zobrazitPoukazDetail(${p.id})">🖨️</button>
+            ${p.stav !== 'zruseny' && Number(p.zustatek) < Number(p.hodnota) ? `<button class="btn btn-outline btn-sm" title="Připsat částku zpět na poukaz (vrácené zboží)" onclick="pripsatNaPoukaz(${p.id})">↩️</button>` : ''}
             ${p.druh !== 'dar' ? `<button class="btn btn-outline btn-sm" title="Označit jako dar (nepočítá se do tržeb)" onclick="oznacitPoukazDar(${p.id}, ${!!p.vydano_prodej_id})">🎁</button>` : ''}
             <button class="btn btn-red btn-sm" onclick="smazatPoukaz(${p.id}, ${!!p.vydano_prodej_id})">🗑️</button>
           </td>
@@ -5708,6 +5697,26 @@ async function loadPoukazy() {
   } catch(e) { document.getElementById('poukazyTable').innerHTML = '<div class="error-msg">Chyba načítání</div>'; }
 
   loadPoukazyZadosti();
+}
+
+// Vrácení peněz na poukaz (zákazník odstoupil od smlouvy a zboží platil poukazem)
+async function pripsatNaPoukaz(id) {
+  const p = vsechnyPoukazy.find(x => x.id === id);
+  if (!p) return;
+  const max = Number(p.hodnota) - Number(p.zustatek);
+  const zadano = prompt(`Kolik Kč připsat zpět na poukaz ${p.kod}?\nZůstatek teď: ${Number(p.zustatek).toLocaleString('cs-CZ')} Kč, připsat jde nejvýš ${max.toLocaleString('cs-CZ')} Kč.`, String(max));
+  if (zadano === null) return;
+  const castka = Number(String(zadano).replace(/\s|Kč/g, '').replace(',', '.'));
+  if (!Number.isInteger(castka) || castka <= 0 || castka > max) { alert(`❌ Zadejte celé číslo od 1 do ${max}.`); return; }
+  try {
+    const res = await adminFetch(API + '/poukazy/' + id + '/pripsat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ castka }) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { alert('❌ ' + (data.chyba || 'Nepodařilo se.')); return; }
+    const poPlatnosti = new Date(data.platnost_do) < new Date();
+    alert(`✅ Připsáno ${castka.toLocaleString('cs-CZ')} Kč. Nový zůstatek: ${Number(data.zustatek).toLocaleString('cs-CZ')} Kč.`
+      + (poPlatnosti ? '\n\n⚠️ Poukaz je už po platnosti – zákazník ho nevyužije. Zvažte vrácení peněz jinak.' : ''));
+  } catch (e) { alert('❌ Chyba spojení'); return; }
+  loadPoukazy();
 }
 
 // Dodatečně přeznačit vydaný poukaz na dar (EAN zůstane, záznam prodeje se smaže)
