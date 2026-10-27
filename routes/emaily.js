@@ -152,9 +152,9 @@ function pravniSekce(nadpis, obsahHtml) {
 
 // Informace, které musí zákazník dostat v textové podobě (§ 1824a, § 1827 odst. 2):
 // prodávající, poučení o odstoupení, vzorový formulář, reklamace, ADR a VOP.
-// Texty jsou převzaté z veřejných stránek webu (jediný zdroj). Záměrně tu
-// NENÍ žádné tvrzení o okamžiku uzavření smlouvy - VOP čl. 2 zatím čeká na
-// právní rozhodnutí; samotné VOP se cituje beze změny v sekci níže.
+// Texty jsou převzaté z veřejných stránek webu (jediný zdroj). Okamžik
+// uzavření smlouvy (doručení tohoto e-mailu) stanoví VOP čl. 2, které se
+// cituje beze změny v sekci níže - tady se záměrně neopakuje.
 function pravniCastPotvrzeni() {
   const odkazyHtml = `
     <ul style="margin:4px 0 0 0;padding-left:20px;font-size:13px">

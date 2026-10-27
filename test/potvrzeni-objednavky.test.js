@@ -230,6 +230,16 @@ test('platba na prodejně: e-mail ukáže způsob platby a žádné pokyny k př
   assert.equal(html.includes('X-VS'), false);
 });
 
+test('VOP čl. 2: jeden okamžik uzavření smlouvy (doručení potvrzení), platba podle zvoleného způsobu', () => {
+  const t = textStranky(fs.readFileSync(path.join(KOREN, 'obchodni-podminky.html'), 'utf8'));
+  assert.match(t, /Odesláním objednávky tlačítkem „Objednávka zavazující k platbě“ činí kupující závazný návrh na uzavření kupní smlouvy\./);
+  assert.match(t, /Kupní smlouva je uzavřena okamžikem, kdy prodávající kupujícímu doručí e-mail s potvrzením objednávky\./);
+  assert.match(t, /převodem předem, na dobírku při převzetí zásilky, nebo na prodejně při osobním odběru/);
+  assert.doesNotMatch(t, /uhrazením kupní ceny|stává závaznou/);
+  // text tlačítka ve VOP odpovídá tlačítku v e-shopu
+  assert.match(fs.readFileSync(path.join(KOREN, 'eshop.html'), 'utf8'), /Objednávka zavazující k platbě/);
+});
+
 test('VOP 10/2026: převod nebo dobírka (40 Kč), GLS, odeslání do 2 pracovních dnů, bez Stripe, Fio banka u terminálu', () => {
   const t = textStranky(fs.readFileSync(path.join(KOREN, 'obchodni-podminky.html'), 'utf8'));
   assert.doesNotMatch(t, /Stripe|na základě výzvy prodávajícího/);
