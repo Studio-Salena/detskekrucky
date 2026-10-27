@@ -1,4 +1,5 @@
-const { odeslat_potvrzeni, odeslat_upozorneni_objednavky, odeslat_email_zmena_stavu } = require('./emaily');
+const { odeslat_potvrzeni, odeslat_upozorneni_objednavky, odeslat_email_zmena_stavu, odeslat_fakturu } = require('./emaily');
+const { fakturaHtml } = require('../lib/faktura');
 
 // Stavy, u kterých se zákazníkovi posílá informační e-mail o změně stavu
 // (viz STAV_OBJEDNAVKY_EMAIL v routes/emaily.js).
@@ -37,6 +38,8 @@ async function initObjednavkySloupce() {
       ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS cislo TEXT UNIQUE;
       ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS faktura_cislo TEXT UNIQUE;
       ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS faktura_datum TIMESTAMPTZ;
+      -- Kdy admin naposledy poslal fakturu zákazníkovi e-mailem (2026-10)
+      ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS faktura_odeslano TIMESTAMPTZ;
       -- Doprava (2026-10): skutečná cena dopravy v době objednávky, dopravce a
       -- výdejní místo (obecně, ne jen GLS - později i Zásilkovna). Údaje místa se
       -- berou z ověřeného seznamu dopravce, ne z prohlížeče. Starší objednávky
@@ -512,23 +515,30 @@ router.get('/', vyzadovatAdmina, async (req, res) => {
   }
 });
 
-// Detail objednavky (jen pro admin)
-router.get('/:id', vyzadovatAdmina, async (req, res) => {
-  try {
-    const objednavka = await pool.query(`
+// Objednávka s položkami (detail v adminu, faktura)
+async function nacistObjednavku(id) {
+  const objednavka = await pool.query(`
       SELECT o.*, ${SQL_UDAJE_OBJEDNAVKY}, dp.kod AS poukaz_kod
       FROM objednavky o
       JOIN zakaznici z ON o.zakaznik_id = z.id
       LEFT JOIN darkove_poukazy dp ON o.poukaz_id = dp.id
       WHERE o.id = $1
-    `, [req.params.id]);
-
-    const polozky = await pool.query(`
+    `, [id]);
+  if (!objednavka.rows.length) return null;
+  const polozky = await pool.query(`
       SELECT op.*, p.nazev, p.znacka
       FROM objednavky_polozky op
       JOIN produkty p ON op.produkt_id = p.id
       WHERE op.objednavka_id = $1
-    `, [req.params.id]);
+    `, [id]);
+  return { ...objednavka.rows[0], polozky: polozky.rows };
+}
+
+// Detail objednavky (jen pro admin)
+router.get('/:id', vyzadovatAdmina, async (req, res) => {
+  try {
+    const o = await nacistObjednavku(req.params.id);
+    if (!o) return res.status(404).json({ chyba: 'Objednávka nenalezena.' });
 
     // Zásilky u dopravců (bez interních dat odpovědi API)
     let zasilky = [];
@@ -538,7 +548,7 @@ router.get('/:id', vyzadovatAdmina, async (req, res) => {
       )).rows;
     } catch (e) { /* tabulka zásilek není povinná pro zobrazení objednávky */ }
 
-    res.json({ ...objednavka.rows[0], polozky: polozky.rows, zasilky, zasilkovna_podani: zasilkovnaApi.stav().podani, gls_podani: gls.stav().podani, gls_prostredi: gls.stav().prostredi });
+    res.json({ ...o, zasilky, zasilkovna_podani: zasilkovnaApi.stav().podani, gls_podani: gls.stav().podani, gls_prostredi: gls.stav().prostredi });
   } catch (err) {
     res.status(500).json({ chyba: err.message });
   }
@@ -678,6 +688,36 @@ router.post('/:id/faktura', vyzadovatAdmina, async (req, res) => {
     res.json(vysledek);
   } catch (err) {
     res.status(500).json({ chyba: err.message });
+  }
+});
+
+// Faktura jako hotová stránka (tisk v adminu) - stejná šablona jako v e-mailu
+router.post('/:id/faktura-html', vyzadovatAdmina, async (req, res) => {
+  try {
+    const o = await nacistObjednavku(req.params.id);
+    if (!o) return res.status(404).json({ chyba: 'Objednávka nenalezena.' });
+    const faktura = await ziskatFakturuCislo(req.params.id);
+    res.json({ ...faktura, html: fakturaHtml(o, faktura) });
+  } catch (err) {
+    res.status(500).json({ chyba: err.message });
+  }
+});
+
+// Poslat fakturu zákazníkovi e-mailem (jen na klik v adminu). Číslo se vystaví
+// stejně jako při tisku; zrušená objednávka fakturu nedostane.
+router.post('/:id/faktura-email', vyzadovatAdmina, async (req, res) => {
+  try {
+    const o = await nacistObjednavku(req.params.id);
+    if (!o) return res.status(404).json({ chyba: 'Objednávka nenalezena.' });
+    if (o.stav === 'zrusena') return res.status(400).json({ chyba: 'Zrušená objednávka fakturu nedostane.' });
+    if (!o.email) return res.status(400).json({ chyba: 'Objednávka nemá e-mail zákazníka.' });
+    const faktura = await ziskatFakturuCislo(req.params.id);
+    await odeslat_fakturu(o, faktura);
+    const odeslano = (await pool.query('UPDATE objednavky SET faktura_odeslano = NOW() WHERE id = $1 RETURNING faktura_odeslano', [req.params.id])).rows[0];
+    res.json({ ok: true, email: o.email, ...faktura, faktura_odeslano: odeslano ? odeslano.faktura_odeslano : null });
+  } catch (err) {
+    console.error('Fakturu se nepodařilo odeslat (objednávka ' + req.params.id + '):', err.message);
+    res.status(502).json({ chyba: 'Fakturu se nepodařilo odeslat: ' + err.message });
   }
 });
 

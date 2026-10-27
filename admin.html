@@ -2004,6 +2004,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     <div id="detailObjContent"></div>
     <div class="modal-footer">
       <button class="btn btn-print no-print" onclick="tiskObjednavky()">🖨️ Tisk</button>
+      <button class="btn btn-outline no-print" id="btnPoslatFakturu" onclick="poslatFakturu()">📧 Poslat fakturu</button>
       <button class="btn btn-outline" onclick="closeModal('modalDetailObj')">Zavřít</button>
     </div>
   </div>
@@ -2525,7 +2526,12 @@ async function detailObjednavky(id) {
       <tr style="background:var(--cream)"><td colspan="4"><strong>CELKEM</strong></td>
         <td><strong style="color:var(--brown);font-size:1.1rem">${data.celkem.toLocaleString('cs-CZ')} Kč</strong></td></tr>
       </tbody></table>
-      ${data.poznamka?`<div class="info-box" style="margin-top:12px">📝 ${escH(data.poznamka)}</div>`:''}`;
+      ${data.poznamka?`<div class="info-box" style="margin-top:12px">📝 ${escH(data.poznamka)}</div>`:''}
+      ${data.faktura_cislo?`<div class="info-box" style="margin-top:12px">🧾 Faktura ${escH(data.faktura_cislo)}${data.faktura_odeslano?` · odeslaná zákazníkovi ${new Date(data.faktura_odeslano).toLocaleString('cs-CZ')}`:' · zatím neodeslaná e-mailem'}</div>`:''}`;
+    const btnF = document.getElementById('btnPoslatFakturu');
+    btnF.hidden = data.stav === 'zrusena' || !data.email;
+    btnF.dataset.email = data.email || '';
+    btnF.dataset.poslano = data.faktura_odeslano ? new Date(data.faktura_odeslano).toLocaleString('cs-CZ') : '';
     openModal('modalDetailObj');
   } catch(e) { alert('Chyba'); }
 }
@@ -2670,93 +2676,37 @@ async function kopirovatIdMista(btn) {
 const PLATBA_LABELY = { dobirka: 'Dobírka', prevod: 'Bankovní převod', na_prodejne: 'Na prodejně při vyzvednutí' };
 
 async function tiskObjednavkyId(id) {
+  // Faktura ze serveru - stejná šablona jako faktura poslaná e-mailem (lib/faktura.js)
+  const printWin = window.open('','_blank');
   try {
-    const [data, faktura] = await Promise.all([
-      adminFetch(API+'/objednavky/'+id).then(r=>r.json()),
-      adminFetch(API+'/objednavky/'+id+'/faktura', {method:'POST'}).then(r=>r.json())
-    ]);
-    const polozky = data.polozky || [];
-    const dopravaLabel = DOPRAVA_LABELY[data.doprava] || data.doprava || '—';
-    const platbaLabel = PLATBA_LABELY[data.platba] || data.platba || '—';
-    // Cena dopravy uložená při objednávce; u starších objednávek (bez doprava_cena)
-    // se dopočítá z celkem (celkem = mezisoucet - sleva + doprava).
-    const mezisoucet = polozky.reduce((s,p) => s + p.cena*p.pocet, 0);
-    const priplatek = Number(data.platba_priplatek) || 0;
-    const dopravaCena = data.doprava_cena != null ? Number(data.doprava_cena) : data.celkem - mezisoucet + Number(data.sleva||0) - priplatek;
-    const datumVystaveni = faktura.faktura_datum ? new Date(faktura.faktura_datum).toLocaleDateString('cs-CZ') : new Date().toLocaleDateString('cs-CZ');
-
-    const printWin = window.open('','_blank');
-    printWin.document.write(`<html><head><title>Faktura ${escH(faktura.faktura_cislo)||''}</title>
-    <style>
-      :root{--primary:#2c3e50;--text:#334155;--light-bg:#f8fafc;--border:#e2e8f0}
-      body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--text);line-height:1.5;margin:0;padding:40px;background:#fff}
-      .order-container{max-width:700px;margin:0 auto;background:#fff;border:1px solid var(--border);border-radius:12px;padding:40px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05)}
-      .order-header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid var(--border);padding-bottom:20px;margin-bottom:24px}
-      .order-header h1{font-size:24px;color:var(--primary);margin:0}
-      .order-header img{height:48px;display:block;margin-bottom:8px}
-      .order-meta{font-size:14px;color:#64748b;text-align:right}
-      .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:30px;background:var(--light-bg);padding:20px;border-radius:8px}
-      .info-block h3{font-size:12px;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;margin:0 0 8px 0}
-      .info-block p{margin:0;font-size:14px}
-      table{width:100%;border-collapse:collapse;margin-bottom:30px}
-      th{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;border-bottom:2px solid var(--border);padding:12px 8px}
-      td{padding:14px 8px;border-bottom:1px solid var(--border);font-size:14px}
-      .text-right{text-align:right}
-      .total-row td{font-weight:bold;font-size:16px;color:var(--primary);border-top:2px solid var(--border);border-bottom:none}
-      .order-footer{font-size:12px;color:#94a3b8;text-align:right;border-top:1px solid var(--border);padding-top:15px}
-    </style>
-    </head><body>
-    <div class="order-container">
-      <div class="order-header">
-        <div>
-          <img src="https://www.detskekrucky.cz/logo.jpg" alt="Dětské krůčky">
-          <h1>Faktura ${escH(faktura.faktura_cislo)||'—'}</h1>
-        </div>
-        <div class="order-meta">
-          Objednávka #${escH(data.cislo || id)}<br>
-          Datum vystavení: ${datumVystaveni}
-        </div>
-      </div>
-      <div class="info-grid">
-        <div class="info-block">
-          <h3>Dodavatel</h3>
-          <p><strong>Monika Škarpichová</strong></p>
-          <p>Holešovská 752, Hulín 768 24</p>
-          <p>IČO: 24354635</p>
-          <p style="margin-top:8px;color:#64748b">Neplátce DPH</p>
-        </div>
-        <div class="info-block">
-          <h3>Odběratel</h3>
-          <p><strong>${escH(data.jmeno)}</strong></p>
-          <p>${escH(data.ulice)}, ${escH(data.mesto)} ${escH(data.psc)}</p>
-          <p style="margin-top:8px;color:#64748b">${escH(data.email)}</p>
-          <p style="color:#64748b">${escH(data.telefon)||'—'}</p>
-        </div>
-      </div>
-      <div class="info-grid" style="margin-top:-10px">
-        <div class="info-block">
-          <h3>Doprava a platba</h3>
-          <p><strong>Doprava:</strong> ${escH(dopravaLabel)}</p>
-          ${data.vydejni_misto_id?`<p><strong>Výdejní místo:</strong> ${escH(data.vydejni_misto_nazev)}, ${escH(vydejniMistoAdresa(data))} (ID ${escH(data.vydejni_misto_id)})</p>`:''}
-          <p><strong>Platba:</strong> ${escH(platbaLabel)}</p>
-        </div>
-      </div>
-      <table>
-        <thead><tr><th>Produkt</th><th class="text-right">Vel.</th><th class="text-right">Ks</th><th class="text-right">Cena</th><th class="text-right">Celkem</th></tr></thead>
-        <tbody>
-          ${polozky.map(p=>`<tr><td>${escH(p.nazev)||'Produkt'}</td><td class="text-right">${escH(p.velikost)}</td><td class="text-right">${escH(p.pocet)}</td><td class="text-right">${p.cena} Kč</td><td class="text-right">${p.cena*p.pocet} Kč</td></tr>`).join('')}
-          ${Number(data.sleva)>0?`<tr><td colspan="4">Poukaz${data.poukaz_kod?' '+escH(data.poukaz_kod):''}</td><td class="text-right">−${Number(data.sleva)} Kč</td></tr>`:''}
-          <tr><td colspan="4">${escH(dopravaLabel)} (doprava)</td><td class="text-right">${dopravaCena===0?'Zdarma':dopravaCena+' Kč'}</td></tr>
-          ${priplatek > 0 ? `<tr><td colspan="4">Dobírka (příplatek)</td><td class="text-right">${priplatek} Kč</td></tr>` : ''}
-          <tr class="total-row"><td colspan="4">CELKEM K ÚHRADĚ</td><td class="text-right">${data.celkem} Kč</td></tr>
-        </tbody>
-      </table>
-      <div class="order-footer">Vytištěno: ${new Date().toLocaleDateString('cs-CZ')}</div>
-    </div>
-    </body></html>`);
+    const res = await adminFetch(API+'/objednavky/'+id+'/faktura-html', {method:'POST'});
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.chyba || 'Chyba');
+    printWin.document.write(data.html);
     printWin.document.close();
+    printWin.focus();
     printWin.print();
-  } catch(e) { alert('Chyba tisku'); }
+  } catch(e) { if (printWin) printWin.close(); alert('Chyba tisku faktury: ' + e.message); }
+}
+
+// Poslat fakturu zákazníkovi e-mailem (číslo faktury se vystaví stejně jako při tisku)
+async function poslatFakturu() {
+  const id = aktivniDetailObjId;
+  if (!id) return;
+  const btn = document.getElementById('btnPoslatFakturu');
+  const znovu = btn.dataset.poslano ? '\n\nFaktura už byla odeslaná ' + btn.dataset.poslano + ' – pošle se znovu.' : '';
+  if (!confirm('Poslat fakturu na ' + (btn.dataset.email || 'e-mail zákazníka') + '?' + znovu)) return;
+  btn.disabled = true;
+  const puvodni = btn.textContent;
+  btn.textContent = 'Odesílám…';
+  try {
+    const res = await adminFetch(API+'/objednavky/'+id+'/faktura-email', {method:'POST'});
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { alert('❌ ' + (data.chyba || 'Fakturu se nepodařilo odeslat.')); return; }
+    alert('✅ Faktura ' + data.faktura_cislo + ' odeslána na ' + data.email + '.');
+    detailObjednavky(id);
+  } catch(e) { alert('❌ Chyba spojení'); }
+  finally { btn.disabled = false; btn.textContent = puvodni; }
 }
 
 // ZÁKAZNÍCI

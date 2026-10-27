@@ -7,6 +7,7 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const ODESILATEL = 'Dětské krůčky <info@detskekrucky.cz>';
 const MAJITELKA_EMAIL = 'info@detskekrucky.cz';
 const { ziskatPravniTexty, ODKAZY } = require('../lib/pravniTexty');
+const { fakturaHtml, fakturaObsahHtml } = require('../lib/faktura');
 
 if (!RESEND_API_KEY) {
   console.error('CHYBA: RESEND_API_KEY neni nastaven v promennych prostredi! Odesilani emailu nebude fungovat.');
@@ -19,7 +20,7 @@ function escH(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-async function odeslatEmail({ to, subject, html }) {
+async function odeslatEmail({ to, subject, html, attachments }) {
   if (!RESEND_API_KEY) throw new Error('RESEND_API_KEY není nastaven na serveru.');
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -31,7 +32,8 @@ async function odeslatEmail({ to, subject, html }) {
       from: ODESILATEL,
       to: Array.isArray(to) ? to : [to],
       subject,
-      html
+      html,
+      ...(attachments ? { attachments } : {})
     })
   });
   if (!res.ok) {
@@ -298,6 +300,26 @@ async function odeslat_potvrzeni(objednavka) {
     html: obalitBrandovanyEmail({ nadpis: `Objednávka #${escH(cisloZobrazit)}`, obsahHtml })
   });
   console.log('Email odoslan na:', objednavka.email);
+}
+
+// Faktura zákazníkovi - posílá se jen na klik v adminu. Faktura je v těle
+// e-mailu a ještě jako příloha (HTML, jde otevřít a vytisknout / uložit do PDF).
+async function odeslat_fakturu(objednavka, faktura) {
+  const cisloObj = objednavka.cislo || objednavka.id;
+  const obsahHtml = `
+    <p style="margin:0 0 4px 0;font-size:15px">Ahoj ${escH(objednavka.jmeno)},</p>
+    <p style="margin:0 0 20px 0;font-size:14px;color:${BARVA_TEXT_TLUMENY}">posíláme fakturu k objednávce #${escH(cisloObj)}. Najdete ji níže a v příloze tohoto e-mailu. Děkujeme za nákup!</p>
+    ${fakturaObsahHtml(objednavka, faktura)}`;
+  await odeslatEmail({
+    to: objednavka.email,
+    subject: `Faktura ${faktura.faktura_cislo} k objednávce #${cisloObj} – Dětské krůčky`,
+    html: obalitBrandovanyEmail({ nadpis: `Faktura ${escH(faktura.faktura_cislo)}`, obsahHtml }),
+    attachments: [{
+      filename: `faktura-${String(faktura.faktura_cislo).replace(/[^A-Za-z0-9-]/g, '')}.html`,
+      content: Buffer.from(fakturaHtml(objednavka, faktura), 'utf8').toString('base64')
+    }]
+  });
+  console.log('Faktura odeslána k objednávce #', cisloObj);
 }
 
 // Upozornění majitelce o nové objednávce z e-shopu
@@ -656,4 +678,4 @@ async function odeslat_test(komu) {
   });
 }
 
-module.exports = { odeslat_potvrzeni, odeslat_upozorneni_objednavky, odeslat_email_zmena_stavu, odeslat_potvrzeni_rezervace, odeslat_potvrzeni_terminu, odeslat_upozorneni_rezervace, odeslat_potvrzeni_vratky, odeslat_upozorneni_vratky, odeslat_potvrzeni_poradna, odeslat_upozorneni_poradna, odeslat_upozorneni_zadost_poukaz, odeslat_poukaz_zakaznikovi, odeslat_overeni_emailu, odeslat_test, escH };
+module.exports = { odeslat_fakturu, odeslat_potvrzeni, odeslat_upozorneni_objednavky, odeslat_email_zmena_stavu, odeslat_potvrzeni_rezervace, odeslat_potvrzeni_terminu, odeslat_upozorneni_rezervace, odeslat_potvrzeni_vratky, odeslat_upozorneni_vratky, odeslat_potvrzeni_poradna, odeslat_upozorneni_poradna, odeslat_upozorneni_zadost_poukaz, odeslat_poukaz_zakaznikovi, odeslat_overeni_emailu, odeslat_test, escH };

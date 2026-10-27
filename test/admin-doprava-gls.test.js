@@ -41,7 +41,9 @@ test('štítky dopravy obsahují GLS; seznam, detail i tisk je používají', ()
   assert.match(ADMIN, /gls_adresa: 'GLS – na adresu', gls_vydejni_misto: 'GLS – výdejní místo'/);
   assert.match(ADMIN, /escH\(DOPRAVA_LABELY\[o\.doprava\]\|\|o\.doprava\)/);
   assert.match(ADMIN, /escH\(DOPRAVA_LABELY\[data\.doprava\]\|\|data\.doprava\)/);
-  assert.match(ADMIN, /data\.doprava_cena != null \? Number\(data\.doprava_cena\)/);
+  // tisk faktury je ze serveru (lib/faktura.js) - cena dopravy uložená u objednávky
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'lib', 'faktura.js'), 'utf8'), /o\.doprava_cena != null \? Number\(o\.doprava_cena\)/);
+  assert.match(ADMIN, /'\/faktura-html'/);
 });
 
 test('Nastavení -> Doprava: ukládá přes PUT /doprava, stav GLS jen jako text, žádné přístupové údaje', () => {
