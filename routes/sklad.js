@@ -5,6 +5,7 @@ const { pripravit } = require('../lib/startServeru');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const { ziskatOptimalizovanouUrl } = require('../lib/cloudinary');
 const { priraditModel } = require('../lib/modely');
+const { migrovatCenyHistorie } = require('../lib/cenyHistorie');
 
 // Produkt patří k modelu podle značky a názvu (lib/modely.js). Chyba přiřazení
 // nesmí shodit uložení produktu - model mu doplní migrace při dalším startu.
@@ -35,6 +36,11 @@ async function initSkladSloupce() {
   }
 }
 pripravit(initSkladSloupce());
+
+// Historie cen pro slevy (nejnižší cena za 30 dní) - viz lib/cenyHistorie.js
+pripravit(migrovatCenyHistorie(pool)
+  .then(() => console.log('Historie cen OK'))
+  .catch(e => console.log('Historie cen chyba:', e.message)));
 
 // Veřejné - frontend (e-shop) nesmí dostat interní skladové údaje jako
 // min_pocet (interní práh pro "nízký stav"), z něj odvozené nizky_stav, ani
@@ -216,13 +222,14 @@ router.get('/nizky-stav', async (req, res) => {
 
 // Přidat nový produkt (volitelně rovnou i s první variantou - velikost/počet/EAN)
 router.post('/produkty', async (req, res) => {
-  const { nazev, znacka, emoji, popis, kategorie, cena, cena_puvodni, typ_nohy, velikost, pocet, ean, delka_mm, sirka_mm, dostupnost, na_eshopu } = req.body;
+  // Přeškrtnutou cenu (cena_puvodni) nastavuje jen sleva - podle historie cen (lib/cenyHistorie.js)
+  const { nazev, znacka, emoji, popis, kategorie, cena, typ_nohy, velikost, pocet, ean, delka_mm, sirka_mm, dostupnost, na_eshopu } = req.body;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const result = await client.query(
-      'INSERT INTO produkty (nazev, znacka, emoji, popis, kategorie, cena, cena_puvodni, typ_nohy, na_eshopu) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',
-      [nazev, znacka, emoji||'', popis||'', kategorie, cena, cena_puvodni||null, typ_nohy || null, na_eshopu !== false]
+      'INSERT INTO produkty (nazev, znacka, emoji, popis, kategorie, cena, typ_nohy, na_eshopu) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
+      [nazev, znacka, emoji||'', popis||'', kategorie, cena, typ_nohy || null, na_eshopu !== false]
     );
     const produkt = result.rows[0];
     if (velikost) {
@@ -251,11 +258,16 @@ router.post('/produkty', async (req, res) => {
 
 // Upravit produkt
 router.patch('/produkty/:id', async (req, res) => {
-  const { nazev, znacka, emoji, cena, cena_puvodni, popis, kategorie, typ_nohy } = req.body;
+  // Přeškrtnutá cena se ručně nezadává (jen přes slevu). Ruční změna ceny slevu ukončí -
+  // stará přeškrtnutá cena by k nové ceně nemusela odpovídat pravidlu 30 dní.
+  const { nazev, znacka, emoji, cena, popis, kategorie, typ_nohy } = req.body;
   try {
     const result = await pool.query(
-      'UPDATE produkty SET nazev=$1, znacka=$2, cena=$3, cena_puvodni=$4, popis=$5, kategorie=$6, emoji=$7, typ_nohy=$8 WHERE id=$9 RETURNING *',
-      [nazev, znacka, cena, cena_puvodni||null, popis||'', kategorie, emoji||'', typ_nohy || null, req.params.id]
+      `UPDATE produkty SET nazev=$1, znacka=$2,
+         cena_puvodni = CASE WHEN cena = $3 THEN cena_puvodni END,
+         cena_pred_slevou = CASE WHEN cena = $3 THEN cena_pred_slevou END,
+         cena=$3, popis=$4, kategorie=$5, emoji=$6, typ_nohy=$7 WHERE id=$8 RETURNING *`,
+      [nazev, znacka, cena, popis||'', kategorie, emoji||'', typ_nohy || null, req.params.id]
     );
     // Přejmenovaný produkt (jiná značka/název) se přesune k odpovídajícímu modelu
     if (result.rows.length) await priraditModelBezpecne(result.rows[0].id);

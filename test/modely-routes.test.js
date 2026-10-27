@@ -241,7 +241,7 @@ function nacistSklad(dotazy, { selhaniModelu = false } = {}) {
       dotazy.push({ sql: s, params });
       if (s.startsWith('ALTER TABLE')) return { rows: [] };
       if (s.startsWith('INSERT INTO produkty')) return { rows: [{ id: 50, nazev: params[0], znacka: params[1] }] };
-      if (s.startsWith('UPDATE produkty SET nazev')) return { rows: [{ id: Number(params[8]), nazev: params[0], znacka: params[1] }] };
+      if (s.startsWith('UPDATE produkty SET nazev')) return { rows: [{ id: Number(params[7]), nazev: params[0], znacka: params[1] }] };
       if (s.startsWith('SELECT id, znacka, nazev, kategorie FROM produkty WHERE id')) {
         if (selhaniModelu) throw new Error('tabulka modely zatím neexistuje');
         return { rows: [{ id: params[0], znacka: 'Froddo', nazev: 'Autumn', kategorie: 'celorocky' }] };

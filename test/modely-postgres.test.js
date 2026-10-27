@@ -7,6 +7,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { migrovatModely } = require('../lib/modely');
+const { migrovatCenyHistorie } = require('../lib/cenyHistorie');
 
 const URL_DB = process.env.TEST_PG_URL;
 const preskocit = URL_DB ? false : 'TEST_PG_URL není nastavená - test proti PostgreSQL se přeskakuje';
@@ -240,6 +241,7 @@ test('Produkty v adminu proti PostgreSQL: seznam s cenou od-do a skrytými, deta
     await pool.query("UPDATE sklad SET ean = '8590000000024' WHERE produkt_id = $1", [p24]);
     await pool.query("INSERT INTO product_images (produkt_id, url, alt, is_primary, position) VALUES ($1, 'https://img.example/b.jpg', 'bok', false, 1), ($1, 'https://img.example/a.jpg', 'předek', true, 0)", [p24]);
     await migrovatModely(pool);
+    await migrovatCenyHistorie(pool);
 
     delete require.cache[routePath];
     require.cache[poolPath] = { id: poolPath, filename: poolPath, loaded: true, exports: pool };
@@ -292,7 +294,8 @@ test('Produkty v adminu proti PostgreSQL: seznam s cenou od-do a skrytými, deta
     await ulozit({ params: { id: String(froddo.id) }, body: { rozmery: [{ produkt_id: p24, velikost: '24', delka_mm: 156, sirka_mm: 64 }] } }, rN2);
     assert.equal(await nadmerek(), 15, 'bez pole nadmerek_mm se nemění');
 
-    // Sleva na celý model: z původní ceny, nová sleva starou nahradí, zrušení ji vrátí
+    // Sleva na celý model: z běžné ceny, nová sleva starou nahradí, zrušení ji vrátí.
+    // Přeškrtnutá cena = nejnižší cena za 30 dní (§ 12a), jinak žádná.
     const sleva = najit('post', '/sleva');
     const ceny = async () => (await pool.query('SELECT cena, cena_puvodni FROM produkty WHERE model_id = $1 ORDER BY id', [froddo.id])).rows
       .map(x => [Number(x.cena), x.cena_puvodni == null ? null : Number(x.cena_puvodni)]);
@@ -304,17 +307,60 @@ test('Produkty v adminu proti PostgreSQL: seznam s cenou od-do a skrytými, deta
     assert.deepEqual(await ceny(), zaklad.map(z => [Math.round(z * 0.8), z]));
     const rS2 = res();
     await sleva({ body: { ids: [froddo.id], typ: 'castka', hodnota: 100 } }, rS2);
-    assert.deepEqual(await ceny(), zaklad.map(z => [z - 100, z]), 'počítá se z původní ceny, nesčítá');
+    // počítá se z běžné ceny, nesčítá; za 30 dní ale už byla cena po 20% slevě (nižší) -> bez přeškrtnutí
+    assert.deepEqual(await ceny(), zaklad.map(z => [z - 100, null]), 'počítá se z běžné ceny, nesčítá');
+    assert.equal(rS2.body.bezPreskrtnuti, 2);
     const rS3 = res();
     await sleva({ body: { ids: [froddo.id], typ: 'castka', hodnota: Math.min(...zaklad) } }, rS3);
     assert.equal(rS3.statusCode, 400, 'sleva nesmí srazit cenu na nulu');
-    assert.deepEqual(await ceny(), zaklad.map(z => [z - 100, z]), 'při chybě beze změny');
+    assert.deepEqual(await ceny(), zaklad.map(z => [z - 100, null]), 'při chybě beze změny');
     const rS4 = res();
     await sleva({ body: { ids: [froddo.id], typ: 'zrusit' } }, rS4);
     assert.deepEqual(await ceny(), zaklad.map(z => [z, null]));
     const rS5 = res();
     await sleva({ body: { ids: [999999], typ: 'zrusit' } }, rS5);
     assert.equal(rS5.statusCode, 404);
+
+    // Pravidlo 30 dní: dosavadní historie je starší než 30 dní, pak zdražení o 200 Kč
+    // a sleva 30 % -> přeškrtne se cena před zdražením (nejnižší za 30 dní), ne ta zdražená
+    const idsFroddo = (await pool.query('SELECT id FROM produkty WHERE model_id = $1 ORDER BY id', [froddo.id])).rows.map(x => x.id);
+    await pool.query("UPDATE ceny_historie SET od = od - INTERVAL '40 days' WHERE produkt_id = ANY($1::int[])", [idsFroddo]);
+    const zaznamu = async () => Number((await pool.query('SELECT COUNT(*) FROM ceny_historie WHERE produkt_id = ANY($1::int[])', [idsFroddo])).rows[0].count);
+    const predZdrazenim = await zaznamu();
+    await pool.query('UPDATE produkty SET cena = cena + 200 WHERE model_id = $1', [froddo.id]);
+    assert.equal(await zaznamu(), predZdrazenim + 2, 'trigger zapsal každou změnu ceny');
+    await pool.query('UPDATE produkty SET nazev = nazev WHERE model_id = $1', [froddo.id]);
+    assert.equal(await zaznamu(), predZdrazenim + 2, 'bez změny ceny se nic nezapíše');
+    const rS6 = res();
+    await sleva({ body: { ids: [froddo.id], typ: 'procenta', hodnota: 30 } }, rS6);
+    assert.equal(rS6.statusCode, 200, JSON.stringify(rS6.body));
+    assert.deepEqual(await ceny(), zaklad.map(z => [Math.round((z + 200) * 0.7), z]), 'přeškrtnutá = cena před zdražením');
+    assert.equal(rS6.body.bezPreskrtnuti, 0);
+    // Ruční úprava produktu (sklad): stejná cena slevu nechá, jiná ji ukončí; přeškrtnutá cena se ručně nastavit nedá
+    const skladPath = require.resolve('../routes/sklad.js');
+    delete require.cache[skladPath];
+    const skladRouter = require(skladPath);
+    const upravit = skladRouter.stack.find(l => l.route && l.route.path === '/produkty/:id' && l.route.methods.patch).route.stack.at(-1).handle;
+    const produkt24 = (await pool.query('SELECT * FROM produkty WHERE id = $1', [p24])).rows[0];
+    const telo = { nazev: produkt24.nazev, znacka: produkt24.znacka, cena: produkt24.cena, popis: produkt24.popis, kategorie: produkt24.kategorie, cena_puvodni: 99999 };
+    const rU1 = res();
+    await upravit({ params: { id: String(p24) }, body: telo }, rU1);
+    assert.equal(rU1.statusCode, 200, JSON.stringify(rU1.body));
+    assert.equal(rU1.body.cena_puvodni, produkt24.cena_puvodni, 'stejná cena: sleva trvá, ruční přeškrtnutá cena se ignoruje');
+    const rU2 = res();
+    await upravit({ params: { id: String(p24) }, body: { ...telo, cena: produkt24.cena + 1 } }, rU2);
+    assert.equal(rU2.body.cena_puvodni, null, 'jiná cena: sleva končí');
+    assert.equal(rU2.body.cena_pred_slevou, null);
+    await pool.query('UPDATE produkty SET cena = $1, cena_puvodni = $2, cena_pred_slevou = $3 WHERE id = $4', [produkt24.cena, produkt24.cena_puvodni, produkt24.cena_pred_slevou, p24]);
+    delete require.cache[skladPath];
+    const rS7 = res();
+    await sleva({ body: { ids: [froddo.id], typ: 'zrusit' } }, rS7);
+    assert.deepEqual(await ceny(), zaklad.map(z => [z + 200, null]), 'zrušení vrátí běžnou (zdraženou) cenu');
+    assert.equal((await pool.query('SELECT COUNT(*) FROM produkty WHERE cena_pred_slevou IS NOT NULL')).rows[0].count, '0');
+    // migrace jde spustit opakovaně a nic nezdvojí
+    const celkem = Number((await pool.query('SELECT COUNT(*) FROM ceny_historie')).rows[0].count);
+    await migrovatCenyHistorie(pool);
+    assert.equal(Number((await pool.query('SELECT COUNT(*) FROM ceny_historie')).rows[0].count), celkem);
     // velikost cizího modelu: nic se neuloží (ani ta platná)
     const beda = r1.body.modely.find(m => m.znacka === 'Beda');
     const r5 = res();

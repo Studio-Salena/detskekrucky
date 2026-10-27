@@ -152,7 +152,7 @@ router.get('/:id', async (req, res) => {
     const model = await pool.query('SELECT * FROM modely WHERE id = $1', [id]);
     if (!model.rows.length) return res.status(404).json({ chyba: 'Model nebyl nalezen.' });
     const varianty = await pool.query(`
-      SELECT p.id AS produkt_id, p.nazev, p.znacka, p.kategorie, p.cena, p.cena_puvodni, p.na_eshopu, p.emoji, p.popis, p.typ_nohy,
+      SELECT p.id AS produkt_id, p.nazev, p.znacka, p.kategorie, p.cena, p.cena_puvodni, p.cena_pred_slevou, p.na_eshopu, p.emoji, p.popis, p.typ_nohy,
              s.velikost, s.ean, s.pocet_kusu, s.min_pocet, s.dostupnost, s.delka_mm, s.sirka_mm,
              CASE WHEN s.pocet_kusu <= s.min_pocet THEN true ELSE false END AS nizky_stav
       FROM produkty p
@@ -359,15 +359,20 @@ router.post('/hromadne', async (req, res) => {
   }
 });
 
-// Sleva na vybrané modely - všechny jejich velikosti najednou. Původní cena se
-// uloží do cena_puvodni (e-shop ji ukáže přeškrtnutou a dá štítek Sleva),
-// zrušení slevy vrátí původní cenu. Cenu v objednávce dál počítá server z produkty.cena.
+// Sleva na vybrané modely - všechny jejich velikosti najednou. Sleva se počítá
+// z běžné ceny (cena_pred_slevou, u bot bez slevy aktuální cena), zrušení slevy
+// ji vrátí. Přeškrtnutá cena pro e-shop (cena_puvodni) = nejnižší cena za 30 dní
+// před slevou (§ 12a zákona o ochraně spotřebitele, lib/cenyHistorie.js); když
+// není vyšší než nová cena, přeškrtnutá cena ani štítek Sleva se neukáže.
+// Cenu v objednávce dál počítá server z produkty.cena.
 // Všechno, nebo nic: když by sleva u některé velikosti srazila cenu na nulu, nezmění se nic.
 router.post('/sleva', async (req, res) => {
   const { chyba, ids, typ, hodnota } = overitSlevu(req.body);
   if (chyba) return res.status(400).json({ chyba });
-  // základ = původní cena (u bot bez slevy aktuální cena)
-  const ZAKLAD = 'GREATEST(cena, COALESCE(cena_puvodni, cena))';
+  // běžná cena (u starých slev bez cena_pred_slevou vyšší z ceny a přeškrtnuté ceny)
+  const ZAKLAD = 'COALESCE(cena_pred_slevou, GREATEST(cena, COALESCE(cena_puvodni, cena)))';
+  // nejnižší cena za 30 dní včetně té dnešní (v SET jsou to hodnoty před změnou)
+  const NEJNIZSI_30 = 'LEAST(cena, COALESCE(nejnizsi_cena_30_dni(id), cena))';
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -379,7 +384,8 @@ router.post('/sleva', async (req, res) => {
     let result;
     if (typ === 'zrusit') {
       result = await client.query(
-        `UPDATE produkty SET cena = ${ZAKLAD}, cena_puvodni = NULL WHERE model_id = ANY($1::int[]) AND cena_puvodni IS NOT NULL`, [ids]);
+        `UPDATE produkty SET cena = ${ZAKLAD}, cena_puvodni = NULL, cena_pred_slevou = NULL
+         WHERE model_id = ANY($1::int[]) AND (cena_puvodni IS NOT NULL OR cena_pred_slevou IS NOT NULL)`, [ids]);
     } else {
       if (typ === 'castka') {
         const nejlevnejsi = await client.query(`SELECT MIN(${ZAKLAD}) AS min FROM produkty WHERE model_id = ANY($1::int[])`, [ids]);
@@ -390,11 +396,15 @@ router.post('/sleva', async (req, res) => {
       }
       const nova = typ === 'procenta' ? `GREATEST(1, ROUND(${ZAKLAD} * (100 - $2) / 100.0))` : `${ZAKLAD} - $2`;
       result = await client.query(
-        `UPDATE produkty SET cena_puvodni = ${ZAKLAD}, cena = ${nova} WHERE model_id = ANY($1::int[])`, [ids, hodnota]);
+        `UPDATE produkty SET cena_pred_slevou = ${ZAKLAD}, cena = ${nova},
+           cena_puvodni = CASE WHEN ${NEJNIZSI_30} > ${nova} THEN ${NEJNIZSI_30} END
+         WHERE model_id = ANY($1::int[]) RETURNING cena_puvodni`, [ids, hodnota]);
     }
     await client.query('UPDATE modely SET upraveno = NOW() WHERE id = ANY($1::int[])', [ids]);
     await client.query('COMMIT');
-    res.json({ zmeneno: result.rowCount });
+    // velikosti, u kterých se přeškrtnutá cena neukáže (za 30 dní byla cena stejná nebo nižší)
+    const bezPreskrtnuti = typ === 'zrusit' ? 0 : result.rows.filter(r => r.cena_puvodni == null).length;
+    res.json({ zmeneno: result.rowCount, bezPreskrtnuti });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('Sleva selhala:', err.message);

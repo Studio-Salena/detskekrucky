@@ -1961,10 +1961,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <div class="form-group"><label>Název *</label><input type="text" id="pNazev" placeholder="Softshellové boty"></div>
       <div class="form-group"><label>Značka *</label><input type="text" id="pZnacka" placeholder="Superfit"></div>
     </div>
-    <div class="form-grid-2">
-      <div class="form-group"><label>Cena (Kč) *</label><input type="number" id="pCena" placeholder="1290"></div>
-      <div class="form-group"><label>Původní cena</label><input type="number" id="pCenaPuvodni" placeholder="volitelné"></div>
-    </div>
+    <div class="form-group"><label>Cena (Kč) *</label><input type="number" id="pCena" placeholder="1290"></div>
     <div class="form-group"><label>Kategorie</label>
       <select id="pKategorie"></select>
     </div>
@@ -2029,10 +2026,8 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <div class="form-group"><label>Název</label><input type="text" id="upNazev"></div>
       <div class="form-group"><label>Značka</label><input type="text" id="upZnacka"></div>
     </div>
-    <div class="form-grid-2">
-      <div class="form-group"><label>Cena (Kč)</label><input type="number" id="upCena"></div>
-      <div class="form-group"><label>Původní cena</label><input type="number" id="upCenaPuvodni"></div>
-    </div>
+    <div class="form-group"><label>Cena (Kč)</label><input type="number" id="upCena">
+      <small style="color:var(--text-light)">Slevu nastavíte v detailu produktu (🏷️ Sleva) – přeškrtnutou cenu admin dopočítá sám. Ruční změna ceny slevu ukončí.</small></div>
     <input type="hidden" id="upEmoji">
     <div class="form-group"><label>Kategorie</label>
       <select id="upKategorie"></select>
@@ -3648,7 +3643,7 @@ function vykreslitDetailModelu() {
         <button type="button" class="btn btn-green btn-sm" onclick="slevaDetailu(false)">Zlevnit</button>
         ${varianty.some(v => v.cena_puvodni) ? '<button type="button" class="btn btn-outline btn-sm" onclick="slevaDetailu(true)">Zrušit slevu</button>' : ''}
       </div>
-      <p class="detail-pozn">Sleva se počítá z původní ceny – nová sleva tu starou nahradí. Platí na e-shopu i na prodejně; e-shop ukáže původní cenu přeškrtnutou se štítkem Sleva.</p>
+      <p class="detail-pozn">Sleva se počítá z běžné ceny – nová sleva tu starou nahradí, zrušení vrátí běžnou cenu. Platí na e-shopu i na prodejně. Jako přeškrtnutou cenu e-shop ukáže nejnižší cenu za posledních 30 dní (tak to chce zákon) – admin ji dopočítá sám. Když za 30 dní byla cena stejná nebo nižší než nová, sleva platí, ale bez přeškrtnuté ceny a štítku Sleva.</p>
       <p class="detail-pozn">Délka a šířka = vnitřní rozměry boty v mm. Podle délky e-shop zákazníkům doporučuje velikost: vnitřní délka je delší než nožička aspoň o nadměrek (${m.nadmerek_mm != null ? `u tohoto modelu ${Number(m.nadmerek_mm)} mm` : `výchozí ${Number(nastaveniKatalogu.rezervaMm ?? 12)} mm`}). EAN, počty kusů, minimální stav a naskladnění jsou ve Skladu (tlačítko „📦 Otevřít ve skladu“).</p>
     </section>`;
 }
@@ -3784,7 +3779,7 @@ function pridatVelikostModelu() {
   if (!detailModeluData) return;
   const m = detailModeluData.model, v = detailModeluData.varianty[0] || {};
   const nastavit = (id, hodnota) => { const el = document.getElementById(id); if (el) el.value = hodnota ?? ''; };
-  nastavit('pNazev', m.nazev); nastavit('pZnacka', m.znacka); nastavit('pCena', v.cena); nastavit('pCenaPuvodni', v.cena_puvodni);
+  nastavit('pNazev', m.nazev); nastavit('pZnacka', m.znacka); nastavit('pCena', v.cena_pred_slevou ?? v.cena);
   nastavit('pPopis', v.popis); nastavit('pTypNohy', v.typ_nohy); nastavit('pVelikost', ''); nastavit('pPocet', ''); nastavit('pEan', '');
   nastavit('pDelkaMm', ''); nastavit('pSirkaMm', ''); nastavit('pDostupnost', 'skladem');
   document.getElementById('pNaEshopu').checked = v.na_eshopu !== false;
@@ -3836,7 +3831,6 @@ async function ulozitProdukt() {
     const velikost = document.getElementById('pVelikost').value;
     const res = await adminFetch(API+'/sklad/produkty',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({nazev,znacka:document.getElementById('pZnacka').value,cena:parseInt(cena),
-      cena_puvodni:document.getElementById('pCenaPuvodni').value||null,
       kategorie:document.getElementById('pKategorie').value,
       emoji:'',
       popis:document.getElementById('pPopis').value,
@@ -3880,7 +3874,6 @@ function upravitProdukt(id) {
   document.getElementById('upNazev').value=p.nazev;
   document.getElementById('upZnacka').value=p.znacka;
   document.getElementById('upCena').value=p.cena;
-  document.getElementById('upCenaPuvodni').value=p.cena_puvodni||'';
   document.getElementById('upEmoji').value=p.emoji||'';
   document.getElementById('upPopis').value=p.popis||'';
   document.getElementById('upTypNohy').value=p.typ_nohy||'';
@@ -4002,7 +3995,7 @@ async function ulozitUpravuProduktu() {
   try {
     const res = await adminFetch(API+'/sklad/produkty/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({nazev:document.getElementById('upNazev').value,znacka:document.getElementById('upZnacka').value,
-      cena:parseInt(document.getElementById('upCena').value),cena_puvodni:document.getElementById('upCenaPuvodni').value||null,emoji:document.getElementById('upEmoji').value||'',popis:document.getElementById('upPopis').value||'',kategorie:document.getElementById('upKategorie').value,typ_nohy:document.getElementById('upTypNohy').value||null})});
+      cena:parseInt(document.getElementById('upCena').value),emoji:document.getElementById('upEmoji').value||'',popis:document.getElementById('upPopis').value||'',kategorie:document.getElementById('upKategorie').value,typ_nohy:document.getElementById('upTypNohy').value||null})});
     if (res.ok) { document.getElementById('upravitMsg').innerHTML='<div class="success-msg">✅ Uloženo!</div>'; setTimeout(()=>{closeModal('modalUpravitProdukt');loadProdukty();},1500); }
     else { document.getElementById('upravitMsg').innerHTML='<div class="error-msg">Chyba serveru</div>'; }
   } catch(e) { document.getElementById('upravitMsg').innerHTML='<div class="error-msg">Chyba</div>'; }
@@ -7270,6 +7263,7 @@ async function poslatSlevu(ids, zrusit, typ, hodnotaText) {
     const res = await adminFetch(API + '/modely/sleva', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(telo) });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) { alert('❌ ' + (data.chyba || 'Slevu se nepodařilo uložit.')); return false; }
+    if (data.bezPreskrtnuti > 0) alert(`Sleva je uložená. U ${data.bezPreskrtnuti} ${data.bezPreskrtnuti === 1 ? 'velikosti' : 'velikostí'} ale e-shop neukáže přeškrtnutou cenu ani štítek Sleva: za posledních 30 dní tam byla cena stejná nebo nižší než ta nová, takže to zákon nedovoluje oznámit jako slevu.`);
     return true;
   } catch (e) {
     alert('❌ Slevu se nepodařilo uložit.');
