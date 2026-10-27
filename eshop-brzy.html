@@ -53,13 +53,33 @@
   .btn:hover { transform:translateY(-2px); }
   .btn-primary { background:linear-gradient(135deg,#7A816C,#565c4c); color:#fff; box-shadow:0 4px 14px rgba(122,129,108,0.4); }
   .btn-outline { background:none; border:2px solid #AE6965; color:#8a4a46; }
+  .odpocet { display:flex; justify-content:center; gap:10px; margin:6px 0 22px; }
+  .odpocet[hidden], .spusteno[hidden] { display:none; }
+  .odpocet div { background:#fff; border:2px solid #d4c4b0; border-radius:14px; min-width:72px; padding:10px 6px 8px; }
+  .odpocet strong { display:block; font-size:1.9rem; font-weight:800; color:#8a4a46; line-height:1.1; font-variant-numeric:tabular-nums; }
+  .odpocet span { display:block; font-size:0.78rem; font-weight:700; color:#7A816C; text-transform:uppercase; letter-spacing:0.04em; margin-top:2px; }
+  .spusteno { font-weight:800; color:#8a4a46; font-size:1.1rem; margin:6px 0 18px; }
+  @media (max-width:400px) {
+    .odpocet { gap:6px; }
+    .odpocet div { min-width:0; flex:1; padding:8px 2px 6px; }
+    .odpocet strong { font-size:1.5rem; }
+    .odpocet span { font-size:0.62rem; letter-spacing:0; }
+  }
 </style>
 </head>
 <body>
   <div class="card">
     <img src="logo.jpg" alt="Dětské krůčky" class="logo">
     <span class="emoji">🦔🛒</span>
-    <h1>E-shop spouštíme už 1. 11. 2026!</h1>
+    <h1>E-shop spouštíme už 1.&nbsp;11.&nbsp;2026!</h1>
+    <!-- Odpočet do spuštění (půlnoc 1. 11. 2026 českého času), bez JavaScriptu se neukáže -->
+    <div class="odpocet" id="odpocet" role="timer" aria-label="Odpočet do spuštění e-shopu" hidden>
+      <div><strong id="odpDny">0</strong><span id="odpDnyText">dní</span></div>
+      <div><strong id="odpHodiny">0</strong><span id="odpHodinyText">hodin</span></div>
+      <div><strong id="odpMinuty">0</strong><span id="odpMinutyText">minut</span></div>
+      <div><strong id="odpSekundy">0</strong><span id="odpSekundyText">sekund</span></div>
+    </div>
+    <p class="spusteno" id="spusteno" hidden>🎉 Je to tady – e-shop právě spouštíme!</p>
     <p>Právě finišujeme nový e-shop s barefoot obuví pro děti.</p>
     <p>Do té doby se stavte u nás na prodejně v Hulíně, nebo si nezávazně rezervujte termín na vyzkoušení.</p>
     <div class="buttons">
@@ -67,5 +87,42 @@
       <a href="index.html#rezervace" class="btn btn-outline">📅 Rezervovat termín</a>
     </div>
   </div>
+<script>
+// 1. 11. je už zimní čas (SEČ, UTC+1)
+const SPUSTENI = Date.parse('2026-11-01T00:00:00+01:00');
+
+// 1 den, 2–4 dny, 0 a 5+ dní
+function tvar(n, tvary) {
+  return n === 1 ? tvary[0] : n >= 2 && n <= 4 ? tvary[1] : tvary[2];
+}
+
+function zbyva(ted) {
+  const s = Math.max(0, Math.floor((SPUSTENI - ted) / 1000));
+  return { dny: Math.floor(s / 86400), hodiny: Math.floor(s / 3600) % 24, minuty: Math.floor(s / 60) % 60, sekundy: s % 60 };
+}
+
+function aktualizovatOdpocet() {
+  const z = zbyva(Date.now());
+  const konec = !z.dny && !z.hodiny && !z.minuty && !z.sekundy;
+  document.getElementById('odpocet').hidden = konec;
+  document.getElementById('spusteno').hidden = !konec;
+  if (konec) return false;
+  const pole = [
+    ['odpDny', z.dny, ['den', 'dny', 'dní']],
+    ['odpHodiny', z.hodiny, ['hodina', 'hodiny', 'hodin']],
+    ['odpMinuty', z.minuty, ['minuta', 'minuty', 'minut']],
+    ['odpSekundy', z.sekundy, ['sekunda', 'sekundy', 'sekund']]
+  ];
+  pole.forEach(([id, n, tvary]) => {
+    document.getElementById(id).textContent = n;
+    document.getElementById(id + 'Text').textContent = tvar(n, tvary);
+  });
+  return true;
+}
+
+if (aktualizovatOdpocet()) {
+  const casovac = setInterval(() => { if (!aktualizovatOdpocet()) clearInterval(casovac); }, 1000);
+}
+</script>
 </body>
 </html>
