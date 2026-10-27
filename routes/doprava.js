@@ -51,6 +51,17 @@ router.post('/gls-test', vyzadovatAdmina, async (req, res) => {
   }
 });
 
+// Admin: zkouška spojení se Zásilkovnou (jen kontrola zkušební zásilky, nic nezakládá)
+router.post('/zasilkovna-test', vyzadovatAdmina, async (req, res) => {
+  try {
+    await zasilkovnaApi.overitSpojeni();
+    res.json({ ok: true, zprava: 'Spojení se Zásilkovnou funguje – API heslo platí a Zásilkovna údaje zásilky přijímá.' });
+  } catch (e) {
+    console.error('Zkouška spojení se Zásilkovnou selhala:', e.message);
+    res.status(502).json({ ok: false, chyba: e.message });
+  }
+});
+
 router.put('/', vyzadovatAdmina, async (req, res) => {
   const { chyba, hodnoty } = overitNastaveniDopravy(req.body);
   if (chyba) return res.status(400).json({ chyba });

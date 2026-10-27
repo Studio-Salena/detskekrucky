@@ -69,3 +69,27 @@ test('štítek PDF: base64 z odpovědi, jen platný formát a číslo zásilky',
 test('sledování zásilky: odkaz na tracking Zásilkovny', () => {
   assert.equal(api.sledovaniUrl('Z1234567890'), 'https://tracking.packeta.com/cs/?id=Z1234567890');
 });
+
+test('zkouška spojení: packetAttributesValid se zkušební zásilkou, nic se nezakládá', async () => {
+  let telo;
+  const fetchFn = async (url, o) => { telo = o.body; return { text: async () => '<response><status>ok</status><result></result></response>' }; };
+  assert.deepEqual(await api.overitSpojeni({ env: { ...ENV, ZASILKOVNA_ODESILATEL: 'detskekrucky' }, fetchFn }), { ok: true });
+  assert.match(telo, /^<packetAttributesValid><apiPassword>a{16}b{16}<\/apiPassword><packetAttributes>/);
+  assert.match(telo, /<number>TESTSPOJENI<\/number>.*<addressId>1<\/addressId>.*<eshop>detskekrucky<\/eshop><\/packetAttributes><\/packetAttributesValid>$/);
+  assert.doesNotMatch(telo, /createPacket/);
+});
+
+test('zkouška spojení: vytknuté jen smyšlené výdejní místo = heslo i údaje v pořádku', async () => {
+  const jenMisto = '<response><status>fault</status><fault>PacketAttributesFault</fault><string>Invalid packet attributes.</string><detail><attributes><fault><name>addressId</name><fault>Unknown pickup point.</fault></fault></attributes></detail></response>';
+  assert.deepEqual(await api.overitSpojeni({ env: ENV, fetchFn: odpoved(jenMisto) }), { ok: true });
+  // jiný vytknutý údaj (např. odesilatel) je skutečná chyba
+  const odesilatel = '<response><status>fault</status><fault>PacketAttributesFault</fault><string>Invalid packet attributes.</string><detail><attributes><fault><name>addressId</name><fault>Unknown pickup point.</fault></fault><fault><name>eshop</name><fault>Sender label is required.</fault></fault></attributes></detail></response>';
+  await assert.rejects(api.overitSpojeni({ env: ENV, fetchFn: odpoved(odesilatel) }), /eshop: Sender label is required/);
+});
+
+test('zkouška spojení: špatné heslo a chybějící heslo srozumitelně, bez hesla v hlášce', async () => {
+  const spatne = '<response><status>fault</status><fault>IncorrectApiPasswordFault</fault><string>Incorrect API password.</string></response>';
+  await assert.rejects(api.overitSpojeni({ env: ENV, fetchFn: odpoved(spatne) }), e => /nepřijala API heslo/.test(e.message) && !e.message.includes(HESLO));
+  await assert.rejects(api.overitSpojeni({ env: {}, fetchFn: odpoved('') }), /není zapnuté/);
+  await assert.rejects(api.overitSpojeni({ env: ENV, fetchFn: async () => { throw new Error('ECONNRESET ' + HESLO); } }), e => /neodpovídá/.test(e.message) && !e.message.includes(HESLO));
+});

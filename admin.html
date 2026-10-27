@@ -1156,6 +1156,10 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
             <tr><td style="padding:8px;font-weight:600">Příplatek za dobírku (Kč)<br><small style="font-weight:400;color:var(--text-light)">Vyplněno = zákazník může platit na dobírku (ne u osobního odběru). Prázdné = dobírka se nenabízí.</small></td><td><input id="doprava-dobirka" class="form-input" type="number" min="0" step="1" placeholder="nevyplněno"></td></tr>
           </table>
           <div id="zasilkovnaStav" class="info-box" style="margin-top:12px;font-size:0.85rem"></div>
+          <div class="zasilkovna-test" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px">
+            <button type="button" class="btn btn-outline btn-sm" id="zasilkovnaTestBtn" onclick="vyzkousetZasilkovnu()" hidden>🔌 Vyzkoušet spojení se Zásilkovnou</button>
+            <span id="zasilkovnaTestMsg" role="status" style="font-size:0.85rem;font-weight:600"></span>
+          </div>
           <div id="glsApiStav" class="info-box" style="margin-top:12px;font-size:0.85rem"></div>
           <div class="gls-test" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px">
             <button type="button" class="btn btn-outline btn-sm" id="glsTestBtn" onclick="vyzkousetGls()" hidden>🔌 Vyzkoušet spojení s GLS</button>
@@ -3939,6 +3943,8 @@ async function loadDopravu() {
       : g.podani
         ? 'GLS API: přístupové údaje jsou na serveru nastavené – ' + prostredi + '. Zásilku a štítek založíte v detailu objednávky tlačítkem „Podat do GLS“.'
         : 'GLS API: přístupové údaje jsou na serveru nastavené' + (prostredi ? ' – ' + prostredi : '') + '. ' + (g.problem || '') + ' Zásilky GLS se zatím zakládají ručně v MyGLS.';
+    document.getElementById('zasilkovnaTestBtn').hidden = !za.podani;
+    document.getElementById('zasilkovnaTestMsg').textContent = '';
     document.getElementById('glsTestBtn').hidden = !g.spojeni;
     document.getElementById('glsTestMsg').textContent = '';
   } catch(e) {
@@ -3960,6 +3966,23 @@ async function vyzkousetGls() {
     const r = await adminFetch(API + '/doprava/gls-test', { method: 'POST' });
     const d = await r.json().catch(() => ({}));
     msg.textContent = r.ok ? '✅ ' + d.zprava : '❌ ' + (d.chyba || 'Spojení s GLS se nepodařilo.');
+    msg.style.color = r.ok ? 'var(--sage-tmava)' : 'var(--red)';
+  } catch (e) {
+    msg.textContent = '❌ Chyba spojení se serverem.'; msg.style.color = 'var(--red)';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// Zkouška spojení se Zásilkovnou - server zásilku jen nechá zkontrolovat (nic nezakládá)
+async function vyzkousetZasilkovnu() {
+  const btn = document.getElementById('zasilkovnaTestBtn');
+  const msg = document.getElementById('zasilkovnaTestMsg');
+  btn.disabled = true; msg.textContent = 'Zkouším spojení se Zásilkovnou…'; msg.style.color = '';
+  try {
+    const r = await adminFetch(API + '/doprava/zasilkovna-test', { method: 'POST' });
+    const d = await r.json().catch(() => ({}));
+    msg.textContent = r.ok ? '✅ ' + d.zprava : '❌ ' + (d.chyba || 'Spojení se Zásilkovnou se nepodařilo.');
     msg.style.color = r.ok ? 'var(--sage-tmava)' : 'var(--red)';
   } catch (e) {
     msg.textContent = '❌ Chyba spojení se serverem.'; msg.style.color = 'var(--red)';
