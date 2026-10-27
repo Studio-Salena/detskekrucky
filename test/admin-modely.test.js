@@ -72,7 +72,7 @@ test('admin Sortiment: v menu jen Produkty a Kategorie; Modely jsou záložka Hr
   }
   // staré odkazy showPage('modely') vedou do Hromadné úpravy, Produkty načtou modely
   assert.match(ADMIN_HTML, /if \(name === 'modely'\) \{ name = 'produkty'; kotva = kotva \|\| 'hromadna'; \}/);
-  assert.match(ADMIN_HTML, /async function loadProdukty\(\) \{\s*await loadModely\(\);/);
+  assert.match(ADMIN_HTML, /async function loadProdukty\(\) \{\s*await Promise\.all\(\[loadModely\(\), loadVyrobci\(\)\]\);/);
 });
 
 test('admin: řádek modelu ukazuje vybrané vlastnosti, velikosti a stav', () => {

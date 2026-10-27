@@ -425,6 +425,8 @@ footer.paticka .footer-copy{text-align:center;border-top:1px solid rgba(255,255,
 .detail-nozicka dd{margin:0;font-weight:700}
 .detail-poradit{margin-top:8px;padding:8px 16px;border-radius:20px;border:2px solid var(--brown);background:#fff;color:var(--brown);font-weight:700;font-family:'Nunito',sans-serif;cursor:pointer}
 .detail-sekce{border-top:1px solid var(--tan-light);margin-top:24px;padding-top:20px}
+.detail-vyrobce p{margin:0 0 4px;font-size:0.88rem;color:var(--text-light);line-height:1.5;white-space:pre-line}
+.detail-vyrobce strong{color:var(--text)}
 .detail-proc{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px}
 .detail-proc li::before{content:"✓";color:var(--sage);font-weight:700;margin-right:8px}
 .detail-parametry{border-collapse:collapse;width:100%;max-width:520px;font-size:0.9rem}
@@ -1276,6 +1278,7 @@ body:has(.katalog-filtry.open) #back-to-top{display:none}
     <section class="detail-sekce" id="detailProcSekce" hidden><h3>Proč jsme ji vybrali</h3><ul class="detail-proc" id="detailProc"></ul></section>
     <section class="detail-sekce"><h3>Popis</h3><div class="modal-popis" id="detailPopis"></div></section>
     <section class="detail-sekce" id="detailParametrySekce" hidden><h3>Parametry</h3><table class="detail-parametry" id="detailParametry"></table></section>
+    <section class="detail-sekce" id="detailVyrobceSekce" hidden><h3>Výrobce a bezpečnost</h3><div class="detail-vyrobce" id="detailVyrobce"></div></section>
     <section class="detail-sekce" id="detailPodobneSekce" hidden><h3>Podobné boty</h3><div class="detail-podobne" id="detailPodobne"></div></section>
     <!-- Přilepená lišta s Přidat do košíku (počítač): ukáže se, když hlavní tlačítko odjede z obrazovky -->
     <div class="detail-lista" id="detailLista" hidden>
@@ -1568,6 +1571,7 @@ let produktyNacteny = false;
 const ZAKLADNI_TITULEK = document.title;
 let kosik = JSON.parse(localStorage.getItem('kosik') || '[]');
 let aktivniProdukt = null;
+let vyrobciZnacek = new Map();
 let vybranaVelikost = null;
 
 // Nabízené způsoby dopravy a ceny. Výchozí = dosavadní ceny; skutečné se načtou
@@ -2450,6 +2454,21 @@ function jeVychoziStav(stav) {
 const KATALOG_BEZ_BOT = ['doplnky', 'pece-o-obuv', 'detske-batuzky'];
 function jeBota(p) { return !KATALOG_BEZ_BOT.includes(p.kategorie); }
 
+// Výrobce podle značky (GPSR) - klíč stejně jako klicZnacky v lib/vyrobci.js
+function klicZnacky(znacka) {
+  return String(znacka || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+function vyrobceDetailHtml(v) {
+  const radek = (nazev, text) => text ? `<p><strong>${nazev}:</strong> ${escHtml(text)}</p>` : '';
+  return radek('Výrobce', v.vyrobce) + radek('Adresa', v.adresa) + radek('Kontakt', v.kontakt)
+    + radek('Odpovědná osoba v EU', v.osoba_eu) + radek('Upozornění', v.upozorneni);
+}
+function vykreslitVyrobceDetailu(p) {
+  const v = vyrobciZnacek.get(klicZnacky(p && p.znacka));
+  document.getElementById('detailVyrobceSekce').hidden = !v;
+  document.getElementById('detailVyrobce').innerHTML = v ? vyrobceDetailHtml(v) : '';
+}
+
 // Capáčky mají místo velikosti věk v měsících (6 = 0–6 měsíců, 12 = 6–12 ...),
 // proto nejsou ve filtru Velikost ani ve věkových skupinách mezi botami
 const KATALOG_MESICE = ['capacky'];
@@ -2785,6 +2804,7 @@ function openDetail(klic, { zHistorie = false } = {}) {
   document.getElementById('detailBrand').textContent = p.znacka;
   document.getElementById('detailName').textContent = p.nazev;
   document.getElementById('detailPopis').textContent = p.popis || 'Kvalitní barefoot obuv pro zdravý vývoj dětských nožiček.';
+  vykreslitVyrobceDetailu(p);
   document.getElementById('detailPrice').textContent = (p.cenaOd ? 'od ' : '') + p.cena + ' Kč';
   const skladem = p.velikosti.some(jeSkladem);
   const skladEl = document.getElementById('detailSklad');
@@ -3906,6 +3926,12 @@ fetch(API + '/nastaveni/texty').then(r => r.ok ? r.json() : null).then(data => {
     pruh.hidden = !data.eshopPruh.trim();
   }
   if (Array.isArray(data.mereniKroky)) mereniKroky = data.mereniKroky;
+}).catch(() => {});
+// Výrobci podle značek (GPSR) pro detail boty; dorazí-li až po otevření detailu, doplní se
+fetch(API + '/vyrobci').then(r => r.ok ? r.json() : null).then(data => {
+  if (!Array.isArray(data)) return;
+  vyrobciZnacek = new Map(data.filter(v => v && v.klic).map(v => [v.klic, v]));
+  if (aktivniProdukt && document.getElementById('modalDetail').classList.contains('open')) vykreslitVyrobceDetailu(aktivniProdukt);
 }).catch(() => {});
 // Věkové skupiny nastavené v adminu (Modely bot -> Věk a pohlaví)
 fetch(API + '/modely/nastaveni-katalogu').then(r => r.ok ? r.json() : null).then(data => {

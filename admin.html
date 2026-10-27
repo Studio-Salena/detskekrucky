@@ -756,6 +756,16 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <button type="button" role="tab" data-cil="seznam" onclick="prepnoutPohled('produkty','seznam')">Seznam</button>
         <button type="button" role="tab" data-cil="hromadna" onclick="prepnoutPohled('produkty','hromadna')">Hromadná úprava</button>
         <button type="button" role="tab" data-cil="chybi" onclick="prepnoutPohled('produkty','chybi')">Co chybí</button>
+        <button type="button" role="tab" data-cil="vyrobci" onclick="prepnoutPohled('produkty','vyrobci')">Výrobci</button>
+      </div>
+
+      <div data-pohled="vyrobci">
+        <p style="color:var(--text-light);font-size:0.85rem;margin:0 0 12px">Údaje o výrobci vyžaduje u zboží prodávaného online nařízení o bezpečnosti výrobků (GPSR). Zadávají se jednou pro značku a e-shop je ukáže v detailu každé boty té značky. Najdete je obvykle na krabici, na štítku nebo na webu značky. Povinné jsou výrobce, adresa a e-mail nebo web. Odpovědnou osobu v EU vyplňte, jen když výrobce sídlí mimo EU.</p>
+        <div id="vyrobciMsg" role="status"></div>
+        <div class="table-wrap">
+          <div class="table-header"><h3 id="vyrobciPocet">Značky</h3></div>
+          <div id="vyrobciTable"><div class="loading">Načítám...</div></div>
+        </div>
       </div>
 
       <div data-pohled="chybi">
@@ -3293,8 +3303,72 @@ let posledniProdukty = [];
 // údaje, vlastnosti, fotky a velikosti na jednom místě, Hromadná úprava = dřívější
 // "Modely bot". Data: /api/modely (seznam) a /api/modely/:id (detail).
 async function loadProdukty() {
-  await loadModely();
+  await Promise.all([loadModely(), loadVyrobci()]);
   obnovitDetailModelu();
+}
+
+// ===== VÝROBCI (GPSR) =====
+const VYROBCI_POLE = [
+  { kod: 'vyrobce', nazev: 'Výrobce *', placeholder: 'např. Froddo d.o.o.', max: 150 },
+  { kod: 'adresa', nazev: 'Adresa *', placeholder: 'ulice, PSČ, město, stát', max: 300 },
+  { kod: 'kontakt', nazev: 'E-mail nebo web *', placeholder: 'info@… nebo www…', max: 200 },
+  { kod: 'osoba_eu', nazev: 'Odpovědná osoba v EU', placeholder: 'jen u výrobce mimo EU', max: 400 },
+  { kod: 'upozorneni', nazev: 'Upozornění', placeholder: 'nepovinné', max: 1000 }
+];
+let vyrobciData = null;
+async function loadVyrobci() {
+  const el = document.getElementById('vyrobciTable');
+  try {
+    const r = await adminFetch(API + '/vyrobci/admin');
+    if (!r.ok) throw new Error('načtení selhalo');
+    vyrobciData = await r.json();
+    vykreslitVyrobce();
+  } catch (e) {
+    el.innerHTML = '<div class="error-msg">Značky se nepodařilo načíst. Zkuste to znovu tlačítkem ↻.</div>';
+  }
+}
+function vykreslitVyrobce() {
+  const el = document.getElementById('vyrobciTable');
+  if (!el || !vyrobciData) return;
+  const bez = vyrobciData.filter(v => !v.vyrobce).length;
+  document.getElementById('vyrobciPocet').textContent = `Značky (${vyrobciData.length})` + (bez ? ` – bez výrobce: ${bez}` : ' – všechny vyplněné ✓');
+  if (!vyrobciData.length) { el.innerHTML = '<div class="empty">Zatím žádné značky</div>'; return; }
+  el.innerHTML = `<div style="display:flex;flex-direction:column;gap:12px;padding:0 18px 18px">${vyrobciData.map(v => `
+    <div class="vyrobce-znacka" data-klic="${escAttr(v.klic)}" style="border:1px solid var(--tan-light);border-radius:10px;padding:12px 14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px">
+        <strong>${escH(v.znacka)} <span style="font-weight:400;color:var(--text-light);font-size:0.8rem">${pocetSlovy(v.pocet_modelu || 0, ['model', 'modely', 'modelů'])}</span></strong>
+        ${v.vyrobce ? '<span class="badge badge-ok">✓ vyplněno</span>' : '<span class="badge badge-nizky">chybí výrobce</span>'}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px">
+        ${VYROBCI_POLE.map(p => `<label style="font-size:0.78rem;font-weight:700;color:var(--text-light)">${p.nazev}
+          <input class="form-input" data-pole="${p.kod}" maxlength="${p.max}" placeholder="${escAttr(p.placeholder)}" value="${escAttr(v[p.kod] || '')}" style="width:100%;font-weight:400"></label>`).join('')}
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:8px">
+        <button type="button" class="btn btn-primary btn-sm" onclick="ulozitVyrobce(this)">💾 Uložit</button>
+        <span data-hlaska style="font-size:0.85rem;font-weight:600"></span>
+      </div>
+    </div>`).join('')}</div>`;
+}
+async function ulozitVyrobce(btn) {
+  const box = btn.closest('.vyrobce-znacka');
+  const v = vyrobciData.find(x => x.klic === box.dataset.klic);
+  const hlaska = box.querySelector('[data-hlaska]');
+  const telo = { znacka: v.znacka };
+  box.querySelectorAll('[data-pole]').forEach(i => { telo[i.dataset.pole] = i.value; });
+  btn.disabled = true;
+  try {
+    const r = await adminFetch(API + '/vyrobci', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(telo) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { hlaska.textContent = '❌ ' + (d.chyba || 'Uložení se nepovedlo.'); hlaska.style.color = 'var(--red)'; return; }
+    VYROBCI_POLE.forEach(p => { v[p.kod] = d.smazano ? null : d[p.kod]; });
+    vykreslitVyrobce();
+    const nova = document.querySelector(`.vyrobce-znacka[data-klic="${CSS.escape(v.klic)}"] [data-hlaska]`);
+    if (nova) { nova.textContent = d.smazano ? '✅ Údaje smazány' : '✅ Uloženo'; nova.style.color = 'var(--sage-tmava)'; }
+  } catch (e) {
+    hlaska.textContent = '❌ Chyba spojení se serverem.'; hlaska.style.color = 'var(--red)';
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 let produktyEshopFiltr = 'vse';
