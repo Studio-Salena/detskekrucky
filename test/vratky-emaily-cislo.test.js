@@ -76,7 +76,7 @@ test('B3.3: potvrzení obsahuje serverové jméno, číslo, čas přijetí (Euro
   assert.match(html, /#261012/);
   const ocekavanyCas = ZADOST_B33.vytvoreno.toLocaleString('cs-CZ', FORMAT_PRAHA);
   assert.match(ocekavanyCas, /5\. ?10\. ?2026.*12:00/); // formát formatovatDatumCasObjednavky, pražský letní čas
-  assert.ok(html.includes(`Datum a čas přijetí:</strong> ${ocekavanyCas}`), 'chybí datum a čas přijetí');
+  assert.ok(html.includes(`Datum a čas odeslání odstoupení:</strong> ${ocekavanyCas}`), 'chybí datum a čas odeslání');
   assert.ok(html.includes(PROHLASENI), 'text prohlášení musí být přesně uložený text');
   assert.match(html, /white-space:pre-line/);
 });
@@ -84,7 +84,7 @@ test('B3.3: potvrzení obsahuje serverové jméno, číslo, čas přijetí (Euro
 test('B3.3: zimní čas přijetí se převede na Europe/Prague (UTC+1)', async () => {
   const vytvoreno = new Date('2026-01-15T10:00:00Z');
   const { html } = await odeslat('odeslat_potvrzeni_vratky', { ...ZADOST_B33, vytvoreno });
-  assert.match(html, /Datum a čas přijetí:<\/strong> 15\. ?1\. ?2026 11:00/);
+  assert.match(html, /Datum a čas odeslání odstoupení:<\/strong> 15\. ?1\. ?2026 11:00/);
 });
 
 test('B3.3: jméno i text prohlášení jsou v potvrzení HTML-escapované', async () => {
@@ -107,10 +107,19 @@ test('B3.3: bez prohlaseni_text a vytvoreno (starší přímá volání) bez blo
   for (const [prohlaseni_text, vytvoreno] of [[undefined, undefined], [null, null], ['', 'neplatné datum']]) {
     const { html } = await odeslat('odeslat_potvrzeni_vratky', { ...ZADOST, prohlaseni_text, vytvoreno });
     assert.doesNotMatch(html, /undefined|null|Invalid Date/);
-    assert.doesNotMatch(html, /Datum a čas přijetí/);
+    assert.doesNotMatch(html, /Datum a čas odeslání/);
     assert.doesNotMatch(html, /Text vašeho prohlášení/);
   }
   const { html: bezJmena } = await odeslat('odeslat_potvrzeni_vratky', { ...ZADOST_B33, jmeno: null });
   assert.match(bezJmena, /Ahoj,/);
   assert.doesNotMatch(bezJmena, /undefined|null/);
+});
+
+test('§ 1830a: potvrzení mluví o přijetí odstoupení od smlouvy, ne o žádosti', async () => {
+  const { subject, html } = await odeslat('odeslat_potvrzeni_vratky', ZADOST_B33);
+  assert.equal(subject, 'Potvrzení přijetí odstoupení od smlouvy – objednávka #261012');
+  assert.match(html, /<h1[^>]*>Odstoupení od smlouvy přijato<\/h1>/);
+  assert.match(html, /potvrzujeme, že jsme přijali vaše odstoupení od smlouvy k objednávce <strong>#261012<\/strong>/);
+  assert.match(html, /Zboží, kterého se odstoupení týká/);
+  assert.doesNotMatch(html, /žádost o vrácení|Žádost o vrácení/);
 });

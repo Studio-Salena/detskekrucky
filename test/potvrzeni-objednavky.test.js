@@ -239,7 +239,34 @@ test('VOP 10/2026: převod nebo dobírka (40 Kč), GLS, odeslání do 2 pracovn�
   assert.match(t, /výdejní místo Zásilkovny \(79 Kč\), přepravní službou GLS na vybrané výdejní místo \(69 Kč\) nebo na adresu \(119 Kč\), případně prostřednictvím České pošty \(89 Kč\)/);
   assert.match(t, /přepravce \(Zásilkovna, GLS, Česká pošta\)/);
   assert.match(t, /poskytovatele platebního terminálu na prodejně \(Fio banka, a\.s\.\)/);
-  assert.match(t, /platné od 8\. 10\. 2026/);
+  assert.match(t, /platné od 1\. 11\. 2026/);
+});
+
+// ═══ Tlačítko „Odstoupit od smlouvy“ (§ 1830a obč. zák., od 1. 1. 2027) ═══
+
+test('§ 1830a: VOP a poučení říkají, že jde odstoupit tlačítkem, kde je a jak se potvrzuje', () => {
+  for (const soubor of ['obchodni-podminky.html', 'odstoupeni-od-smlouvy.html']) {
+    const t = textStranky(fs.readFileSync(path.join(KOREN, soubor), 'utf8'));
+    assert.match(t, /tlačítko „Odstoupit od smlouvy“/, soubor);
+    assert.match(t, /v patičce e-shopu, na stránce Odstoupení od smlouvy.*v e-mailu s potvrzením objednávky.*Můj účet u každé objednávky/, soubor);
+    assert.match(t, /tlačítkem „Potvrdit odstoupení od smlouvy“/, soubor);
+    assert.match(t, /Potvrzení o přijetí odstoupení s jeho obsahem a datem a časem odeslání/, soubor);
+    assert.doesNotMatch(t, /Vrátit zboží/, soubor);
+  }
+  // i jiné způsoby odstoupení zůstávají
+  const vop = textStranky(fs.readFileSync(path.join(KOREN, 'obchodni-podminky.html'), 'utf8'));
+  assert.match(vop, /Odstoupit můžete i jinak — e-mailem na info@detskekrucky\.cz, telefonicky na čísle 773 517 733 nebo zasláním vzorového formuláře/);
+});
+
+test('§ 1830a: potvrzení objednávky má tlačítko Odstoupit od smlouvy s číslem objednávky, poučení v e-mailu ho popisuje', async () => {
+  const { html } = await vyrenderovatPotvrzeni();
+  assert.match(html, /<a href="https:\/\/www\.detskekrucky\.cz\/eshop\.html\?vratky=1&amp;cislo=261001"[^>]*>Odstoupit od smlouvy<\/a>/);
+  const t = text(html);
+  assert.match(t, /Do 14 dnů od převzetí zboží můžete od smlouvy odstoupit bez udání důvodu/);
+  assert.match(t, /Odstoupit od smlouvy \(online\)/);
+  assert.doesNotMatch(t, /Vrátit zboží/);
+  // poučení převzaté ze stránky popisuje tlačítko i v e-mailu
+  assert.match(t, /Nejrychlejší cesta je tlačítko „Odstoupit od smlouvy“/);
 });
 
 test('potvrzovací e-mail s dobírkou: řádek příplatku, bez pokynů k převodu, „zaplatíte při převzetí“', async () => {

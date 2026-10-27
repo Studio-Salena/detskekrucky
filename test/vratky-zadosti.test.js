@@ -443,3 +443,56 @@ test('B3.4: okno má nadpis a finální tlačítko odstoupení od smlouvy, potvr
   assert.match(odeslani, /class="msg msg-success">\s*Odstoupení od smlouvy bylo odesláno\.\s+Potvrzení vám zašleme e-mailem\.\s*</);
   assert.doesNotMatch(odeslani, /Žádost byla odeslána/);
 });
+
+// ═══ § 1830a - tlačítko „Odstoupit od smlouvy“ v patičce, v Můj účet a z odkazu ═══
+
+test('§ 1830a: patička e-shopu má tlačítko Odstoupit od smlouvy, Můj účet ho má u každé nezrušené objednávky', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const eshop = fs.readFileSync(path.join(__dirname, '..', 'eshop.html'), 'utf8');
+  assert.match(eshop, /<li><button type="button" onclick="otevritOdstoupeni\(\)">Odstoupit od smlouvy<\/button><\/li>/);
+  assert.doesNotMatch(eshop, />Vrátit zboží</);
+  const ucet = eshop.slice(eshop.indexOf('async function nacistMojeObjednavky'), eshop.indexOf('</script>', eshop.indexOf('async function nacistMojeObjednavky')));
+  assert.match(ucet, /o\.stav === 'zrusena' \? '' : `<button type="button" class="odstoupit-btn" data-cislo="\$\{escHtml\(o\.cislo \|\| o\.id\)\}" onclick="otevritOdstoupeni\(this\.dataset\.cislo\)">Odstoupit od smlouvy<\/button>`/);
+  // odkaz ?vratky=1 se zpracuje až po načtení přihlášeného (let prihlasenyUzivatel - jinak ReferenceError)
+  assert.ok(eshop.indexOf("get('vratky') === '1'") > eshop.indexOf('let prihlasenyUzivatel'));
+});
+
+test('§ 1830a: otevritOdstoupeni předvyplní číslo (jen číslice) a e-mail přihlášeného, s oběma rovnou hledá', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const vm = require('node:vm');
+  const eshop = fs.readFileSync(path.join(__dirname, '..', 'eshop.html'), 'utf8');
+  const start = eshop.indexOf('function otevritOdstoupeni(');
+  const kod = eshop.slice(start, eshop.indexOf('\n}\n', start) + 2);
+  const spustit = (cislo, uzivatel) => {
+    const prvky = {};
+    const el = id => (prvky[id] = prvky[id] || { value: '', innerHTML: 'x', style: {} });
+    const volano = [];
+    const sandbox = {
+      document: { getElementById: el }, prihlasenyUzivatel: uzivatel,
+      closeModal: id => volano.push('zavrit:' + id), openModal: id => volano.push('otevrit:' + id),
+      overitObjednavkuVratky: () => volano.push('overit')
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(kod + '\notevritOdstoupeni(' + JSON.stringify(cislo) + ');', sandbox);
+    return { prvky, volano };
+  };
+  const a = spustit('261012', { email: 'jana@example.com' });
+  assert.equal(a.prvky.vratkyObjCislo.value, '261012');
+  assert.equal(a.prvky.vratkyObjEmail.value, 'jana@example.com');
+  assert.equal(a.prvky.vratkyKrok1.style.display, 'block');
+  assert.equal(a.prvky.vratkyKrok2.style.display, 'none');
+  assert.deepEqual(a.volano, ['zavrit:modalUcet', 'otevrit:modalVratky', 'overit']);
+  // nepřihlášený z odkazu v e-mailu: jen číslo, nic se nehledá
+  const b = spustit('261012', null);
+  assert.equal(b.prvky.vratkyObjCislo.value, '261012');
+  assert.equal((b.prvky.vratkyObjEmail || { value: '' }).value, '');
+  assert.deepEqual(b.volano, ['zavrit:modalUcet', 'otevrit:modalVratky']);
+  // podvržené číslo z adresy se nepoužije
+  const c = spustit('<img src=x>', { email: 'jana@example.com' });
+  assert.equal((c.prvky.vratkyObjCislo || { value: '' }).value, '');
+  assert.ok(!c.volano.includes('overit'));
+  // patička bez čísla
+  assert.ok(!spustit(undefined, null).volano.includes('overit'));
+});

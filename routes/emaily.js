@@ -102,6 +102,15 @@ const STYL_BOX = `background:${BARVA_POZADI_BOX};border:1px solid ${BARVA_RAMECE
 function tlacitkoHtml(href, text) {
   return `<a href="${escH(href)}" style="display:inline-block;background:${BARVA_ZNACKA};color:#fff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 20px;border-radius:999px">${escH(text)}</a>`;
 }
+// Tlačítko „Odstoupit od smlouvy“ (§ 1830a obč. zák.) v potvrzení objednávky -
+// otevře online odstoupení v e-shopu s předvyplněným číslem objednávky
+function tlacitkoOdstoupeniHtml(cislo) {
+  return `
+    <div style="${STYL_BOX};margin-top:24px">
+      <p style="margin:0 0 12px 0;font-size:14px">Do 14 dnů od převzetí zboží můžete od smlouvy odstoupit bez udání důvodu – nejrychleji tímto tlačítkem:</p>
+      ${tlacitkoHtml(`${ODKAZY.vratitZbozi}&cislo=${encodeURIComponent(cislo)}`, 'Odstoupit od smlouvy')}
+    </div>`;
+}
 function boxTerminuHtml(datum, cas) {
   return `<div style="${STYL_BOX}">
           <p style="margin:0 0 6px 0;font-size:14px"><strong>Termín:</strong> ${escH(datum)}, ${escH(cas)}</p>
@@ -151,7 +160,7 @@ function pravniCastPotvrzeni() {
     <ul style="margin:4px 0 0 0;padding-left:20px;font-size:13px">
       <li><a href="${ODKAZY.vop}" style="color:${BARVA_ZNACKA}">Obchodní podmínky</a></li>
       <li><a href="${ODKAZY.odstoupeni}" style="color:${BARVA_ZNACKA}">Odstoupení od smlouvy</a></li>
-      <li><a href="${ODKAZY.vratitZbozi}" style="color:${BARVA_ZNACKA}">Vrátit zboží (online formulář)</a></li>
+      <li><a href="${ODKAZY.vratitZbozi}" style="color:${BARVA_ZNACKA}">Odstoupit od smlouvy (online)</a></li>
       <li><a href="${ODKAZY.reklamacniRad}" style="color:${BARVA_ZNACKA}">Reklamační řád</a></li>
     </ul>`;
   let t;
@@ -266,6 +275,7 @@ async function odeslat_potvrzeni(objednavka) {
         <tr><td colspan="3" style="padding:14px 8px 0 8px;font-size:15px;font-weight:bold;color:${BARVA_ZNACKA};border-top:2px solid ${BARVA_ZNACKA_TMAVA}">CELKEM K ÚHRADĚ</td><td style="padding:14px 8px 0 8px;font-size:15px;font-weight:bold;color:${BARVA_ZNACKA};text-align:right;border-top:2px solid ${BARVA_ZNACKA_TMAVA}">${objednavka.celkem} Kč</td></tr>
       </tbody>
     </table>
+    ${tlacitkoOdstoupeniHtml(cisloZobrazit)}
     ${pravniCastPotvrzeni()}`;
 
   await odeslatEmail({
@@ -457,12 +467,12 @@ async function odeslat_potvrzeni_vratky(zadost) {
 
   await odeslatEmail({
     to: zadost.email,
-    subject: `Přijali jsme vaši žádost o vrácení – objednávka #${cisloZobrazit}`,
-    html: obalitBrandovanyEmail({ nadpis: 'Žádost o vrácení přijata', obsahHtml: `
+    subject: `Potvrzení přijetí odstoupení od smlouvy – objednávka #${cisloZobrazit}`,
+    html: obalitBrandovanyEmail({ nadpis: 'Odstoupení od smlouvy přijato', obsahHtml: `
         <p style="${STYL_ODSTAVEC}">Ahoj${zadost.jmeno ? ' ' + escH(zadost.jmeno) : ''},</p>
-        <p style="${STYL_ODSTAVEC}">potvrzujeme, že jsme přijali vaši žádost o vrácení zboží / odstoupení od smlouvy k objednávce <strong>#${escH(cisloZobrazit)}</strong>. Ozveme se vám co nejdřív s dalším postupem.</p>
-        ${prijato ? `<p style="${STYL_ODSTAVEC}"><strong>Datum a čas přijetí:</strong> ${escH(prijato)}</p>` : ''}
-        <h3 style="${STYL_PODNADPIS}">Položky k vrácení</h3>
+        <p style="${STYL_ODSTAVEC}">potvrzujeme, že jsme přijali vaše odstoupení od smlouvy k objednávce <strong>#${escH(cisloZobrazit)}</strong>. Ozveme se vám co nejdřív s dalším postupem.</p>
+        ${prijato ? `<p style="${STYL_ODSTAVEC}"><strong>Datum a čas odeslání odstoupení:</strong> ${escH(prijato)}</p>` : ''}
+        <h3 style="${STYL_PODNADPIS}">Zboží, kterého se odstoupení týká</h3>
         <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
           <thead><tr><th style="${STYL_TH}">Produkt</th><th style="${STYL_TH}">Počet</th></tr></thead>
           <tbody>${polozky_html}</tbody>

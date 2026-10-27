@@ -604,6 +604,10 @@ footer{background:linear-gradient(135deg,#3d2b1f,#6b4c35);padding:32px;text-alig
   .hero-animal-jezek{height:58px}
 }
 
+/* Můj účet: tlačítko Odstoupit od smlouvy u objednávky */
+.odstoupit-btn{margin-top:8px;padding:6px 14px;background:none;border:2px solid var(--brown);border-radius:20px;color:var(--brown);font-family:'Nunito',sans-serif;font-weight:700;font-size:0.8rem;cursor:pointer}
+.odstoupit-btn:hover,.odstoupit-btn:focus-visible{background:var(--brown);color:#fff}
+
 /* COOKIE LIŠTA */
 .cookie-bar{position:fixed;bottom:0;left:0;right:0;background:rgba(45,30,15,0.97);color:#fff;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px;z-index:999;flex-wrap:wrap;box-shadow:0 -4px 20px rgba(0,0,0,0.3)}
 .cookie-bar p{font-size:0.83rem;line-height:1.5;margin:0;flex:1;min-width:200px}
@@ -1190,7 +1194,7 @@ body:has(.katalog-filtry.open) #back-to-top{display:none}
       <ul>
         <li><a href="index.html#eshop">Jak změřit nožičku</a></li>
         <li><button type="button" onclick="otevritPoradnu()">Poradna velikostí</button></li>
-        <li><button type="button" onclick="openModal('modalVratky')">Vrátit zboží</button></li>
+        <li><button type="button" onclick="otevritOdstoupeni()">Odstoupit od smlouvy</button></li>
         <li><a href="odstoupeni-od-smlouvy.html">Odstoupení od smlouvy</a></li>
         <li><a href="reklamacni-rad.html">Reklamační řád</a></li>
         <li><a href="obchodni-podminky.html">Obchodní podmínky</a></li>
@@ -3911,10 +3915,6 @@ fetch(API + '/modely/nastaveni-katalogu').then(r => r.ok ? r.json() : null).then
   }
 }).catch(() => {});
 
-// Odkaz z právních stránek (?vratky=1) rovnou otevře formulář pro vrácení/odstoupení od smlouvy
-if (new URLSearchParams(location.search).get('vratky') === '1') {
-  openModal('modalVratky');
-}
 
 // Odkaz z ověřovacího e-mailu (?overeni=token). Samotný odkaz nic nedokončí -
 // server navíc chce heslo zvolené při registraci (ochrana proti tomu, aby
@@ -3980,6 +3980,12 @@ let prihlasenyUzivatel = null;
 try { prihlasenyUzivatel = JSON.parse(nacistUlozeneho('uzivatel') || 'null'); } catch (e) {}
 if (prihlasenyUzivatel && !nacistUlozeneho('token')) prihlasenyUzivatel = null;
 let prihlaseniZCheckoutu = false;
+
+// Odkaz z právních stránek a z potvrzení objednávky (?vratky=1, případně &cislo=)
+// rovnou otevře formulář pro odstoupení od smlouvy (až po načtení přihlášeného - předvyplní e-mail)
+if (new URLSearchParams(location.search).get('vratky') === '1') {
+  otevritOdstoupeni(new URLSearchParams(location.search).get('cislo'));
+}
 aktualizovatNavUcet();
 
 function ziskatToken() {
@@ -4051,6 +4057,21 @@ function openModal(id) {
 // ═══════════════════════════════
 let vratkyOverenaObjednavka = null;
 let vratkyPolozkyData = [];
+
+// Tlačítko „Odstoupit od smlouvy“ (§ 1830a obč. zák.): patička, Můj účet, odkaz z e-mailu.
+// Číslo objednávky a e-mail přihlášeného se předvyplní; když jsou oba, objednávka se rovnou dohledá.
+function otevritOdstoupeni(cislo) {
+  const cisloText = typeof cislo === 'string' && /^[0-9]{1,12}$/.test(cislo.trim()) ? cislo.trim() : '';
+  const email = prihlasenyUzivatel && prihlasenyUzivatel.email ? prihlasenyUzivatel.email : '';
+  document.getElementById('vratkyKrok1').style.display = 'block';
+  document.getElementById('vratkyKrok2').style.display = 'none';
+  document.getElementById('vratkyOveritMsg').innerHTML = '';
+  if (cisloText) document.getElementById('vratkyObjCislo').value = cisloText;
+  if (email && !document.getElementById('vratkyObjEmail').value) document.getElementById('vratkyObjEmail').value = email;
+  closeModal('modalUcet');
+  openModal('modalVratky');
+  if (cisloText && email) overitObjednavkuVratky();
+}
 
 async function overitObjednavkuVratky() {
   const cislo = document.getElementById('vratkyObjCislo').value.trim();
@@ -4372,6 +4393,7 @@ async function nacistMojeObjednavky() {
           <span style="background:${info.barva};color:#fff;padding:3px 10px;border-radius:10px;font-size:0.75rem;font-weight:700">${info.text}</span>
         </div>
         <div style="color:var(--text-light);font-size:0.85rem;margin-top:4px">Celkem: <strong style="color:var(--brown)">${o.celkem} Kč</strong></div>
+        ${o.stav === 'zrusena' ? '' : `<button type="button" class="odstoupit-btn" data-cislo="${escHtml(o.cislo || o.id)}" onclick="otevritOdstoupeni(this.dataset.cislo)">Odstoupit od smlouvy</button>`}
       </div>`;
     }).join('');
   } catch(e) {
