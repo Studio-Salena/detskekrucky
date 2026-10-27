@@ -43,7 +43,8 @@ function vykreslit({ modely, filtr = {}, pohlavi = false, kategorie = [{ slug: '
     nastaveniKatalogu: { vekoveSkupiny: [], pohlavi },
     modelyVybrane: new Set(vybrane),
     modelyRozbaleneZnacky: new Set(filtr.rozbalene || []),
-    vykreslitSeznamProduktu: () => {}
+    vykreslitSeznamProduktu: () => {},
+    vykreslitCoChybi: () => {}
   };
   vm.createContext(sandbox);
   const funkce = ['normalizovat', 'pocetSlovy', 'escH', 'escAttr', 'modelBezVlastnosti', 'vyberAnoNe', 'vyberJedna', 'vyberVice', 'vyberKategorie', 'vykreslitModely'];
@@ -207,4 +208,69 @@ test('admin Modely: seskupení podle značky - sbalené skupiny, hledání bez d
   h = vykreslit({ modely, vybrane: [1, 2] }).modelyTable.innerHTML;
   assert.match(h, /data-znacka="froddo">\s*<tr class="skupina-hlavicka">\s*<td><input type="checkbox" data-vyber-znacka[^>]* checked>/, 'značka se všemi vybranými modely je zaškrtnutá');
   assert.match(vykreslit({ modely: [{ ...MODEL, znacka: '<img src=x>' }] }).modelyTable.innerHTML, /&lt;img src=x&gt;/);
+});
+
+// ═══ Co chybí ═══
+
+function vykreslitChybi(modely, filtr = '') {
+  const prvky = { chybiTable: { innerHTML: '' }, chybiFiltr: { innerHTML: '' } };
+  const sandbox = {
+    document: { getElementById: id => prvky[id] },
+    modelyData: { volby: VOLBY, kategorieBezVlastnosti: ['doplnky'], modely },
+    modelyKategorie: [{ slug: 'celorocky', nazev: 'Celoročky' }, { slug: 'doplnky', nazev: 'Doplňky' }]
+  };
+  vm.createContext(sandbox);
+  const konst = ADMIN_HTML.match(/const CHYBI = \[[\s\S]*?\n\];/)[0];
+  vm.runInContext([konst, 'let chybiFiltr = ' + JSON.stringify(filtr) + ';',
+    ...['escH', 'escAttr', 'modelBezVlastnosti', 'nazevKategorie', 'coChybiModelu', 'vykreslitCoChybi'].map(vytahnoutFunkci), 'vykreslitCoChybi();'].join('\n'), sandbox);
+  return prvky;
+}
+
+test('admin Co chybí: jen boty v nabídce, u každé co chybí, počty ve filtrech', () => {
+  const uplny = { ...MODEL, id: 1, v_nabidce: true, ma_rozmery: true, ma_popis: true };
+  const modely = [
+    uplny,
+    { ...uplny, id: 2, nazev: 'Bez fotky a mm', ma_fotku: false, ma_rozmery: false },
+    { ...uplny, id: 3, nazev: 'Nevyplněná', vyplneno: false, ma_popis: false },
+    { ...uplny, id: 4, nazev: 'Ke kontrole', kategorie_ke_kontrole: true },
+    { ...uplny, id: 5, nazev: 'Vyprodaná', v_nabidce: false, ma_fotku: false },
+    // doplňky: rozměry a vlastnosti se nehlídají, fotka a popis ano
+    { ...uplny, id: 6, nazev: 'Ponožky', kategorie: 'doplnky', vyplneno: false, ma_rozmery: false, ma_popis: false },
+    { ...uplny, id: 7, nazev: PAYLOAD, ma_fotku: false }
+  ];
+  const { chybiTable, chybiFiltr } = vykreslitChybi(modely);
+  const h = chybiTable.innerHTML;
+  const radky = [...h.matchAll(/data-chybi-model="(\d+)"/g)].map(m => Number(m[1]));
+  assert.deepEqual(radky, [2, 3, 4, 6, 7]);
+  const radek = id => h.slice(h.indexOf(`data-chybi-model="${id}"`), h.indexOf('</tr>', h.indexOf(`data-chybi-model="${id}"`)));
+  assert.match(radek(2), /Bez fotky.*Bez rozměrů/);
+  assert.match(radek(3), /Bez vlastností.*Bez popisu/);
+  assert.match(radek(4), /Bez vlastností/);
+  assert.match(radek(6), /Bez popisu/);
+  assert.doesNotMatch(radek(6), /Bez rozměrů|Bez vlastností/);
+  assert.match(h, /onclick="otevritDetailModelu\(2\)"/);
+  assert.ok(!h.includes(PAYLOAD), 'název se escapuje');
+  assert.match(chybiFiltr.innerHTML, /Vše \(5\)/);
+  assert.match(chybiFiltr.innerHTML, /Bez fotky \(2\)/);
+  assert.match(chybiFiltr.innerHTML, /Bez rozměrů \(mm\) \(1\)/);
+  assert.match(chybiFiltr.innerHTML, /Bez vlastností \(2\)/);
+  assert.match(chybiFiltr.innerHTML, /Bez popisu \(2\)/);
+});
+
+test('admin Co chybí: filtr podle druhu, prázdný filtr se zruší, bez chyb hláška', () => {
+  const uplny = { ...MODEL, v_nabidce: true, ma_rozmery: true, ma_popis: true };
+  const modely = [{ ...uplny, id: 1, ma_fotku: false }, { ...uplny, id: 2, ma_popis: false }];
+  const { chybiTable, chybiFiltr } = vykreslitChybi(modely, 'popis');
+  assert.deepEqual([...chybiTable.innerHTML.matchAll(/data-chybi-model="(\d+)"/g)].map(m => Number(m[1])), [2]);
+  assert.match(chybiFiltr.innerHTML, /class="pill active" onclick="filtrovatCoChybi\('popis'\)"/);
+  // filtr, kterému nic neodpovídá, se vrátí na Vše
+  const r = vykreslitChybi(modely, 'rozmery');
+  assert.match(r.chybiFiltr.innerHTML, /class="pill active" onclick="filtrovatCoChybi\(''\)"/);
+  assert.match(vykreslitChybi([uplny]).chybiTable.innerHTML, /nic nechybí/);
+});
+
+test('admin Co chybí: záložka v Produktech', () => {
+  const produkty = ADMIN_HTML.slice(ADMIN_HTML.indexOf('id="page-produkty"'), ADMIN_HTML.indexOf('<!-- PRODEJNA -->'));
+  assert.match(produkty, /data-cil="chybi"[^>]*>Co chybí<\/button>/);
+  assert.match(produkty, /data-pohled="chybi"[\s\S]*id="chybiFiltr"[\s\S]*id="chybiTable"/);
 });

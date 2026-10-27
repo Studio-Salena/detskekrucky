@@ -104,6 +104,10 @@ router.get('/', async (req, res) => {
              MAX(p.cena) AS cena_do,
              COUNT(DISTINCT p.id) FILTER (WHERE p.na_eshopu IS FALSE)::int AS skryto,
              COALESCE(ARRAY_AGG(DISTINCT s.ean) FILTER (WHERE s.ean IS NOT NULL AND s.ean <> ''), '{}') AS eany,
+             -- přehled „Co chybí“: rozměry, popis a jestli jde botu na e-shopu koupit
+             COALESCE(BOOL_OR(s.delka_mm > 0), false) AS ma_rozmery,
+             COALESCE(BOOL_OR(TRIM(COALESCE(p.popis, '')) <> ''), false) AS ma_popis,
+             COALESCE(BOOL_OR(p.na_eshopu AND s.velikost IS NOT NULL AND (s.pocet_kusu > 0 OR s.dostupnost = 'dodavatel')), false) AS v_nabidce,
              -- úvodní fotka do seznamu: hlavní nahraná fotka, jinak starší odkaz z pole emoji
              COALESCE((
                SELECT pi.url FROM product_images pi JOIN produkty p2 ON p2.id = pi.produkt_id

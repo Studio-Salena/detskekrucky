@@ -755,6 +755,15 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <div class="pohledy" role="tablist" aria-label="Zobrazení">
         <button type="button" role="tab" data-cil="seznam" onclick="prepnoutPohled('produkty','seznam')">Seznam</button>
         <button type="button" role="tab" data-cil="hromadna" onclick="prepnoutPohled('produkty','hromadna')">Hromadná úprava</button>
+        <button type="button" role="tab" data-cil="chybi" onclick="prepnoutPohled('produkty','chybi')">Co chybí</button>
+      </div>
+
+      <div data-pohled="chybi">
+        <p style="color:var(--text-light);font-size:0.85rem;margin:0 0 12px">Boty, které jdou na e-shopu koupit (skladem nebo u dodavatele) a něco jim chybí. Kliknutím na řádek otevřete detail a doplníte to. Po doplnění klikněte na ↻ nahoře.</p>
+        <div class="filter-pills" id="chybiFiltr" style="margin:0 0 14px"></div>
+        <div class="table-wrap">
+          <div id="chybiTable"><div class="loading">Načítám...</div></div>
+        </div>
       </div>
 
       <div data-pohled="seznam">
@@ -3381,6 +3390,43 @@ function rozbalitVsechnyProdukty(rozbalit) {
   document.querySelectorAll('#produktyTable .skupina-prepinac').forEach(btn => {
     if ((btn.getAttribute('aria-expanded') === 'true') !== rozbalit) prepnoutZnackuProduktu(btn);
   });
+}
+
+// ===== CO CHYBÍ =====
+// Jen boty v nabídce e-shopu. Rozměry a vlastnosti se u doplňků a péče o obuv nehlídají.
+const CHYBI = [
+  { kod: 'foto', nazev: 'Bez fotky', chybi: m => !m.ma_fotku },
+  { kod: 'rozmery', nazev: 'Bez rozměrů (mm)', chybi: m => !modelBezVlastnosti(m) && !m.ma_rozmery },
+  { kod: 'vlastnosti', nazev: 'Bez vlastností', chybi: m => !modelBezVlastnosti(m) && (!m.vyplneno || m.kategorie_ke_kontrole) },
+  { kod: 'popis', nazev: 'Bez popisu', chybi: m => !m.ma_popis }
+];
+let chybiFiltr = '';
+function coChybiModelu(m) {
+  return CHYBI.filter(c => c.chybi(m));
+}
+function filtrovatCoChybi(kod) {
+  chybiFiltr = kod;
+  vykreslitCoChybi();
+}
+function vykreslitCoChybi() {
+  const el = document.getElementById('chybiTable');
+  if (!el || !modelyData || !modelyData.modely) return;
+  const sChybou = modelyData.modely.filter(m => m.v_nabidce && coChybiModelu(m).length);
+  const pocet = kod => sChybou.filter(m => CHYBI.find(c => c.kod === kod).chybi(m)).length;
+  if (chybiFiltr && !pocet(chybiFiltr)) chybiFiltr = '';
+  document.getElementById('chybiFiltr').innerHTML =
+    `<button type="button" class="pill${chybiFiltr ? '' : ' active'}" onclick="filtrovatCoChybi('')">Vše (${sChybou.length})</button>` +
+    CHYBI.map(c => `<button type="button" class="pill${chybiFiltr === c.kod ? ' active' : ''}" onclick="filtrovatCoChybi('${c.kod}')">${c.nazev} (${pocet(c.kod)})</button>`).join(' ');
+  const list = chybiFiltr ? sChybou.filter(m => CHYBI.find(c => c.kod === chybiFiltr).chybi(m)) : sChybou;
+  if (!list.length) { el.innerHTML = '<div class="empty">✅ U bot v nabídce nic nechybí</div>'; return; }
+  el.innerHTML = `<table class="produkty-seznam"><thead><tr><th>Fotka</th><th>Produkt</th><th>Kategorie</th><th>Co chybí</th><th></th></tr></thead><tbody>
+    ${list.map(m => `<tr class="radek-odkaz" data-chybi-model="${Number(m.id)}" onclick="otevritDetailModelu(${Number(m.id)})">
+      <td class="seznam-foto-bunka">${m.foto ? `<img class="seznam-foto" src="${escAttr(m.foto)}" alt="" loading="lazy">` : '<span class="seznam-foto bez-fotky" title="Bez fotky">👟</span>'}</td>
+      <td><strong>${escH(m.znacka || '')}</strong> ${escH(m.nazev)}</td>
+      <td>${escH(nazevKategorie(m.kategorie))}</td>
+      <td>${coChybiModelu(m).map(c => `<span class="badge badge-nizky" style="margin:2px 4px 2px 0">${c.nazev}</span>`).join('')}</td>
+      <td><button type="button" class="btn btn-outline btn-sm" onclick="event.stopPropagation();otevritDetailModelu(${Number(m.id)})">Detail ›</button></td>
+    </tr>`).join('')}</tbody></table>`;
 }
 
 // ===== DETAIL MODELU =====
@@ -7007,7 +7053,7 @@ function vykreslitModely() {
     (!hledat || normalizovat(`${m.znacka || ''} ${m.nazev}`).includes(normalizovat(hledat))) &&
     (!kategorie || m.kategorie === kategorie) &&
     (!jenNevyplnene || !m.vyplneno || m.kategorie_ke_kontrole));
-  if (!list.length) { el.innerHTML = '<div class="empty">Žádné modely neodpovídají filtru</div>'; vykreslitSeznamProduktu(); return; }
+  if (!list.length) { el.innerHTML = '<div class="empty">Žádné modely neodpovídají filtru</div>'; vykreslitSeznamProduktu(); vykreslitCoChybi(); return; }
 
   const pohlavi = !!nastaveniKatalogu.pohlavi;
   const vseVybrano = list.every(m => modelyVybrane.has(m.id));
@@ -7060,6 +7106,7 @@ function vykreslitModely() {
     }).join('')}</tbody>`;
     }).join('')}</table>`;
   vykreslitSeznamProduktu();
+  vykreslitCoChybi();
 }
 
 // Rozbalené značky v Modelech (zůstanou rozbalené i po uložení a obnovení)

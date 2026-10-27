@@ -106,6 +106,28 @@ test('API proti PostgreSQL: seznam modelů a úprava s propsáním do produktů'
     assert.equal(m.pocet_produktu, 2);
     assert.equal(m.kategorie_ke_kontrole, true);
     assert.equal(m.ma_fotku, false);
+    // přehled Co chybí: bez rozměrů a popisu, skladem = v nabídce
+    assert.equal(m.ma_rozmery, false);
+    assert.equal(m.ma_popis, false);
+    assert.equal(m.v_nabidce, true);
+    await pool.query("UPDATE sklad SET delka_mm = 150 WHERE velikost = 24");
+    await pool.query("UPDATE produkty SET popis = '  ' WHERE id = (SELECT MIN(id) FROM produkty)");
+    const rMm = res();
+    await najit('get', '/')({}, rMm);
+    assert.equal(rMm.body.modely[0].ma_rozmery, true);
+    assert.equal(rMm.body.modely[0].ma_popis, false, 'samé mezery nejsou popis');
+    await pool.query("UPDATE produkty SET popis = 'Kožená bota'");
+    await pool.query('UPDATE sklad SET pocet_kusu = 0');
+    const rNabidka = res();
+    await najit('get', '/')({}, rNabidka);
+    assert.equal(rNabidka.body.modely[0].ma_popis, true);
+    assert.equal(rNabidka.body.modely[0].v_nabidce, false, 'vyprodaná bota není v nabídce');
+    await pool.query("UPDATE sklad SET dostupnost = 'dodavatel' WHERE velikost = 25");
+    const rDodavatel = res();
+    await najit('get', '/')({}, rDodavatel);
+    assert.equal(rDodavatel.body.modely[0].v_nabidce, true, 'u dodavatele = v nabídce');
+    await pool.query('UPDATE sklad SET pocet_kusu = CASE velikost WHEN 24 THEN 1 ELSE 2 END');
+    await pool.query("UPDATE sklad SET dostupnost = 'skladem'");
 
     const r2 = res();
     await najit('patch', '/:id')({ params: { id: String(m.id) }, body: { kategorie: 'celorocky', znacka: 'FRODDO', barefoot: true, sirka: ['siroka'], zapinani: ['suchy_zip', 'tkanicky'], membrana: false, material: 'kuze' } }, r2);
