@@ -16,15 +16,25 @@
 <meta property="og:image" content="https://www.detskekrucky.cz/logo.jpg">
 <!-- E-shop zatím není spuštěný: bez náhledového klíče přesměrovat na eshop-brzy.html.
      Náhled: eshop.html?nahled=VhnxYyqF (prohlížeč si ho zapamatuje). Ověření účtu z e-mailu (?overeni=) projde.
+     Zapamatování jde do localStorage, sessionStorage i cookie - stačí, když funguje jedno
+     (vestavěné prohlížeče Messengeru/Facebooku, anonymní okno, blokované úložiště).
      PŘI SPUŠTĚNÍ E-SHOPU tenhle blok i meta robots odstranit a eshop.html přidat do sitemap.xml. -->
 <meta name="robots" content="noindex">
 <script>
 (function () {
-  try {
-    var q = new URLSearchParams(location.search);
-    if (q.get('nahled') === 'VhnxYyqF') localStorage.setItem('eshopNahled', '1');
-    if (localStorage.getItem('eshopNahled') === '1' || q.has('overeni')) return;
-  } catch (e) {}
+  var KLIC = 'vhnxyyqf';
+  function zkusit(fn) { try { return fn(); } catch (e) { return null; } }
+  var m = /[?&]nahled=([^&#]*)/i.exec(location.search);
+  if (m && decodeURIComponent(m[1]).trim().toLowerCase() === KLIC) {
+    zkusit(function () { localStorage.setItem('eshopNahled', '1'); });
+    zkusit(function () { sessionStorage.setItem('eshopNahled', '1'); });
+    zkusit(function () { document.cookie = 'eshopNahled=1; path=/; max-age=2592000; SameSite=Lax; Secure'; });
+    return;
+  }
+  if (/[?&]overeni=/.test(location.search)) return;
+  if (zkusit(function () { return localStorage.getItem('eshopNahled'); }) === '1') return;
+  if (zkusit(function () { return sessionStorage.getItem('eshopNahled'); }) === '1') return;
+  if (/(?:^|;\s*)eshopNahled=1/.test(zkusit(function () { return document.cookie; }) || '')) return;
   location.replace('eshop-brzy.html');
 })();
 </script>
