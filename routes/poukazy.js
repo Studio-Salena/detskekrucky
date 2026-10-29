@@ -5,6 +5,7 @@ const { pripravit } = require('../lib/startServeru');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const { jeZablokovana: jeZadostZablokovana, zaznamenatZadost } = require('../middleware/poukazyZadostLimiter');
 const { odeslat_upozorneni_zadost_poukaz, odeslat_poukaz_zakaznikovi } = require('./emaily');
+const { poukazPoPlatnosti } = require('../lib/poukazPlatnost');
 
 const POVOLENE_HODNOTY = [500, 1000, 1500];
 // Vzhled tištěného poukazu - volí se při vydání, ať jde i později vytisknout stejně
@@ -98,7 +99,7 @@ router.get('/overit/:kod', async (req, res) => {
     const poukaz = result.rows[0];
     if (poukaz.stav === 'zruseny') return res.status(400).json({ chyba: 'Tento poukaz byl zrušen.' });
     if (poukaz.stav === 'pouzity' || Number(poukaz.zustatek) <= 0) return res.status(400).json({ chyba: 'Tento poukaz je již plně vyčerpaný.' });
-    if (new Date(poukaz.platnost_do) < new Date()) return res.status(400).json({ chyba: 'Platnost poukazu vypršela.' });
+    if (poukazPoPlatnosti(poukaz.platnost_do)) return res.status(400).json({ chyba: 'Platnost poukazu vypršela.' });
     res.json({ id: poukaz.id, kod: poukaz.kod, ean: poukaz.ean, hodnota: Number(poukaz.hodnota), zustatek: Number(poukaz.zustatek), platnost_do: poukaz.platnost_do });
   } catch (err) {
     res.status(500).json({ chyba: err.message });
@@ -242,6 +243,8 @@ router.post('/pouzit', vyzadovatAdmina, async (req, res) => {
     if (result.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ chyba: 'Poukaz nebyl nalezen.' }); }
     const poukaz = result.rows[0];
     if (poukaz.stav !== 'aktivni') { await client.query('ROLLBACK'); return res.status(400).json({ chyba: 'Poukaz už není aktivní.' }); }
+    // Server platnost ověřuje sám - nespoléhá na to, že admin předtím volal /overit
+    if (poukazPoPlatnosti(poukaz.platnost_do)) { await client.query('ROLLBACK'); return res.status(400).json({ chyba: 'Platnost poukazu vypršela.' }); }
     if (Number(poukaz.zustatek) < castka) { await client.query('ROLLBACK'); return res.status(400).json({ chyba: `Na poukazu zbývá jen ${poukaz.zustatek} Kč.` }); }
 
     const novyZustatek = Number(poukaz.zustatek) - Number(castka);

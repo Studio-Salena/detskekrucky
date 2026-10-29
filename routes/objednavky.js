@@ -1,5 +1,7 @@
-const { odeslat_potvrzeni, odeslat_upozorneni_objednavky, odeslat_email_zmena_stavu, odeslat_fakturu } = require('./emaily');
+const { odeslat_potvrzeni, odeslat_upozorneni_objednavky, odeslat_email_zmena_stavu, odeslat_fakturu, odeslat_storno } = require('./emaily');
 const { fakturaHtml } = require('../lib/faktura');
+const { migrovatFaktury, vystavitFakturu, vystavitStorno, overitUlozenou, HISTORICKA_UPOZORNENI, NAZEV_BEZ_PRODUKTU } = require('../lib/vystaveniFaktury');
+const { poukazPoPlatnosti } = require('../lib/poukazPlatnost');
 
 // Stavy, u kterých se zákazníkovi posílá informační e-mail o změně stavu
 // (viz STAV_OBJEDNAVKY_EMAIL v routes/emaily.js).
@@ -40,6 +42,17 @@ async function initObjednavkySloupce() {
       ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS faktura_datum TIMESTAMPTZ;
       -- Kdy admin naposledy poslal fakturu zákazníkovi e-mailem (2026-10)
       ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS faktura_odeslano TIMESTAMPTZ;
+      -- Kdy admin naposledy poslal opravný doklad (storno faktury) e-mailem
+      ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS storno_odeslano TIMESTAMPTZ;
+      -- Okamžiky v životě objednávky (2026-10), každý zvlášť a nezaměňují se:
+      -- úhrada, expedice (odeslání) a dodání se zapíšou při PRVNÍ změně stavu na
+      -- zaplacena / odeslana / dorucena v adminu, zrušení při zrušení. Dodání
+      -- = majitelka v adminu označila jako doručené (dopravce ho zatím nepotvrzuje).
+      -- Starší objednávky zůstávají NULL - nic se zpětně nedoplňuje.
+      ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS zaplaceno_at TIMESTAMPTZ;
+      ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS expedovano_at TIMESTAMPTZ;
+      ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS dodano_at TIMESTAMPTZ;
+      ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS zruseno_at TIMESTAMPTZ;
       -- Doprava (2026-10): skutečná cena dopravy v době objednávky, dopravce a
       -- výdejní místo (obecně, ne jen GLS - později i Zásilkovna). Údaje místa se
       -- berou z ověřeného seznamu dopravce, ne z prohlížeče. Starší objednávky
@@ -93,6 +106,14 @@ async function initObjednavkySloupce() {
   } catch (e) {
     console.log('Zasilky chyba:', e.message);
   }
+  // Neměnné faktury (tabulka faktury + ochrana čísla faktury) - zvlášť, až po
+  // sloupcích faktura_cislo/faktura_datum výše, na kterých trigger stojí.
+  try {
+    await migrovatFaktury(pool);
+    console.log('Faktury OK');
+  } catch (e) {
+    console.log('Faktury chyba:', e.message);
+  }
   try {
     const bezSnimku = await migrovatSnapshoty(pool);
     if (bezSnimku.length) {
@@ -122,45 +143,6 @@ async function pridelitCisloObjednavky(client, objednavkaId) {
   const cislo = `${rok2}${mesic2}${String(pocitadlo.rows[0].posledni_cislo).padStart(2, '0')}`;
   await client.query('UPDATE objednavky SET cislo=$1 WHERE id=$2', [cislo, objednavkaId]);
   return cislo;
-}
-
-// Vrátí číslo faktury pro objednávku - pokud ještě žádné nemá, PRVNÍ volání
-// (typicky při prvním tisku/zobrazení faktury) jí ho tady vystaví a natrvalo
-// uloží. Číslo se tak nepřiděluje hned při vzniku objednávky (testovací/
-// zrušené objednávky, které se nikdy nevytisknou, tak "nespotřebují" číslo a
-// nevznikají v řadě mezery) a opakovaný tisk vrací pořád stejné, jednou
-// vystavené číslo (faktura se nesmí přečíslovávat).
-// FOR UPDATE na řádku objednávky serializuje souběžné první-tisky téže
-// objednávky; UPDATE ... RETURNING na faktury_cislovani je sám o sobě
-// atomický (řádkový zámek po dobu transakce), takže dvě různé objednávky
-// vystavované souběžně nikdy nedostanou stejné číslo.
-async function ziskatFakturuCislo(objednavkaId) {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const soucasna = await client.query('SELECT faktura_cislo, faktura_datum FROM objednavky WHERE id=$1 FOR UPDATE', [objednavkaId]);
-    if (!soucasna.rows.length) {
-      await client.query('ROLLBACK');
-      return null;
-    }
-    if (soucasna.rows[0].faktura_cislo) {
-      await client.query('ROLLBACK'); // nic se neměnilo, jen se čtelo
-      return soucasna.rows[0];
-    }
-    const rok = new Date().getFullYear();
-    await client.query('INSERT INTO faktury_cislovani (rok, posledni_cislo) VALUES ($1, 0) ON CONFLICT (rok) DO NOTHING', [rok]);
-    const pocitadlo = await client.query('UPDATE faktury_cislovani SET posledni_cislo = posledni_cislo + 1 WHERE rok=$1 RETURNING posledni_cislo', [rok]);
-    const cislo = `${rok}${String(pocitadlo.rows[0].posledni_cislo).padStart(3, '0')}`;
-    const datum = new Date();
-    await client.query('UPDATE objednavky SET faktura_cislo=$1, faktura_datum=$2 WHERE id=$3', [cislo, datum, objednavkaId]);
-    await client.query('COMMIT');
-    return { faktura_cislo: cislo, faktura_datum: datum };
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -373,7 +355,7 @@ router.post('/', async (req, res) => {
         await client.query('ROLLBACK');
         return res.status(400).json({ chyba: 'Tento poukaz je již plně vyčerpaný nebo zrušený.' });
       }
-      if (new Date(poukaz.platnost_do) < new Date()) {
+      if (poukazPoPlatnosti(poukaz.platnost_do)) {
         await client.query('ROLLBACK');
         return res.status(400).json({ chyba: 'Platnost poukazu vypršela.' });
       }
@@ -525,13 +507,18 @@ async function nacistObjednavku(id) {
       WHERE o.id = $1
     `, [id]);
   if (!objednavka.rows.length) return null;
+  // LEFT JOIN: produkt smazaný z katalogu položku nevypustí (cena a počet jsou
+  // uložené u položky). Název z položky, pokud ho schéma má, jinak z katalogu,
+  // jinak náhradní text - stejně jako při vystavení faktury.
   const polozky = await pool.query(`
-      SELECT op.*, p.nazev, p.znacka
+      SELECT op.*, p.nazev AS produkt_nazev, p.znacka AS produkt_znacka
       FROM objednavky_polozky op
-      JOIN produkty p ON op.produkt_id = p.id
+      LEFT JOIN produkty p ON op.produkt_id = p.id
       WHERE op.objednavka_id = $1
     `, [id]);
-  return { ...objednavka.rows[0], polozky: polozky.rows };
+  return { ...objednavka.rows[0], polozky: polozky.rows.map(({ produkt_nazev, produkt_znacka, ...p }) => ({
+    ...p, nazev: p.nazev || produkt_nazev || NAZEV_BEZ_PRODUKTU, znacka: p.znacka || produkt_znacka || null
+  })) };
 }
 
 // Detail objednavky (jen pro admin)
@@ -548,7 +535,14 @@ router.get('/:id', vyzadovatAdmina, async (req, res) => {
       )).rows;
     } catch (e) { /* tabulka zásilek není povinná pro zobrazení objednávky */ }
 
-    res.json({ ...o, zasilky, zasilkovna_podani: zasilkovnaApi.stav().podani, gls_podani: gls.stav().podani, gls_prostredi: gls.stav().prostredi });
+    // Uložená faktura (bez HTML) - u čísla faktury bez uloženého dokladu jde o historickou
+    let fakturaUlozena = null, storno = null;
+    try {
+      fakturaUlozena = (await pool.query("SELECT cislo, datum_vystaveni, sablona_verze FROM faktury WHERE objednavka_id = $1 AND druh = 'faktura'", [req.params.id])).rows[0] || null;
+      storno = (await pool.query("SELECT cislo, datum_vystaveni FROM faktury WHERE objednavka_id = $1 AND druh = 'storno'", [req.params.id])).rows[0] || null;
+    } catch (e) { /* bez tabulky faktur se detail ukáže i tak */ }
+
+    res.json({ ...o, zasilky, faktura_ulozena: fakturaUlozena, storno,zasilkovna_podani: zasilkovnaApi.stav().podani, gls_podani: gls.stav().podani, gls_prostredi: gls.stav().prostredi });
   } catch (err) {
     res.status(500).json({ chyba: err.message });
   }
@@ -676,50 +670,130 @@ router.get('/:id/zasilkovna/stitek', vyzadovatAdmina, async (req, res) => {
   }
 });
 
-// Vystavit (nebo - pokud už existuje - jen vrátit) číslo faktury k objednávce.
-// Volá admin.html před tiskem faktury; opakované volání vrací stále stejné
-// číslo (viz ziskatFakturuCislo).
+// Faktura: vystaví se jednou (číslo + uložená neměnná podoba, lib/vystaveniFaktury.js),
+// každý další tisk i e-mail použije přesně uloženou podobu. Historická faktura
+// (číslo z doby před ukládáním) originál nemá - tisk ukáže jasně označenou
+// rekonstrukci, e-mailem se neposílá.
+const CHYBY_FAKTURY = {
+  nenalezena: [404, 'Objednávka nenalezena.'],
+  zrusena: [400, 'Ke zrušené objednávce se faktura nevystavuje.']
+};
+// Odpoví chybou, když faktura nevznikla (true = odpovězeno). 'nelze' = částky
+// nesouhlasí nebo nejdou ověřit - nic se neuložilo ani nespotřebovalo číslo.
+function odpovedetChybouFaktury(res, v) {
+  if (v.stav === 'nelze') { res.status(422).json({ chyba: 'Fakturu nelze vystavit: ' + v.chyba }); return true; }
+  if (CHYBY_FAKTURY[v.stav]) { res.status(CHYBY_FAKTURY[v.stav][0]).json({ chyba: CHYBY_FAKTURY[v.stav][1] }); return true; }
+  return false;
+}
+
+// Vystavit (nebo vrátit už vystavenou) fakturu - jen číslo a datum
 router.post('/:id/faktura', vyzadovatAdmina, async (req, res) => {
   try {
-    const vysledek = await ziskatFakturuCislo(req.params.id);
-    if (!vysledek) {
-      return res.status(404).json({ chyba: 'Objednávka nenalezena.' });
-    }
-    res.json(vysledek);
+    const v = await vystavitFakturu(pool, req.params.id);
+    if (odpovedetChybouFaktury(res, v)) return;
+    if (v.stav === 'historicka') return res.json({ faktura_cislo: v.faktura_cislo, faktura_datum: v.faktura_datum, historicka: true });
+    res.json({ faktura_cislo: v.faktura.cislo, faktura_datum: v.faktura.datum_vystaveni });
   } catch (err) {
     res.status(500).json({ chyba: err.message });
   }
 });
 
-// Faktura jako hotová stránka (tisk v adminu) - stejná šablona jako v e-mailu
+// Faktura jako hotová stránka (tisk v adminu) - uložená podoba dokladu
 router.post('/:id/faktura-html', vyzadovatAdmina, async (req, res) => {
   try {
-    const o = await nacistObjednavku(req.params.id);
-    if (!o) return res.status(404).json({ chyba: 'Objednávka nenalezena.' });
-    const faktura = await ziskatFakturuCislo(req.params.id);
-    res.json({ ...faktura, html: fakturaHtml(o, faktura) });
+    const v = await vystavitFakturu(pool, req.params.id);
+    if (odpovedetChybouFaktury(res, v)) return;
+    if (v.stav === 'historicka') {
+      const o = await nacistObjednavku(req.params.id);
+      const faktura = { faktura_cislo: v.faktura_cislo, faktura_datum: v.faktura_datum };
+      return res.json({ ...faktura, historicka: true, html: fakturaHtml(o, faktura, { rekonstrukce: HISTORICKA_UPOZORNENI }) });
+    }
+    res.json({ faktura_cislo: v.faktura.cislo, faktura_datum: v.faktura.datum_vystaveni, html: v.faktura.html });
   } catch (err) {
     res.status(500).json({ chyba: err.message });
   }
 });
 
-// Poslat fakturu zákazníkovi e-mailem (jen na klik v adminu). Číslo se vystaví
-// stejně jako při tisku; zrušená objednávka fakturu nedostane.
+// Poslat fakturu zákazníkovi e-mailem (jen na klik v adminu) - uloženou podobu.
+// Zrušená objednávka (i s už vystavenou fakturou) ani historická faktura bez
+// originálu se neposílá. Tisk originálu zrušené objednávky zůstává povolený.
 router.post('/:id/faktura-email', vyzadovatAdmina, async (req, res) => {
   try {
     const o = await nacistObjednavku(req.params.id);
     if (!o) return res.status(404).json({ chyba: 'Objednávka nenalezena.' });
-    if (o.stav === 'zrusena') return res.status(400).json({ chyba: 'Zrušená objednávka fakturu nedostane.' });
     if (!o.email) return res.status(400).json({ chyba: 'Objednávka nemá e-mail zákazníka.' });
-    const faktura = await ziskatFakturuCislo(req.params.id);
-    await odeslat_fakturu(o, faktura);
-    const odeslano = (await pool.query('UPDATE objednavky SET faktura_odeslano = NOW() WHERE id = $1 RETURNING faktura_odeslano', [req.params.id])).rows[0];
-    res.json({ ok: true, email: o.email, ...faktura, faktura_odeslano: odeslano ? odeslano.faktura_odeslano : null });
+    const ZRUSENA = 'Fakturu zrušené objednávky nelze posílat e-mailem.';
+    if (o.stav === 'zrusena') return res.status(400).json({ chyba: ZRUSENA });
+    const v = await vystavitFakturu(pool, req.params.id);
+    if (odpovedetChybouFaktury(res, v)) return;
+    if (v.stav === 'historicka') {
+      return res.status(409).json({ chyba: `Faktura ${v.faktura_cislo} byla vystavena před zavedením ukládání faktur a její originál v systému není – e-mailem se proto neposílá. Vytisknout jde jen jako označená rekonstrukce.` });
+    }
+    // Stav zjištěný pod zámkem objednávky - zrušení mezi kontrolou výše a vystavením
+    if (v.stav_objednavky === 'zrusena') return res.status(400).json({ chyba: ZRUSENA });
+    await odeslat_fakturu({ email: o.email, jmeno: o.jmeno, cislo_objednavky: o.cislo || o.id, faktura_cislo: v.faktura.cislo, html: v.faktura.html });
+    // E-mailová služba odeslání přijala. Selhání následné evidence času nesmí
+    // vypadat jako neodeslaný e-mail (admin by fakturu poslal znovu) - jen se
+    // zaloguje (bez e-mailu a obsahu faktury) a admin dostane upozornění.
+    const vysledek = { ok: true, email: o.email, faktura_cislo: v.faktura.cislo, faktura_datum: v.faktura.datum_vystaveni, faktura_odeslano: null };
+    try {
+      const odeslano = (await pool.query('UPDATE objednavky SET faktura_odeslano = NOW() WHERE id = $1 RETURNING faktura_odeslano', [req.params.id])).rows[0];
+      if (odeslano) vysledek.faktura_odeslano = odeslano.faktura_odeslano;
+    } catch (e) {
+      console.error('Faktura ' + v.faktura.cislo + ' předána k odeslání, ale čas odeslání se nepodařilo uložit (objednávka ' + req.params.id + '):', e.message);
+      vysledek.varovani = 'E-mail s fakturou byl předán k odeslání, ale čas odeslání se nepodařilo uložit. Fakturu znovu neposílejte – u objednávky se odeslání nemusí zobrazit.';
+    }
+    res.json(vysledek);
   } catch (err) {
     console.error('Fakturu se nepodařilo odeslat (objednávka ' + req.params.id + '):', err.message);
     res.status(502).json({ chyba: 'Fakturu se nepodařilo odeslat: ' + err.message });
   }
 });
+
+// Uložený opravný doklad (storno) objednávky - vzniká jen při zrušení, tady se jen čte
+async function nacistStorno(id) {
+  const d = (await pool.query("SELECT * FROM faktury WHERE objednavka_id = $1 AND druh = 'storno'", [id])).rows[0];
+  return d ? overitUlozenou(d) : null;
+}
+const BEZ_STORNA = 'K objednávce není vystavený opravný doklad (vzniká při zrušení objednávky s fakturou).';
+
+// Opravný doklad jako hotová stránka (tisk v adminu)
+router.post('/:id/storno-html', vyzadovatAdmina, async (req, res) => {
+  try {
+    const d = await nacistStorno(req.params.id);
+    if (!d) return res.status(404).json({ chyba: BEZ_STORNA });
+    res.json({ storno_cislo: d.cislo, datum_vystaveni: d.datum_vystaveni, html: d.html });
+  } catch (err) {
+    res.status(500).json({ chyba: err.message });
+  }
+});
+
+// Poslat opravný doklad zákazníkovi e-mailem (jen na klik v adminu)
+router.post('/:id/storno-email', vyzadovatAdmina, async (req, res) => {
+  try {
+    const o = await nacistObjednavku(req.params.id);
+    if (!o) return res.status(404).json({ chyba: 'Objednávka nenalezena.' });
+    if (!o.email) return res.status(400).json({ chyba: 'Objednávka nemá e-mail zákazníka.' });
+    const d = await nacistStorno(req.params.id);
+    if (!d) return res.status(404).json({ chyba: BEZ_STORNA });
+    await odeslat_storno({ email: o.email, jmeno: o.jmeno, cislo_objednavky: o.cislo || o.id, storno_cislo: d.cislo, faktura_cislo: d.data.puvodni_doklad.cislo, html: d.html });
+    const vysledek = { ok: true, email: o.email, storno_cislo: d.cislo, storno_odeslano: null };
+    try {
+      const odeslano = (await pool.query('UPDATE objednavky SET storno_odeslano = NOW() WHERE id = $1 RETURNING storno_odeslano', [req.params.id])).rows[0];
+      if (odeslano) vysledek.storno_odeslano = odeslano.storno_odeslano;
+    } catch (e) {
+      console.error('Opravný doklad ' + d.cislo + ' předán k odeslání, ale čas odeslání se nepodařilo uložit (objednávka ' + req.params.id + '):', e.message);
+      vysledek.varovani = 'E-mail byl předán k odeslání, ale čas odeslání se nepodařilo uložit. Doklad znovu neposílejte – u objednávky se odeslání nemusí zobrazit.';
+    }
+    res.json(vysledek);
+  } catch (err) {
+    console.error('Opravný doklad se nepodařilo odeslat (objednávka ' + req.params.id + '):', err.message);
+    res.status(502).json({ chyba: 'Opravný doklad se nepodařilo odeslat: ' + err.message });
+  }
+});
+
+// Stav objednávky -> sloupec s okamžikem, kdy nastal (pevný seznam, žádný vstup od uživatele)
+const CAS_STAVU = { zaplacena: 'zaplaceno_at', odeslana: 'expedovano_at', dorucena: 'dodano_at', zrusena: 'zruseno_at' };
 
 // Zmenit stav objednavky (jen pro admin)
 router.patch('/:id/stav', vyzadovatAdmina, async (req, res) => {
@@ -731,6 +805,7 @@ router.patch('/:id/stav', vyzadovatAdmina, async (req, res) => {
     return res.status(400).json({ chyba: 'Neplatny stav' });
   }
   const client = await pool.connect();
+  let storno = null;
   try {
     await client.query('BEGIN');
 
@@ -796,11 +871,21 @@ router.patch('/:id/stav', vyzadovatAdmina, async (req, res) => {
         );
         await client.query('DELETE FROM poukazy_pouziti WHERE objednavka_id = $1', [req.params.id]);
       }
+
+      // Faktura zůstává, zruší ji opravný doklad (storno) - ve stejné transakci,
+      // takže zrušení bez storna (nebo storno bez zrušení) nevznikne.
+      storno = await vystavitStorno(client, req.params.id);
     }
 
     await client.query('UPDATE objednavky SET stav = $1 WHERE id = $2', [stav, req.params.id]);
+    // Okamžik úhrady / expedice / dodání / zrušení - jen poprvé, dřívější se nepřepíše
+    // a z jednoho stavu se nic neodvozuje (doručeno neznamená zaplaceno apod.)
+    const sloupecCasu = CAS_STAVU[stav];
+    if (sloupecCasu && stav !== puvodniStav) {
+      await client.query(`UPDATE objednavky SET ${sloupecCasu} = COALESCE(${sloupecCasu}, NOW()) WHERE id = $1`, [req.params.id]);
+    }
     await client.query('COMMIT');
-    res.json({ zprava: 'Stav aktualizovan' });
+    res.json({ zprava: 'Stav aktualizovan', storno_cislo: storno && storno.doklad ? storno.doklad.cislo : null });
 
     // E-mail zákazníkovi o změně stavu - až po COMMITu, ať prodleva/chyba s
     // odesláním neblokuje odpověď adminovi (stejný vzor jako u potvrzení
@@ -830,11 +915,14 @@ router.patch('/:id/stav', vyzadovatAdmina, async (req, res) => {
 // jen maže záznam z přehledu. objednavky_polozky nemá ON DELETE CASCADE
 // (FK delete_rule = NO ACTION), takže se musí smazat ručně před řádkem
 // objednávky, jinak by DELETE selhal na porušení cizího klíče.
+// Objednávka s vystavenou fakturou se nemaže nikdy - faktura je doklad a v číselné
+// řadě by po ní zůstala díra. FOR UPDATE se serializuje s vystavením čísla
+// (vystavitFakturu zamyká stejný řádek), takže souběžný tisk ochranu neobejde.
 router.delete('/:id', vyzadovatAdmina, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const objednavka = await client.query('SELECT stav FROM objednavky WHERE id=$1 FOR UPDATE', [req.params.id]);
+    const objednavka = await client.query('SELECT stav, faktura_cislo FROM objednavky WHERE id=$1 FOR UPDATE', [req.params.id]);
     if (!objednavka.rows.length) {
       await client.query('ROLLBACK');
       return res.status(404).json({ chyba: 'Objednávka nenalezena.' });
@@ -842,6 +930,10 @@ router.delete('/:id', vyzadovatAdmina, async (req, res) => {
     if (objednavka.rows[0].stav !== 'zrusena') {
       await client.query('ROLLBACK');
       return res.status(400).json({ chyba: 'Smazat lze jen již zrušenou objednávku.' });
+    }
+    if (objednavka.rows[0].faktura_cislo) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ chyba: `Objednávku nelze smazat – je k ní vystavená faktura ${objednavka.rows[0].faktura_cislo}. Faktura je účetní doklad a musí zůstat v evidenci.` });
     }
     await client.query('DELETE FROM objednavky_polozky WHERE objednavka_id=$1', [req.params.id]);
     await client.query('DELETE FROM poukazy_pouziti WHERE objednavka_id=$1', [req.params.id]);

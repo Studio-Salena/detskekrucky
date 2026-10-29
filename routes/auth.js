@@ -400,6 +400,13 @@ router.put('/zakaznici/:id', vyzadovatAdmina, async (req, res) => {
 // Smazat zákazníka
 router.delete('/zakaznici/:id', vyzadovatAdmina, async (req, res) => {
   try {
+    // Objednávky s fakturou nesmí zmizet ani přes smazání zákazníka. Cizí klíč
+    // objednávek se nezakládá v repozitáři (tabulka je z doby Supabase), proto
+    // se tu na něj nespoléháme a kontrolujeme výslovně.
+    const fakturovane = await pool.query('SELECT faktura_cislo FROM objednavky WHERE zakaznik_id=$1 AND faktura_cislo IS NOT NULL ORDER BY faktura_cislo LIMIT 1', [req.params.id]);
+    if (fakturovane.rows.length) {
+      return res.status(400).json({ chyba: `Zákazníka nelze smazat – má objednávku s vystavenou fakturou ${fakturovane.rows[0].faktura_cislo}. Faktura musí zůstat v evidenci.` });
+    }
     const result = await pool.query('DELETE FROM zakaznici WHERE id=$1 RETURNING id', [req.params.id]);
     if (!result.rows.length) return res.status(404).json({ chyba: 'Zákazník nenalezen.' });
     res.json({ ok: true });

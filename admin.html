@@ -2005,6 +2005,8 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     <div class="modal-footer">
       <button class="btn btn-print no-print" onclick="tiskObjednavky()">🖨️ Tisk</button>
       <button class="btn btn-outline no-print" id="btnPoslatFakturu" onclick="poslatFakturu()">📧 Poslat fakturu</button>
+      <button class="btn btn-print no-print" id="btnTiskStorna" onclick="tiskStorna()" hidden>🖨️ Opravný doklad</button>
+      <button class="btn btn-outline no-print" id="btnPoslatStorno" onclick="poslatStorno()" hidden>📧 Poslat opravný doklad</button>
       <button class="btn btn-outline" onclick="closeModal('modalDetailObj')">Zavřít</button>
     </div>
   </div>
@@ -2473,17 +2475,23 @@ function filtrovatObjednavky(stav, btn) {
 // selectEl (volitelný) - <select> odkud změna přišla; při chybě se vrátí na
 // původní hodnotu, ať UI neukazuje stav, který server ve skutečnosti odmítl.
 async function zmenitStav(id, stav, selectEl) {
+  // Zrušení nejde vrátit - vrací sklad i poukaz a k faktuře vystaví opravný doklad
+  if (stav === 'zrusena' && !confirm('Opravdu zrušit objednávku?\n\nZboží se vrátí na sklad, uplatněný dárkový poukaz se vrátí zákazníkovi a pokud je vystavená faktura, vznikne k ní opravný doklad (storno). Zrušení nejde vrátit zpět.')) {
+    if (selectEl && selectEl.dataset.puvodni) selectEl.value = selectEl.dataset.puvodni;
+    return false;
+  }
   try {
     const res = await adminFetch(API+'/objednavky/'+id+'/stav', {
       method:'PATCH', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({stav})
     });
+    const data = await res.json().catch(()=>({}));
     if (!res.ok) {
-      const data = await res.json().catch(()=>({}));
       alert('❌ ' + (data.chyba || 'Nepodařilo se změnit stav objednávky.'));
       if (selectEl && selectEl.dataset.puvodni) selectEl.value = selectEl.dataset.puvodni;
       return false;
     }
+    if (data.storno_cislo) alert('↩️ K faktuře byl vystaven opravný doklad ' + data.storno_cislo + '.\nVytisknout nebo poslat zákazníkovi ho můžete v detailu objednávky.');
     if (selectEl) selectEl.dataset.puvodni = stav;
     checkNoveObjednavky();
     return true;
@@ -2527,11 +2535,21 @@ async function detailObjednavky(id) {
         <td><strong style="color:var(--brown);font-size:1.1rem">${data.celkem.toLocaleString('cs-CZ')} Kč</strong></td></tr>
       </tbody></table>
       ${data.poznamka?`<div class="info-box" style="margin-top:12px">📝 ${escH(data.poznamka)}</div>`:''}
-      ${data.faktura_cislo?`<div class="info-box" style="margin-top:12px">🧾 Faktura ${escH(data.faktura_cislo)}${data.faktura_odeslano?` · odeslaná zákazníkovi ${new Date(data.faktura_odeslano).toLocaleString('cs-CZ')}`:' · zatím neodeslaná e-mailem'}</div>`:''}`;
+      ${(data.zaplaceno_at||data.expedovano_at||data.dodano_at)?`<div class="info-box" style="margin-top:12px">📅 ${[
+        data.zaplaceno_at?`Zaplaceno ${new Date(data.zaplaceno_at).toLocaleDateString('cs-CZ')}`:'',
+        data.expedovano_at?`Odesláno ${new Date(data.expedovano_at).toLocaleDateString('cs-CZ')}`:'',
+        data.dodano_at?`Doručeno ${new Date(data.dodano_at).toLocaleDateString('cs-CZ')} (označeno v adminu)`:''
+      ].filter(Boolean).join(' · ')}</div>`:''}
+      ${data.faktura_cislo?`<div class="info-box" style="margin-top:12px">🧾 Faktura ${escH(data.faktura_cislo)}${data.faktura_ulozena?'':' · <strong>historická</strong> – originál není uložený, tisk jen jako označená rekonstrukce, e-mailem nejde'}${data.faktura_odeslano?` · odeslaná zákazníkovi ${new Date(data.faktura_odeslano).toLocaleString('cs-CZ')}`:(data.faktura_ulozena?' · zatím neodeslaná e-mailem':'')}${data.storno?`<br>↩️ Stornována opravným dokladem <strong>${escH(data.storno.cislo)}</strong> z ${new Date(data.storno.datum_vystaveni).toLocaleDateString('cs-CZ')}${data.storno_odeslano?` · odeslaný zákazníkovi ${new Date(data.storno_odeslano).toLocaleString('cs-CZ')}`:' · zatím neodeslaný e-mailem'}`:(data.stav==='zrusena'?'<br>⚠️ Objednávka byla zrušena, ale opravný doklad k faktuře v systému není – dořešte s účetní.':'')}</div>`:''}`;
     const btnF = document.getElementById('btnPoslatFakturu');
-    btnF.hidden = data.stav === 'zrusena' || !data.email;
+    btnF.hidden = data.stav === 'zrusena' || !data.email || (!!data.faktura_cislo && !data.faktura_ulozena);
     btnF.dataset.email = data.email || '';
     btnF.dataset.poslano = data.faktura_odeslano ? new Date(data.faktura_odeslano).toLocaleString('cs-CZ') : '';
+    document.getElementById('btnTiskStorna').hidden = !data.storno;
+    const btnS = document.getElementById('btnPoslatStorno');
+    btnS.hidden = !data.storno || !data.email;
+    btnS.dataset.email = data.email || '';
+    btnS.dataset.poslano = data.storno_odeslano ? new Date(data.storno_odeslano).toLocaleString('cs-CZ') : '';
     openModal('modalDetailObj');
   } catch(e) { alert('Chyba'); }
 }
@@ -2703,7 +2721,42 @@ async function poslatFakturu() {
     const res = await adminFetch(API+'/objednavky/'+id+'/faktura-email', {method:'POST'});
     const data = await res.json().catch(() => ({}));
     if (!res.ok) { alert('❌ ' + (data.chyba || 'Fakturu se nepodařilo odeslat.')); return; }
-    alert('✅ Faktura ' + data.faktura_cislo + ' odeslána na ' + data.email + '.');
+    alert('✅ Faktura ' + data.faktura_cislo + ' předána k odeslání na ' + data.email + '.' + (data.varovani ? '\n\n⚠️ ' + data.varovani : ''));
+    detailObjednavky(id);
+  } catch(e) { alert('❌ Chyba spojení'); }
+  finally { btn.disabled = false; btn.textContent = puvodni; }
+}
+
+// Opravný doklad (storno faktury) - vzniká sám při zrušení objednávky s fakturou
+async function tiskStorna() {
+  const id = aktivniDetailObjId;
+  if (!id) return;
+  const printWin = window.open('','_blank');
+  try {
+    const res = await adminFetch(API+'/objednavky/'+id+'/storno-html', {method:'POST'});
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.chyba || 'Chyba');
+    printWin.document.write(data.html);
+    printWin.document.close();
+    printWin.focus();
+    printWin.print();
+  } catch(e) { if (printWin) printWin.close(); alert('Chyba tisku opravného dokladu: ' + e.message); }
+}
+
+async function poslatStorno() {
+  const id = aktivniDetailObjId;
+  if (!id) return;
+  const btn = document.getElementById('btnPoslatStorno');
+  const znovu = btn.dataset.poslano ? '\n\nDoklad už byl odeslaný ' + btn.dataset.poslano + ' – pošle se znovu.' : '';
+  if (!confirm('Poslat opravný doklad na ' + (btn.dataset.email || 'e-mail zákazníka') + '?' + znovu)) return;
+  btn.disabled = true;
+  const puvodni = btn.textContent;
+  btn.textContent = 'Odesílám…';
+  try {
+    const res = await adminFetch(API+'/objednavky/'+id+'/storno-email', {method:'POST'});
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { alert('❌ ' + (data.chyba || 'Opravný doklad se nepodařilo odeslat.')); return; }
+    alert('✅ Opravný doklad ' + data.storno_cislo + ' předán k odeslání na ' + data.email + '.' + (data.varovani ? '\n\n⚠️ ' + data.varovani : ''));
     detailObjednavky(id);
   } catch(e) { alert('❌ Chyba spojení'); }
   finally { btn.disabled = false; btn.textContent = puvodni; }

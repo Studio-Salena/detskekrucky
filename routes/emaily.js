@@ -7,7 +7,7 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const ODESILATEL = 'Dětské krůčky <info@detskekrucky.cz>';
 const MAJITELKA_EMAIL = 'info@detskekrucky.cz';
 const { ziskatPravniTexty, ODKAZY } = require('../lib/pravniTexty');
-const { fakturaHtml, fakturaObsahHtml } = require('../lib/faktura');
+const { obsahDokumentu } = require('../lib/faktura');
 
 if (!RESEND_API_KEY) {
   console.error('CHYBA: RESEND_API_KEY neni nastaven v promennych prostredi! Odesilani emailu nebude fungovat.');
@@ -302,24 +302,42 @@ async function odeslat_potvrzeni(objednavka) {
   console.log('Email odoslan na:', objednavka.email);
 }
 
-// Faktura zákazníkovi - posílá se jen na klik v adminu. Faktura je v těle
-// e-mailu a ještě jako příloha (HTML, jde otevřít a vytisknout / uložit do PDF).
-async function odeslat_fakturu(objednavka, faktura) {
-  const cisloObj = objednavka.cislo || objednavka.id;
+// Faktura zákazníkovi - posílá se jen na klik v adminu, a to výhradně uložená
+// podoba dokladu (html z tabulky faktury, beze změny): v těle e-mailu její obsah,
+// v příloze celý dokument (jde otevřít a vytisknout / uložit do PDF).
+async function odeslat_fakturu({ email, jmeno, cislo_objednavky, faktura_cislo, html }) {
   const obsahHtml = `
-    <p style="margin:0 0 4px 0;font-size:15px">Ahoj ${escH(objednavka.jmeno)},</p>
-    <p style="margin:0 0 20px 0;font-size:14px;color:${BARVA_TEXT_TLUMENY}">posíláme fakturu k objednávce #${escH(cisloObj)}. Najdete ji níže a v příloze tohoto e-mailu. Děkujeme za nákup!</p>
-    ${fakturaObsahHtml(objednavka, faktura)}`;
+    <p style="margin:0 0 4px 0;font-size:15px">Ahoj ${escH(jmeno)},</p>
+    <p style="margin:0 0 20px 0;font-size:14px;color:${BARVA_TEXT_TLUMENY}">posíláme fakturu k objednávce #${escH(cislo_objednavky)}. Najdete ji níže a v příloze tohoto e-mailu. Děkujeme za nákup!</p>
+    ${obsahDokumentu(html)}`;
   await odeslatEmail({
-    to: objednavka.email,
-    subject: `Faktura ${faktura.faktura_cislo} k objednávce #${cisloObj} – Dětské krůčky`,
-    html: obalitBrandovanyEmail({ nadpis: `Faktura ${escH(faktura.faktura_cislo)}`, obsahHtml }),
+    to: email,
+    subject: `Faktura ${faktura_cislo} k objednávce #${cislo_objednavky} – Dětské krůčky`,
+    html: obalitBrandovanyEmail({ nadpis: `Faktura ${escH(faktura_cislo)}`, obsahHtml }),
     attachments: [{
-      filename: `faktura-${String(faktura.faktura_cislo).replace(/[^A-Za-z0-9-]/g, '')}.html`,
-      content: Buffer.from(fakturaHtml(objednavka, faktura), 'utf8').toString('base64')
+      filename: `faktura-${String(faktura_cislo).replace(/[^A-Za-z0-9-]/g, '')}.html`,
+      content: Buffer.from(html, 'utf8').toString('base64')
     }]
   });
-  console.log('Faktura odeslána k objednávce #', cisloObj);
+  console.log('Faktura odeslána k objednávce #', cislo_objednavky);
+}
+
+// Opravný doklad (storno faktury) po zrušení objednávky - stejně jako faktura
+async function odeslat_storno({ email, jmeno, cislo_objednavky, storno_cislo, faktura_cislo, html }) {
+  const obsahHtml = `
+    <p style="margin:0 0 4px 0;font-size:15px">Ahoj ${escH(jmeno)},</p>
+    <p style="margin:0 0 20px 0;font-size:14px;color:${BARVA_TEXT_TLUMENY}">objednávka #${escH(cislo_objednavky)} byla zrušena. Posíláme opravný doklad, který ruší fakturu ${escH(faktura_cislo)}. Najdete ho níže a v příloze tohoto e-mailu.</p>
+    ${obsahDokumentu(html)}`;
+  await odeslatEmail({
+    to: email,
+    subject: `Opravný doklad ${storno_cislo} (storno faktury ${faktura_cislo}) – Dětské krůčky`,
+    html: obalitBrandovanyEmail({ nadpis: `Opravný doklad ${escH(storno_cislo)}`, obsahHtml }),
+    attachments: [{
+      filename: `opravny-doklad-${String(storno_cislo).replace(/[^A-Za-z0-9-]/g, '')}.html`,
+      content: Buffer.from(html, 'utf8').toString('base64')
+    }]
+  });
+  console.log('Opravný doklad odeslán k objednávce #', cislo_objednavky);
 }
 
 // Upozornění majitelce o nové objednávce z e-shopu
@@ -678,4 +696,4 @@ async function odeslat_test(komu) {
   });
 }
 
-module.exports = { odeslat_fakturu, odeslat_potvrzeni, odeslat_upozorneni_objednavky, odeslat_email_zmena_stavu, odeslat_potvrzeni_rezervace, odeslat_potvrzeni_terminu, odeslat_upozorneni_rezervace, odeslat_potvrzeni_vratky, odeslat_upozorneni_vratky, odeslat_potvrzeni_poradna, odeslat_upozorneni_poradna, odeslat_upozorneni_zadost_poukaz, odeslat_poukaz_zakaznikovi, odeslat_overeni_emailu, odeslat_test, escH };
+module.exports = { odeslat_fakturu, odeslat_storno,odeslat_potvrzeni, odeslat_upozorneni_objednavky, odeslat_email_zmena_stavu, odeslat_potvrzeni_rezervace, odeslat_potvrzeni_terminu, odeslat_upozorneni_rezervace, odeslat_potvrzeni_vratky, odeslat_upozorneni_vratky, odeslat_potvrzeni_poradna, odeslat_upozorneni_poradna, odeslat_upozorneni_zadost_poukaz, odeslat_poukaz_zakaznikovi, odeslat_overeni_emailu, odeslat_test, escH };

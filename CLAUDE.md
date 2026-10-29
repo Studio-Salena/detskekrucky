@@ -23,6 +23,8 @@ Web a e-shop pro obchod s barefoot obuví pro děti (majitelka: Monika Škarpich
 - `lib/zasilkovnaApi.js` – podání zásilky + štítek PDF (XML API, env `ZASILKOVNA_API_HESLO` – tajné, 32 znaků; jen na klik v adminu)
 - `lib/gls.js`, `lib/glsVydejniMista.js` – GLS připravené, ale VYPNUTÉ (bez ceny se zákazníkům nenabízí, MyGLS API se nevolá)
 - `lib/nakupniFaktury.js`, `routes/nakupniFaktury.js` – nákupní faktury v Účetnictví
+- `lib/faktura.js` (šablona), `lib/vystaveniFaktury.js` – faktury k objednávkám: tabulka `faktury` (snímek + HTML + otisk, trigger zakazuje změnu i smazání), řada RRRRNNN; zrušení objednávky s fakturou vystaví ve stejné transakci opravný doklad (`druh = 'storno'`, řada ODRRRRNNN). Objednávku ani zákazníka s fakturou nejde smazat. Faktury z doby před ukládáním (např. 2026004) jsou „historické“ – tisk jen jako označená rekonstrukce
+- `lib/poukazPlatnost.js` – platnost dárkového poukazu (celý poslední den včetně, český čas), e-shop i prodejna
 - `admin.html` – administrace (heslo v env `ADMIN_HESLO` na Renderu, není v repozitáři); stránky přes `showPage(stranka, el, pohled)`, záložky přes `data-pohled`
 - Tabulka `nastaveni` (JSONB) – editovatelné texty webu (`textyWebu`, `procBarefoot`, `vyberteSi`), doprava, katalog
 - `rezervace_sloty`, `rezervace` – rezervační systém

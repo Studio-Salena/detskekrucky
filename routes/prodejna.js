@@ -3,6 +3,7 @@ const router = express.Router();
 const pool = require('../db/pool');
 const { pripravit } = require('../lib/startServeru');
 const vyzadovatAdmina = require('../middleware/adminAuth');
+const { poukazPoPlatnosti } = require('../lib/poukazPlatnost');
 
 // Vše v tomto souboru je admin-only (prodejna i vratky jsou interní data)
 router.use(vyzadovatAdmina);
@@ -96,7 +97,7 @@ async function prodejSDoplatkem(req, res) {
     const poukaz = nalezeny.rows[0];
     const chyba = !poukaz ? 'Poukaz nebyl nalezen.'
       : poukaz.stav !== 'aktivni' || Number(poukaz.zustatek) <= 0 ? 'Poukaz už není aktivní.'
-      : new Date(poukaz.platnost_do) < new Date(new Date().toISOString().slice(0, 10)) ? 'Platnost poukazu vypršela.'
+      : poukazPoPlatnosti(poukaz.platnost_do) ? 'Platnost poukazu vypršela.'
       : Number(poukaz.zustatek) >= zaZbozi ? 'Poukaz pokryje celý nákup – zvolte platbu jen dárkovým poukazem.'
       : null;
     if (chyba) { await client.query('ROLLBACK'); return res.status(400).json({ chyba }); }

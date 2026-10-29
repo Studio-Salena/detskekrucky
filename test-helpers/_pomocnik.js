@@ -45,6 +45,8 @@ function vytvoritMockClient(stav) {
       if (stav.callLog) stav.callLog.push({ sql: s, params });
 
       if (s.startsWith('ALTER TABLE')) return {};
+      // migrace (tabulky, triggery) - v paměťové DB nic nedělají
+      if (s.startsWith('CREATE') || s.startsWith('SELECT pg_advisory_xact_lock(')) return {};
       // Nastavení dopravy (lib/doprava.js) - bez uloženého platí výchozí ceny
       if (s === "SELECT hodnota FROM nastaveni WHERE klic = 'doprava'") {
         return { rows: stav.nastaveniDopravy ? [{ hodnota: stav.nastaveniDopravy }] : [] };
@@ -204,9 +206,6 @@ function vytvoritMockClient(stav) {
         const o = stav.objednavky.find(o => o.id === Number(params[0]));
         return { rows: o ? [{ ...o, ...udajeObjednavky(o), poukaz_kod: null }] : [] };
       }
-      if (s.startsWith('SELECT op.*, p.nazev, p.znacka FROM objednavky_polozky op')) {
-        return { rows: stav.objednavkyPolozky.filter(p => String(p.objednavka_id) === String(params[0])) };
-      }
 
       if (s.startsWith('INSERT INTO objednavky_cislovani')) {
         const [rok] = params;
@@ -279,6 +278,11 @@ function vytvoritMockClient(stav) {
         const o = stav.objednavky.find(o => o.id === Number(id));
         return { rows: o ? [{ stav: o.stav }] : [] };
       }
+      if (s.startsWith('SELECT stav, faktura_cislo FROM objednavky WHERE')) {
+        const [id] = params;
+        const o = stav.objednavky.find(o => o.id === Number(id));
+        return { rows: o ? [{ stav: o.stav, faktura_cislo: o.faktura_cislo || null }] : [] };
+      }
       if (s.startsWith('DELETE FROM objednavky_polozky WHERE')) {
         const [objednavka_id] = params;
         stav.objednavkyPolozky = stav.objednavkyPolozky.filter(p => String(p.objednavka_id) !== String(objednavka_id));
@@ -300,14 +304,17 @@ function vytvoritMockClient(stav) {
         const o = stav.objednavky.find(o => o.id === Number(id));
         return { rows: o ? [{ faktura_cislo: o.faktura_cislo || null, faktura_datum: o.faktura_datum || null }] : [] };
       }
-      if (s.startsWith('INSERT INTO faktury_cislovani')) {
+      // Roční číselné řady faktur a opravných dokladů (storno)
+      const rada = /^(?:INSERT INTO|UPDATE) (faktury_cislovani|opravne_doklady_cislovani)/.exec(s);
+      const pocitadla = rada && (rada[1] === 'faktury_cislovani' ? stav.fakturyCislovani : stav.stornoCislovani);
+      if (rada && s.startsWith('INSERT')) {
         const [rok] = params;
-        if (!stav.fakturyCislovani.find(f => f.rok === rok)) stav.fakturyCislovani.push({ rok, posledni_cislo: 0 });
+        if (!pocitadla.find(f => f.rok === rok)) pocitadla.push({ rok, posledni_cislo: 0 });
         return {};
       }
-      if (s.startsWith('UPDATE faktury_cislovani SET posledni_cislo')) {
+      if (rada) {
         const [rok] = params;
-        const f = stav.fakturyCislovani.find(f => f.rok === rok);
+        const f = pocitadla.find(f => f.rok === rok);
         f.posledni_cislo++;
         return { rows: [{ posledni_cislo: f.posledni_cislo }] };
       }
@@ -315,6 +322,52 @@ function vytvoritMockClient(stav) {
         const [cislo, datum, id] = params;
         const o = stav.objednavky.find(o => o.id === Number(id));
         if (o) { o.faktura_cislo = cislo; o.faktura_datum = datum; }
+        return {};
+      }
+
+      // Položky objednávky (detail i faktura, LEFT JOIN produkty) - jako repozitářové schéma: položka
+      // nemá vlastní název, název je z katalogu; produkt_smazan = produkt už v katalogu není
+      if (s.startsWith('SELECT op.*, p.nazev AS produkt_nazev, p.znacka AS produkt_znacka FROM objednavky_polozky op LEFT JOIN produkty p')) {
+        return { rows: stav.objednavkyPolozky.filter(p => String(p.objednavka_id) === String(params[0])).map(({ nazev, znacka, produkt_smazan, ...p }) => ({
+          ...p, produkt_nazev: produkt_smazan ? null : (nazev ?? null), produkt_znacka: produkt_smazan ? null : (znacka ?? null)
+        })) };
+      }
+      // Uložené faktury (lib/vystaveniFaktury.js)
+      const druhDokladu = /AND druh = '(\w+)'/.exec(s);
+      if (s.startsWith('SELECT * FROM faktury WHERE objednavka_id')) {
+        return { rows: stav.faktury.filter(f => String(f.objednavka_id) === String(params[0]) && f.druh === druhDokladu[1]) };
+      }
+      if (s.startsWith('SELECT cislo, datum_vystaveni FROM faktury WHERE objednavka_id')) {
+        return { rows: stav.faktury.filter(f => String(f.objednavka_id) === String(params[0]) && f.druh === druhDokladu[1]).map(({ cislo, datum_vystaveni }) => ({ cislo, datum_vystaveni })) };
+      }
+      if (s.startsWith('SELECT cislo, datum_vystaveni, sablona_verze FROM faktury WHERE objednavka_id')) {
+        return { rows: stav.faktury.filter(f => String(f.objednavka_id) === String(params[0]) && f.druh === 'faktura').map(({ cislo, datum_vystaveni, sablona_verze }) => ({ cislo, datum_vystaveni, sablona_verze })) };
+      }
+      if (s.startsWith('INSERT INTO faktury (')) {
+        const [objednavka_id, druh, cislo, datum_vystaveni, data, html, html_sha256, sablona_verze] = params;
+        if (stav.selhatZapisDokladu) throw new Error('simulované selhání zápisu dokladu');
+        if (stav.faktury.some(f => (String(f.objednavka_id) === String(objednavka_id) && f.druh === druh) || f.cislo === cislo)) {
+          throw Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505' });
+        }
+        const radek = { id: stav.faktury.length + 1, objednavka_id: Number(objednavka_id), druh, cislo, datum_vystaveni, data: JSON.parse(data), html, html_sha256, sablona_verze };
+        stav.faktury.push(radek);
+        return { rows: [radek] };
+      }
+      if (s.startsWith('UPDATE objednavky SET storno_odeslano = NOW() WHERE id = $1')) {
+        const o = stav.objednavky.find(o => o.id === Number(params[0]));
+        if (o) o.storno_odeslano = new Date();
+        return { rows: o ? [{ storno_odeslano: o.storno_odeslano }] : [] };
+      }
+      if (s.startsWith('UPDATE objednavky SET faktura_odeslano = NOW() WHERE id = $1')) {
+        if (stav.selhatZapisOdeslani) throw new Error('spojení s databází přerušeno');
+        const o = stav.objednavky.find(o => o.id === Number(params[0]));
+        if (o) o.faktura_odeslano = new Date();
+        return { rows: o ? [{ faktura_odeslano: o.faktura_odeslano }] : [] };
+      }
+      const cas = /^UPDATE objednavky SET (\w+_at) = COALESCE\(\1, NOW\(\)\) WHERE id = \$1$/.exec(s);
+      if (cas) {
+        const o = stav.objednavky.find(o => o.id === Number(params[0]));
+        if (o && !o[cas[1]]) o[cas[1]] = new Date();
         return {};
       }
 
@@ -336,7 +389,7 @@ function pocatecniStav() {
     sklad: [], poukazy: [],
     objednavky: [], dalsiObjednavkaId: 1,
     objednavkyPolozky: [], pohybySkladu: [], poukazyPouziti: [],
-    vratky: [], fakturyCislovani: [], objednavkyCislovani: []
+    vratky: [], fakturyCislovani: [], objednavkyCislovani: [], faktury: [], stornoCislovani: []
   };
 }
 
