@@ -140,6 +140,20 @@ body{background:var(--app-bg)}
 .rez-kalendar-legenda{font-size:0.75rem;color:var(--text-light);padding:4px 16px 12px;display:flex;align-items:center;gap:4px}
 .report-pozn{font-size:0.85rem;color:var(--text-light);margin:-6px 0 14px;max-width:80ch}
 @media(max-width:1199px){.stats-grid.rez-karty{grid-template-columns:repeat(3,minmax(0,1fr))}.rez-mrizka{grid-template-columns:1fr}}
+/* Termíny seskupené po dnech - den se rozbalí na jednotlivé časy */
+.slot-den{border-bottom:1px solid var(--app-line)}
+.slot-den > summary{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;cursor:pointer;list-style:none;font-size:0.9rem}
+.slot-den > summary::-webkit-details-marker{display:none}
+.slot-den > summary::before{content:'▸';color:var(--text-light);transition:transform .15s}
+.slot-den[open] > summary::before{transform:rotate(90deg)}
+.slot-den > summary:hover{background:var(--app-bg)}
+.slot-den > summary:focus-visible{outline:2px solid var(--sb-bg);outline-offset:-2px}
+.slot-den.minuly > summary{color:var(--text-light)}
+.slot-den-pocty{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+.slot-casy{display:flex;flex-wrap:wrap;gap:8px;padding:4px 16px 14px 36px}
+.slot-cas{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--app-line);border-radius:999px;padding:4px 6px 4px 12px;font-size:0.85rem;font-weight:700;background:#fff}
+.slot-cas.obsazeny{background:var(--app-bg);color:var(--text-light)}
+.slot-cas .btn{padding:2px 8px;min-height:0}
 @media(max-width:768px){.stats-grid.rez-karty{grid-template-columns:repeat(2,minmax(0,1fr))}.stats-grid.rez-karty > :last-child{grid-column:1/-1}.pohledy button{padding:9px 8px}.rez-den{min-height:46px;padding:4px}.rez-den-info{font-size:0.62rem}}
 
 /* WEB A NASTAVENÍ (etapa 4) */
@@ -6932,18 +6946,32 @@ function filtrovatSloty(f, btn) {
   vykreslitRezervaceStranky();
 }
 
+// Termíny po dnech: řádek = datum s počty, časy až po rozkliknutí (méně posouvání).
+// Rozbalené dny si pamatujeme, ať se po smazání termínu / obnovení nezavřou;
+// den vybraný v kalendáři se rozbalí sám.
+const slotyRozbaleneDny = new Set();
 function renderSloty(data) {
   const el = document.getElementById('slotTable');
   if (!data.length) { el.innerHTML='<div class="empty">Žádné termíny</div>'; return; }
   const sorted = [...data].sort((a,b)=>(a.datum+a.cas_od).localeCompare(b.datum+b.cas_od));
-  el.innerHTML = `<table><thead><tr><th>Datum</th><th>Čas</th><th>Stav</th><th>Akce</th></tr></thead><tbody>
-    ${sorted.map(s=>`<tr>
-      <td><strong>${formatDatum(s.datum)}</strong></td>
-      <td>${s.cas_od.slice(0,5)}–${s.cas_do.slice(0,5)}</td>
-      <td>${s.obsazeno ? '<span class="badge badge-zruseno">Obsazeno</span>' : '<span class="badge badge-ok">Volno</span>'}</td>
-      <td>${!s.obsazeno ? `<button class="btn btn-red btn-sm" onclick="smazatSlot(${s.id})">🗑️</button>` : ''}</td>
-    </tr>`).join('')}
-  </tbody></table>`;
+  const dny = new Map();
+  sorted.forEach(s => { if (!dny.has(s.datum)) dny.set(s.datum, []); dny.get(s.datum).push(s); });
+  const dnesIso = isoDatum(new Date());
+  const vybranyDen = String(rezObdobi).startsWith('den:') ? rezObdobi.slice(4) : null;
+  const NAZVY_DNU = ['neděle','pondělí','úterý','středa','čtvrtek','pátek','sobota'];
+  el.innerHTML = [...dny].map(([datum, sloty]) => {
+    const volne = sloty.filter(s => !s.obsazeno).length, obsazene = sloty.length - volne;
+    const den = NAZVY_DNU[new Date(datum + 'T12:00:00').getDay()];
+    const otevrit = slotyRozbaleneDny.has(datum) || datum === vybranyDen;
+    return `<details class="slot-den${datum < dnesIso ? ' minuly' : ''}" data-datum="${escAttr(datum)}"${otevrit ? ' open' : ''} ontoggle="slotyRozbaleneDny[this.open ? 'add' : 'delete'](this.dataset.datum)">
+      <summary><strong>${formatDatum(datum)}</strong> <span style="color:var(--text-light)">${den}${datum === dnesIso ? ' · dnes' : ''}</span>
+        <span class="slot-den-pocty">${volne ? `<span class="badge badge-ok">${volne} volno</span>` : ''}${obsazene ? `<span class="badge badge-zruseno">${obsazene} obsazeno</span>` : ''}</span>
+      </summary>
+      <div class="slot-casy">${sloty.map(s => `<span class="slot-cas${s.obsazeno ? ' obsazeny' : ''}" title="${s.obsazeno ? 'Obsazeno' : 'Volno'}">
+        ${s.cas_od.slice(0,5)}–${s.cas_do.slice(0,5)}${s.obsazeno ? ' · obsazeno' : ` <button class="btn btn-red btn-sm" onclick="smazatSlot(${s.id})" aria-label="Smazat termín ${formatDatum(datum)} ${s.cas_od.slice(0,5)}">🗑️</button>`}
+      </span>`).join('')}</div>
+    </details>`;
+  }).join('');
 }
 
 let rezFilter = 'vse';
