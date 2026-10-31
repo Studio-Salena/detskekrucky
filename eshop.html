@@ -680,6 +680,8 @@ footer {
 .cookie-bar {
   padding-bottom: max(16px, calc(12px + env(safe-area-inset-bottom)));
 }
+/* Dokud je cookie lišta vidět, košík a okna končí nad ní (výšku nastaví skript) */
+.cart-sidebar, .modal-overlay { bottom: var(--cookie-lista, 0px); }
 
 /* 7. Modal – scrollování na iOS */
 .modal, .checkout-modal {
@@ -4029,16 +4031,29 @@ async function dokoncitOvereniEmailu() {
 }
 
 // COOKIE LIŠTA
+// Dokud je lišta vidět, košík a okna končí nad ní (--cookie-lista), jinak by
+// zakryla tlačítko Objednat a tlačítka dole v objednávce
+function nastavitMistoCookieListy() {
+  const lista = document.getElementById('cookieBar');
+  const vyska = lista.style.display === 'none' ? 0 : lista.offsetHeight;
+  document.documentElement.style.setProperty('--cookie-lista', vyska + 'px');
+}
 function cookieAccept() {
   localStorage.setItem('cookieConsent', 'accepted');
   document.getElementById('cookieBar').style.display = 'none';
+  nastavitMistoCookieListy();
 }
 function cookieDecline() {
   localStorage.setItem('cookieConsent', 'declined');
   document.getElementById('cookieBar').style.display = 'none';
+  nastavitMistoCookieListy();
 }
 if (!localStorage.getItem('cookieConsent')) {
-  setTimeout(() => { document.getElementById('cookieBar').style.display = 'flex'; }, 1000);
+  setTimeout(() => {
+    document.getElementById('cookieBar').style.display = 'flex';
+    nastavitMistoCookieListy();
+    window.addEventListener('resize', nastavitMistoCookieListy);
+  }, 1000);
 }
 
 
