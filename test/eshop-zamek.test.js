@@ -1,55 +1,29 @@
-// Zámek e-shopu před spuštěním: bez náhledového klíče přesměrovat na eshop-brzy.html,
-// s klíčem pustit i v prohlížeči, který nedovolí localStorage (Messenger, anonymní okno)
+// E-shop je od 31. 10. 2026 spuštěný: žádný zámek ani noindex, tlačítko na webu
+// vede do e-shopu, e-shop je v sitemap a stará stránka „E-shop brzy“ přesměruje.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const vm = require('node:vm');
 
-const ESHOP = fs.readFileSync(path.join(__dirname, '..', 'eshop.html'), 'utf8');
-const ZAMEK = ESHOP.slice(ESHOP.indexOf('<script>') + 8, ESHOP.indexOf('</script>'));
+const cist = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const ESHOP = cist('eshop.html');
 
-function spustit({ search = '', uloziste = true, cookie = '' } = {}) {
-  const presmerovano = [];
-  const mapa = () => {
-    const m = new Map();
-    if (!uloziste) return { getItem() { throw new Error('blokováno'); }, setItem() { throw new Error('blokováno'); } };
-    return { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), m };
-  };
-  const ls = mapa(), ss = mapa();
-  const doc = { cookie };
-  vm.runInNewContext(ZAMEK, {
-    location: { search, replace: u => presmerovano.push(u) },
-    localStorage: ls, sessionStorage: ss, document: doc
-  });
-  return { presmerovano, ls, ss, doc };
-}
-
-test('zámek: blok je v hlavičce a stránka má noindex', () => {
-  assert.match(ZAMEK, /location\.replace\('eshop-brzy\.html'\)/);
-  assert.match(ESHOP, /<meta name="robots" content="noindex">/);
+test('spuštěno: eshop.html nemá zámek ani noindex', () => {
+  assert.doesNotMatch(ESHOP, /eshop-brzy\.html/);
+  assert.doesNotMatch(ESHOP, /<meta name="robots" content="noindex">/);
+  assert.doesNotMatch(ESHOP, /eshopNahled/);
 });
 
-test('zámek: bez klíče nebo se špatným klíčem přesměruje na odpočet', () => {
-  assert.deepEqual(spustit().presmerovano, ['eshop-brzy.html']);
-  assert.deepEqual(spustit({ search: '?nahled=spatne' }).presmerovano, ['eshop-brzy.html']);
-  assert.deepEqual(spustit({ uloziste: false }).presmerovano, ['eshop-brzy.html']);
+test('spuštěno: tlačítko Eshop na webu vede do e-shopu', () => {
+  const index = cist('index.html');
+  assert.match(index, /<a href="eshop\.html">🛒 Eshop<\/a>/);
+  assert.doesNotMatch(index, /href="eshop-brzy\.html"/);
 });
 
-test('zámek: s klíčem pustí a zapamatuje si ho (i s jinou velikostí písmen a mezerou na konci)', () => {
-  const r = spustit({ search: '?nahled=VhnxYyqF' });
-  assert.deepEqual(r.presmerovano, []);
-  assert.equal(r.ls.getItem('eshopNahled'), '1');
-  assert.equal(r.ss.getItem('eshopNahled'), '1');
-  assert.match(r.doc.cookie, /^eshopNahled=1; path=\//);
-  assert.deepEqual(spustit({ search: '?produkt=5&NAHLED=vhnxyyqf%20' }).presmerovano, []);
+test('spuštěno: e-shop je v sitemap.xml', () => {
+  assert.match(cist('sitemap.xml'), /<loc>https:\/\/www\.detskekrucky\.cz\/eshop\.html<\/loc>/);
 });
 
-test('zámek: s klíčem pustí i když prohlížeč blokuje úložiště; zapamatování přes cookie stačí', () => {
-  assert.deepEqual(spustit({ search: '?nahled=VhnxYyqF', uloziste: false }).presmerovano, []);
-  assert.deepEqual(spustit({ uloziste: false, cookie: 'a=b; eshopNahled=1' }).presmerovano, []);
-});
-
-test('zámek: ověření účtu z e-mailu projde', () => {
-  assert.deepEqual(spustit({ search: '?overeni=abc' }).presmerovano, []);
+test('spuštěno: stará adresa eshop-brzy.html přesměruje do e-shopu', () => {
+  assert.match(cist('eshop-brzy.html'), /<meta http-equiv="refresh" content="0; url=eshop\.html">/);
 });
