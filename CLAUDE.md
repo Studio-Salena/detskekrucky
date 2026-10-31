@@ -21,7 +21,7 @@ Web a e-shop pro obchod s barefoot obuví pro děti (majitelka: Monika Škarpich
 - `routes/doprava.js`, `lib/doprava.js` – způsoby dopravy a ceny (`nastaveni.doprava`, admin Nastavení → Doprava); cenu vždy počítá server
 - `lib/zasilkovna.js` – výběr výdejního místa (widget Packeta, env `ZASILKOVNA_API_KLIC` – veřejný klíč, 16 znaků)
 - `lib/zasilkovnaApi.js` – podání zásilky + štítek PDF (XML API, env `ZASILKOVNA_API_HESLO` – tajné, 32 znaků; jen na klik v adminu)
-- `lib/gls.js`, `lib/glsVydejniMista.js` – GLS připravené, ale VYPNUTÉ (bez ceny se zákazníkům nenabízí, MyGLS API se nevolá)
+- `lib/gls.js`, `lib/glsVydejniMista.js` – GLS: smlouva podepsaná, zákazníkům se nabízí, MyGLS API v ostrém prostředí (env `GLS_*` na Renderu, spojení ověřené 31. 10. 2026); podání a štítek na klik v detailu objednávky
 - `lib/nakupniFaktury.js`, `routes/nakupniFaktury.js` – nákupní faktury v Účetnictví
 - `lib/faktura.js` (šablona), `lib/vystaveniFaktury.js` – faktury k objednávkám: tabulka `faktury` (snímek + HTML + otisk, trigger zakazuje změnu i smazání), řada RRRRNNN; zrušení objednávky s fakturou vystaví ve stejné transakci opravný doklad (`druh = 'storno'`, řada ODRRRRNNN). Objednávku ani zákazníka s fakturou nejde smazat. Faktury z doby před ukládáním (např. 2026004) jsou „historické“ – tisk jen jako označená rekonstrukce
 - `lib/poukazPlatnost.js` – platnost dárkového poukazu (celý poslední den včetně, český čas), e-shop i prodejna
@@ -61,5 +61,5 @@ Web a e-shop pro obchod s barefoot obuví pro děti (majitelka: Monika Škarpich
 ## Co dál (typické priority)
 
 - Doplnit rozměry (mm) u modelů, které je nemají – bez nich průvodce nabízí poradnu
-- GLS: až bude smluvní ceník a přístupy k MyGLS
+- GLS: ověřit podání zásilky a štítek na první skutečné GLS objednávce
 - **Spuštění e-shopu:** do té doby je `eshop.html` zamčený (blok v `<head>` přesměruje na `eshop-brzy.html`, náhled přes `eshop.html?nahled=…`, klíč je v komentáři u bloku) a má `noindex`. Při spuštění oboje odstranit, tlačítko Eshop na `index.html` přepnout z `eshop-brzy.html` na `eshop.html` a přidat `eshop.html` do `sitemap.xml`.

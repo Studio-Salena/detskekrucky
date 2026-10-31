@@ -5348,6 +5348,7 @@ function tiskUctenkyData(prodej, cislo) {
     <div style="font-size:11px;margin-top:4px">Fyzická osoba zapsaná v živnostenském rejstříku vedeném MÚ Kroměříž.</div>
   </div>
   <div class="divider"></div>
+  <div class="row"><span>Účtenka č.:</span><span>${escH(cislo)}</span></div>
   <div class="row"><span>Datum:</span><span>${datum.toLocaleDateString('cs-CZ')}</span></div>
   <div class="row"><span>Čas:</span><span>${datum.toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})}</span></div>
   ${prodej.zakaznik?`<div class="row"><span>Zákazník:</span><span>${escH(prodej.zakaznik)}</span></div>`:''}
@@ -5381,6 +5382,8 @@ function tiskUctenkyData(prodej, cislo) {
   <div class="footer">
     <div class="divider"></div>
     <div>Děkujeme za nákup! 🦔</div>
+    <div>Tel.: 773 517 733</div>
+    <div>info@detskekrucky.cz</div>
     <div>www.detskekrucky.cz</div>
   </div>
   <script>window.onload=()=>{window.print();}<\/script>
