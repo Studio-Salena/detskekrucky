@@ -3934,13 +3934,42 @@ katalogStav = stavZUrl(location.search);
 nacistKategorieFiltru().then(() => { if (produktyNacteny) vykreslitKatalog(); });
 nacistProdukty();
 nacistNastaveniDopravy();
+// Text pruhu z adminu: [text](adresa) se zobrazí jako odkaz. Povolené jsou jen
+// adresy na našem webu (eshop.html, #kontakt…), https://, mailto: a tel: -
+// cokoli jiného zůstane obyčejným textem.
+function castiPruhu(text) {
+  const casti = [];
+  const vzor = /\[([^\[\]]+)\]\(([^()\s]+)\)/g;
+  let posledni = 0, m;
+  while ((m = vzor.exec(text))) {
+    const adresa = m[2];
+    const bezpecna = /^(https:\/\/|mailto:|tel:)/i.test(adresa) || (!/^[a-z][a-z0-9+.-]*:/i.test(adresa) && !adresa.startsWith('//'));
+    if (!bezpecna) continue;
+    if (m.index > posledni) casti.push({ text: text.slice(posledni, m.index) });
+    casti.push({ text: m[1], odkaz: adresa });
+    posledni = m.index + m[0].length;
+  }
+  if (posledni < text.length) casti.push({ text: text.slice(posledni) });
+  return casti;
+}
+function vykreslitPruh(pruh, text) {
+  pruh.textContent = '';
+  castiPruhu(text).forEach(c => {
+    if (!c.odkaz) { pruh.appendChild(document.createTextNode(c.text)); return; }
+    const a = document.createElement('a');
+    a.href = c.odkaz;
+    a.textContent = c.text;
+    a.style.cssText = 'color:inherit;text-decoration:underline;text-underline-offset:3px';
+    if (/^https:\/\//i.test(c.odkaz)) { a.target = '_blank'; a.rel = 'noopener'; }
+    pruh.appendChild(a);
+  });
+  pruh.hidden = !text.trim();
+}
 // Texty webu z adminu: pruh nad hlavičkou (prázdný = skrytý) a návod na měření pro detail boty
 fetch(API + '/nastaveni/texty').then(r => r.ok ? r.json() : null).then(data => {
   if (!data) return;
   if (typeof data.eshopPruh === 'string') {
-    const pruh = document.getElementById('eshopPruh');
-    pruh.textContent = data.eshopPruh;
-    pruh.hidden = !data.eshopPruh.trim();
+    vykreslitPruh(document.getElementById('eshopPruh'), data.eshopPruh);
   }
   if (Array.isArray(data.mereniKroky)) mereniKroky = data.mereniKroky;
 }).catch(() => {});

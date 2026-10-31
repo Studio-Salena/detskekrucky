@@ -2429,14 +2429,44 @@ document.querySelectorAll('nav a').forEach(a => {
     }
   }
 
+  // Text pruhu z adminu: [text](adresa) se zobrazí jako odkaz. Povolené jsou jen
+  // adresy na našem webu (eshop.html, #kontakt…), https://, mailto: a tel: -
+  // cokoli jiného zůstane obyčejným textem.
+  function castiPruhu(text) {
+    const casti = [];
+    const vzor = /\[([^\[\]]+)\]\(([^()\s]+)\)/g;
+    let posledni = 0, m;
+    while ((m = vzor.exec(text))) {
+      const adresa = m[2];
+      const bezpecna = /^(https:\/\/|mailto:|tel:)/i.test(adresa) || (!/^[a-z][a-z0-9+.-]*:/i.test(adresa) && !adresa.startsWith('//'));
+      if (!bezpecna) continue;
+      if (m.index > posledni) casti.push({ text: text.slice(posledni, m.index) });
+      casti.push({ text: m[1], odkaz: adresa });
+      posledni = m.index + m[0].length;
+    }
+    if (posledni < text.length) casti.push({ text: text.slice(posledni) });
+    return casti;
+  }
+  function vykreslitPruh(pruh, text) {
+    pruh.textContent = '';
+    castiPruhu(text).forEach(c => {
+      if (!c.odkaz) { pruh.appendChild(document.createTextNode(c.text)); return; }
+      const a = document.createElement('a');
+      a.href = c.odkaz;
+      a.textContent = c.text;
+      a.style.cssText = 'color:inherit;text-decoration:underline;text-underline-offset:3px';
+      if (/^https:\/\//i.test(c.odkaz)) { a.target = '_blank'; a.rel = 'noopener'; }
+      pruh.appendChild(a);
+    });
+    pruh.hidden = !text.trim();
+  }
+
   async function nacistTexty() {
     try {
       const res = await fetch('https://detskekrucky1.onrender.com/api/nastaveni/texty');
       const data = await res.json();
       if (typeof data.webPruh === 'string') {
-        const pruh = document.getElementById('promo-banner');
-        pruh.textContent = data.webPruh;
-        pruh.hidden = !data.webPruh.trim();
+        vykreslitPruh(document.getElementById('promo-banner'), data.webPruh);
       }
       if (data.procBarefoot) {
         const karty = document.querySelectorAll('.philo-card');
