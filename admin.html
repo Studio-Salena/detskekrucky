@@ -550,6 +550,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           <button type="button" class="nav-item" onclick="showPage('reporty',this,'trzby')"><span class="nav-text">Tržby</span></button>
           <button type="button" class="nav-item" onclick="showPage('prodejna',this,'prehledy')"><span class="nav-text">Prodeje</span></button>
           <button type="button" class="nav-item" onclick="showPage('reporty',this,'poukazy')"><span class="nav-text">Poukazy</span></button>
+          <button type="button" class="nav-item" onclick="showPage('reporty',this,'navstevnost')"><span class="nav-text">Návštěvnost</span></button>
           <button type="button" class="nav-item" onclick="showPage('ucetnictvi',this)"><span class="nav-text">Účetnictví</span></button>
           <button type="button" class="nav-item" onclick="showPage('ucetnictvi',this,'faktury')"><span class="nav-text">Nákupní faktury</span></button>
         </div>
@@ -932,6 +933,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <button type="button" role="tab" data-cil="trzby" onclick="prepnoutPohled('reporty','trzby')">Tržby</button>
         <button type="button" role="tab" onclick="showPage('prodejna',null,'prehledy')">Prodeje</button>
         <button type="button" role="tab" data-cil="poukazy" onclick="prepnoutPohled('reporty','poukazy')">Poukazy</button>
+        <button type="button" role="tab" data-cil="navstevnost" onclick="prepnoutPohled('reporty','navstevnost')">Návštěvnost</button>
         <button type="button" role="tab" onclick="showPage('ucetnictvi')">Účetnictví</button>
       </div>
 
@@ -964,6 +966,43 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <div class="table-wrap">
           <div class="table-header"><h3>📅 Poukazy po měsících</h3></div>
           <div id="reportPoukazyTabulka"><div class="loading">Načítám...</div></div>
+        </div>
+      </div>
+
+      <div data-pohled="navstevnost">
+        <p class="report-pozn">Měří se bez cookies a bez ukládání IP adres, proto se počítají i lidé, kteří cookies odmítnou. Návštěvník = unikátní za den (za delší období součet dnů). Roboti vyhledávačů se nepočítají, vaše návštěvy z prohlížeče, ve kterém jste přihlášená do administrace, také ne. Měří se od nasazení této funkce.</p>
+        <div class="filter-pills" id="navObdobi" role="group" aria-label="Období">
+          <button type="button" class="pill" data-obdobi="7" onclick="nastavitObdobiNavstevnosti('7')">7 dní</button>
+          <button type="button" class="pill active" data-obdobi="30" onclick="nastavitObdobiNavstevnosti('30')">30 dní</button>
+          <button type="button" class="pill" data-obdobi="mesic" onclick="nastavitObdobiNavstevnosti('mesic')">Tento měsíc</button>
+          <button type="button" class="pill" data-obdobi="minuly" onclick="nastavitObdobiNavstevnosti('minuly')">Minulý měsíc</button>
+          <button type="button" class="pill" data-obdobi="rok" onclick="nastavitObdobiNavstevnosti('rok')">12 měsíců</button>
+        </div>
+        <div class="stats-grid" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+          <div class="stat-card"><div class="stat-label">Návštěvníci</div><div class="stat-value" id="navStatNavstevnici">...</div><div class="stat-sub" id="navStatObdobi"></div></div>
+          <div class="stat-card"><div class="stat-label">Zobrazení stránek</div><div class="stat-value" id="navStatZobrazeni">...</div><div class="stat-sub" id="navStatZobrazeniSub"></div></div>
+          <div class="stat-card"><div class="stat-label">Zobrazení bot</div><div class="stat-value" id="navStatBoty">...</div><div class="stat-sub">otevřené detaily v e-shopu</div></div>
+          <div class="stat-card"><div class="stat-label">Objednávky z e-shopu</div><div class="stat-value" id="navStatObjednavky">...</div><div class="stat-sub" id="navStatKonverze"></div></div>
+        </div>
+        <div class="chart-wrap no-print">
+          <div class="chart-title" id="navGrafNadpis">📈 Návštěvníci po dnech</div>
+          <div class="bar-chart" id="navGraf"><div class="loading">Načítám...</div></div>
+        </div>
+        <div class="table-wrap">
+          <div class="table-header"><h3>👟 Nejprohlíženější boty</h3></div>
+          <div id="navProdukty"><div class="loading">Načítám...</div></div>
+        </div>
+        <div class="table-wrap">
+          <div class="table-header"><h3>📄 Stránky</h3></div>
+          <div id="navStranky"><div class="loading">Načítám...</div></div>
+        </div>
+        <div class="table-wrap">
+          <div class="table-header"><h3>🔗 Odkud lidé přicházejí</h3></div>
+          <div id="navZdroje"><div class="loading">Načítám...</div></div>
+        </div>
+        <div class="table-wrap">
+          <div class="table-header"><h3>📱 Zařízení</h3></div>
+          <div id="navZarizeni"><div class="loading">Načítám...</div></div>
         </div>
       </div>
     </div>
@@ -2092,6 +2131,7 @@ async function login() {
     });
     if (res.ok) {
       sessionStorage.setItem('adminHeslo', zadaneHeslo);
+      nepocitatMeVNavstevnosti();
       document.getElementById('loginOverlay').style.display = 'none';
       document.getElementById('adminWrap').style.display = 'flex';
       loadPrehled();
@@ -2105,7 +2145,12 @@ async function login() {
   }
 }
 function logout() { sessionStorage.removeItem('adminHeslo'); location.reload(); }
+// Prohlížeč majitelky se do návštěvnosti webu nepočítá (čte navstevnost.js)
+function nepocitatMeVNavstevnosti() {
+  try { localStorage.setItem('dkNepocitatNavstevy', '1'); } catch (e) {}
+}
 if (sessionStorage.getItem('adminHeslo')) {
+  nepocitatMeVNavstevnosti();
   document.getElementById('loginOverlay').style.display = 'none';
   document.getElementById('adminWrap').style.display = 'flex';
   loadPrehled();
@@ -6772,6 +6817,7 @@ function poslednichMesicu(n) {
 }
 
 async function loadReporty() {
+  loadNavstevnost();
   try {
     const [obj, prodejna, celySklad, poukazyPouziti, poukazy] = await Promise.all([
       adminFetch(API+'/objednavky').then(r=>r.json()).catch(()=>[]),
@@ -6853,6 +6899,109 @@ async function loadReporty() {
         ${radkyP.map(k => `<tr><td>${nazevMesice(k)}</td><td style="text-align:right">${pm[k].vydanoPocet}</td><td style="text-align:right">${kc(pm[k].vydano)}</td><td style="text-align:right">${kc(pm[k].uplatneno)}</td></tr>`).join('')}
         </tbody></table>`;
   } catch(e) { console.error(e); }
+}
+
+// NÁVŠTĚVNOST (Reporty -> Návštěvnost, server routes/navstevnost.js)
+let navObdobi = '30';
+let navPozadavek = 0;
+function rozsahNavstevnosti(obdobi) {
+  const dnes = new Date(); dnes.setHours(0, 0, 0, 0);
+  const pred = dny => { const d = new Date(dnes); d.setDate(d.getDate() - dny); return d; };
+  if (obdobi === '7') return [isoDatum(pred(6)), isoDatum(dnes)];
+  if (obdobi === 'mesic') return [isoDatum(new Date(dnes.getFullYear(), dnes.getMonth(), 1)), isoDatum(dnes)];
+  if (obdobi === 'minuly') return [isoDatum(new Date(dnes.getFullYear(), dnes.getMonth() - 1, 1)), isoDatum(new Date(dnes.getFullYear(), dnes.getMonth(), 0))];
+  if (obdobi === 'rok') return [isoDatum(new Date(dnes.getFullYear(), dnes.getMonth() - 11, 1)), isoDatum(dnes)];
+  return [isoDatum(pred(29)), isoDatum(dnes)];
+}
+function nastavitObdobiNavstevnosti(obdobi) {
+  navObdobi = obdobi;
+  document.querySelectorAll('#navObdobi .pill').forEach(p => p.classList.toggle('active', p.dataset.obdobi === obdobi));
+  loadNavstevnost();
+}
+const cisloCs = n => Number(n || 0).toLocaleString('cs-CZ');
+function tabulkaNavstevnosti(radky, sloupce, prazdne) {
+  if (!radky.length) return `<div class="empty">${prazdne}</div>`;
+  return `<table><thead><tr>${sloupce.map((s, i) => `<th${i ? ' style="text-align:right"' : ''}>${s.nazev}</th>`).join('')}</tr></thead><tbody>
+    ${radky.map(r => `<tr>${sloupce.map((s, i) => `<td${i ? ' style="text-align:right"' : ''}>${s.hodnota(r)}</td>`).join('')}</tr>`).join('')}
+    </tbody></table>`;
+}
+async function loadNavstevnost() {
+  const [od, doDne] = rozsahNavstevnosti(navObdobi);
+  const cislo_pozadavku = ++navPozadavek;
+  let data;
+  try {
+    const res = await adminFetch(`${API}/navstevnost/prehled?od=${od}&do=${doDne}`);
+    data = await res.json();
+    if (!res.ok) throw new Error(data.chyba || 'Chyba serveru');
+  } catch (e) {
+    if (cislo_pozadavku !== navPozadavek) return;
+    ['navProdukty', 'navStranky', 'navZdroje', 'navZarizeni', 'navGraf'].forEach(id => {
+      document.getElementById(id).innerHTML = `<div class="empty">Návštěvnost se nepodařilo načíst: ${escH(e.message)}</div>`;
+    });
+    return;
+  }
+  // starší odpověď (rychlé přepínání období) nepřepíše novější
+  if (cislo_pozadavku !== navPozadavek) return;
+
+  const s = data.souhrn;
+  const f = iso => new Date(iso + 'T00:00:00').toLocaleDateString('cs-CZ');
+  document.getElementById('navStatNavstevnici').textContent = cisloCs(s.navstevnici);
+  document.getElementById('navStatObdobi').textContent = `${f(od)} – ${f(doDne)}`;
+  document.getElementById('navStatZobrazeni').textContent = cisloCs(s.zobrazeni);
+  document.getElementById('navStatZobrazeniSub').textContent = s.navstevnici
+    ? `${(s.zobrazeni / s.navstevnici).toLocaleString('cs-CZ', { maximumFractionDigits: 1 })} na návštěvníka`
+    : 'načtení stránek';
+  document.getElementById('navStatBoty').textContent = cisloCs(s.zobrazeni_bot);
+  document.getElementById('navStatObjednavky').textContent = s.objednavky === null ? '—' : cisloCs(s.objednavky);
+  document.getElementById('navStatKonverze').textContent = s.navstevnici_eshop && s.objednavky !== null
+    ? `${(100 * s.objednavky / s.navstevnici_eshop).toLocaleString('cs-CZ', { maximumFractionDigits: 1 })} % z ${cisloCs(s.navstevnici_eshop)} návštěvníků e-shopu`
+    : 'bez zrušených';
+
+  // graf: po dnech, za delší období po měsících; dny bez návštěv jako nula
+  const podleDne = Object.fromEntries(data.dny.map(d => [d.den, d]));
+  const poMesicich = navObdobi === 'rok';
+  const sloupce = [];
+  for (let d = new Date(od + 'T00:00:00'); isoDatum(d) <= doDne; d.setDate(d.getDate() + 1)) {
+    const den = isoDatum(d);
+    const z = podleDne[den] || { navstevnici: 0, zobrazeni: 0 };
+    const klic = poMesicich ? den.slice(0, 7) : den;
+    const posledni = sloupce[sloupce.length - 1];
+    if (posledni && posledni.klic === klic) { posledni.navstevnici += z.navstevnici; posledni.zobrazeni += z.zobrazeni; }
+    else sloupce.push({ klic, navstevnici: z.navstevnici, zobrazeni: z.zobrazeni });
+  }
+  document.getElementById('navGrafNadpis').textContent = poMesicich ? '📈 Návštěvníci po měsících' : '📈 Návštěvníci po dnech';
+  const maxN = Math.max(...sloupce.map(x => x.navstevnici), 1);
+  const kazdy = Math.ceil(sloupce.length / 10); // popisek jen u každého n-tého sloupce, ať se nepřekrývají
+  document.getElementById('navGraf').innerHTML = s.zobrazeni + s.zobrazeni_bot === 0
+    ? '<div class="empty">Za toto období zatím žádné návštěvy</div>'
+    : sloupce.map((x, i) => {
+        const h = x.navstevnici ? Math.max((x.navstevnici / maxN) * 100, 4) : 1;
+        const popis = poMesicich ? `${MESICE_KRATCE[Number(x.klic.slice(5)) - 1]} ${x.klic.slice(2, 4)}` : `${Number(x.klic.slice(8))}. ${Number(x.klic.slice(5, 7))}.`;
+        const label = i % kazdy === 0 ? `<span class="bar-label">${popis}</span>` : '';
+        return `<div class="bar-item"><div class="bar" style="height:${h}%"><div class="bar-tooltip">${popis}: ${cisloCs(x.navstevnici)} návštěvníků · ${cisloCs(x.zobrazeni)} zobrazení</div>${label}</div></div>`;
+      }).join('');
+
+  document.getElementById('navProdukty').innerHTML = tabulkaNavstevnosti(data.produkty, [
+    { nazev: 'Bota', hodnota: r => r.nazev ? escH(`${r.znacka || ''} ${r.nazev}`.trim()) : `${escH(r.produkt)} <span style="color:var(--text-light)">(už není v katalogu)</span>` },
+    { nazev: 'Zobrazení', hodnota: r => cisloCs(r.zobrazeni) },
+    { nazev: 'Návštěvníci', hodnota: r => cisloCs(r.navstevnici) }
+  ], 'Zatím nikdo neotevřel detail boty');
+  document.getElementById('navStranky').innerHTML = tabulkaNavstevnosti(data.stranky, [
+    { nazev: 'Stránka', hodnota: r => escH(r.nazev) },
+    { nazev: 'Zobrazení', hodnota: r => cisloCs(r.zobrazeni) },
+    { nazev: 'Návštěvníci', hodnota: r => cisloCs(r.navstevnici) }
+  ], 'Za toto období žádná zobrazení');
+  document.getElementById('navZdroje').innerHTML = tabulkaNavstevnosti(data.zdroje, [
+    { nazev: 'Zdroj', hodnota: r => r.zdroj === 'Přímo' ? 'Přímo (záložka, napsaná adresa, aplikace)' : escH(r.zdroj) },
+    { nazev: 'Návštěvníci', hodnota: r => cisloCs(r.navstevnici) }
+  ], 'Za toto období žádné příchody');
+  const NAZVY_ZARIZENI = { mobil: '📱 Mobil', pocitac: '💻 Počítač', tablet: '📲 Tablet' };
+  const celkemZar = data.zarizeni.reduce((a, r) => a + r.navstevnici, 0) || 1;
+  document.getElementById('navZarizeni').innerHTML = tabulkaNavstevnosti(data.zarizeni, [
+    { nazev: 'Zařízení', hodnota: r => NAZVY_ZARIZENI[r.zarizeni] || escH(r.zarizeni) },
+    { nazev: 'Návštěvníci', hodnota: r => cisloCs(r.navstevnici) },
+    { nazev: 'Podíl', hodnota: r => Math.round(100 * r.navstevnici / celkemZar) + ' %' }
+  ], 'Za toto období žádné návštěvy');
 }
 
 function isoDatum(d) {

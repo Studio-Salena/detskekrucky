@@ -2776,6 +2776,8 @@ function openDetail(klic, { zHistorie = false } = {}) {
   const p = aktivniProdukt;
   const modal = document.getElementById('modalDetail');
   const uzOtevreny = modal.classList.contains('open');
+  // návštěvnost: zobrazení boty (navstevnost.js)
+  if (p.slug && window.dkNavsteva) window.dkNavsteva(p.slug);
   // Bota má vlastní adresu (?produkt=slug) - jde poslat odkazem a Zpět detail zavře.
   // Přechod na podobnou botu adresu jen přepíše, ať Zavřít vede rovnou do katalogu.
   if (!zHistorie && p.slug && katalogStav) {
@@ -4538,5 +4540,6 @@ window.addEventListener('scroll', () => {
 });
 </script>
 
+<script src="/navstevnost.js" defer></script>
 </body>
 </html>

@@ -25,6 +25,7 @@ Web a e-shop pro obchod s barefoot obuví pro děti (majitelka: Monika Škarpich
 - `lib/nakupniFaktury.js`, `routes/nakupniFaktury.js` – nákupní faktury v Účetnictví
 - `lib/faktura.js` (šablona), `lib/vystaveniFaktury.js` – faktury k objednávkám: tabulka `faktury` (snímek + HTML + otisk, trigger zakazuje změnu i smazání), řada RRRRNNN; zrušení objednávky s fakturou vystaví ve stejné transakci opravný doklad (`druh = 'storno'`, řada ODRRRRNNN). Objednávku ani zákazníka s fakturou nejde smazat. Faktury z doby před ukládáním (např. 2026004) jsou „historické“ – tisk jen jako označená rekonstrukce
 - `lib/poukazPlatnost.js` – platnost dárkového poukazu (celý poslední den včetně, český čas), e-shop i prodejna
+- `navstevnost.js` (na veřejných stránkách), `lib/navstevnost.js`, `routes/navstevnost.js` – návštěvnost bez cookies (admin Reporty → Návštěvnost): tabulka `navstevy` bez IP, návštěvník = otisk se solí platnou jeden den (`navstevnost_sul`), roboti a prohlížeč přihlášené majitelky (localStorage `dkNepocitatNavstevy`) se nepočítají
 - `admin.html` – administrace (heslo v env `ADMIN_HESLO` na Renderu, není v repozitáři); stránky přes `showPage(stranka, el, pohled)`, záložky přes `data-pohled`
 - Tabulka `nastaveni` (JSONB) – editovatelné texty webu (`textyWebu`, `procBarefoot`, `vyberteSi`), doprava, katalog
 - `rezervace_sloty`, `rezervace` – rezervační systém
@@ -62,4 +63,4 @@ Web a e-shop pro obchod s barefoot obuví pro děti (majitelka: Monika Škarpich
 
 - Doplnit rozměry (mm) u modelů, které je nemají – bez nich průvodce nabízí poradnu
 - GLS: ověřit podání zásilky a štítek na první skutečné GLS objednávce
-- **Spuštění e-shopu:** do té doby je `eshop.html` zamčený (blok v `<head>` přesměruje na `eshop-brzy.html`, náhled přes `eshop.html?nahled=…`, klíč je v komentáři u bloku) a má `noindex`. Při spuštění oboje odstranit, tlačítko Eshop na `index.html` přepnout z `eshop-brzy.html` na `eshop.html` a přidat `eshop.html` do `sitemap.xml`.
+- **E-shop je spuštěný od 31. 10. 2026** (zámek a noindex odstraněny, `eshop-brzy.html` jen přesměrovává na `eshop.html`)
