@@ -6,6 +6,8 @@
   var API = 'https://detskekrucky1.onrender.com/api/navstevnost';
 
   function nepocitat() {
+    // Web vložený jako náhled do jiné stránky (např. portfolio studiosalena.cz) není návštěva
+    try { if (window.self !== window.top) return true; } catch (e) { return true; }
     try { return localStorage.getItem('dkNepocitatNavstevy') === '1'; } catch (e) { return false; }
   }
 
