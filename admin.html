@@ -736,11 +736,14 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <div class="table-header"><h3>💳 Plastové dárkové karty</h3>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-outline btn-sm no-print" onclick="vygenerovatKarty()" title="Nová čísla a EAN kódy pro výrobu karet">+ Vygenerovat karty</button>
+            <button class="btn btn-outline btn-sm no-print" onclick="otevritTiskKaret()" title="Vytisknout karty na A4 (přední i zadní strana s čárovým kódem)">🖨️ Tisk karet</button>
+            <button class="btn btn-outline btn-sm no-print" onclick="prepnoutVzhledKarty()" title="Grafika přední a zadní strany karty">🎨 Vzhled karty</button>
             <button class="btn btn-csv btn-sm no-print" onclick="exportCSV('karty')">⬇ CSV</button>
             <button class="refresh-btn no-print" onclick="loadKarty()" aria-label="Načíst karty znovu">↻</button>
           </div>
         </div>
         <div style="padding:0 16px 16px">
+        <div id="vzhledKartyPanel" style="display:none;margin-top:12px"></div>
         <p style="color:var(--text-light);font-size:0.85rem;margin:12px 0">Načtěte kartu čtečkou (nebo napište číslo, např. DK-26-00001). Prázdnou kartu nabijete při prodeji, nabitou zákazník platí v pokladně jako dárkovým poukazem. Vyčerpaná karta se sama zablokuje – vrátíte ji do oběhu tlačítkem Odblokovat.</p>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
           <input type="text" class="search-input" id="kartyNacist" placeholder="💳 Načtěte kartu…" aria-label="Načíst plastovou kartu" autocomplete="off" style="width:280px;max-width:100%" onkeydown="if(event.key==='Enter'){event.preventDefault();najitKartu();}">
@@ -1707,6 +1710,31 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
   </div>
 </div>
 
+<div class="modal-overlay" id="modalTiskKaret">
+  <div class="modal" style="max-width:480px">
+    <h3>🖨️ Tisk plastových karet</h3>
+    <p style="font-size:0.85rem;color:var(--text-light);margin:-4px 0 12px">Karty se vytisknou na A4, 10 na list, ve skutečné velikosti 85,6 × 54 mm. Vzhled nastavíte v „🎨 Vzhled karty“.</p>
+    <div id="tkMsg" role="status"></div>
+    <div id="tkVybrane" style="font-weight:700;margin-bottom:10px"></div>
+    <div id="tkVyber" class="form-group">
+      <label>Které karty</label>
+      <label style="display:block;font-weight:normal"><input type="radio" name="tkKtere" value="prazdne" checked> Všechny prázdné karty (<span id="tkPocetPrazdnych">0</span>)</label>
+      <label style="display:block;font-weight:normal"><input type="radio" name="tkKtere" value="rozsah"> Podle čísel od
+        <input type="text" id="tkOd" style="width:120px" aria-label="Číslo první karty" onfocus="document.querySelector('input[name=tkKtere][value=rozsah]').checked=true"> do
+        <input type="text" id="tkDo" style="width:120px" aria-label="Číslo poslední karty" onfocus="document.querySelector('input[name=tkKtere][value=rozsah]').checked=true"></label>
+    </div>
+    <div class="form-group">
+      <label>Strany</label>
+      <label style="display:block;font-weight:normal"><input type="radio" name="tkStrany" value="obe" checked> Přední i zadní (oboustranný tisk)</label>
+      <label style="display:block;font-weight:normal"><input type="radio" name="tkStrany" value="predni"> Jen přední strany</label>
+      <label style="display:block;font-weight:normal"><input type="radio" name="tkStrany" value="zadni"> Jen zadní strany (s čárovými kódy)</label>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-outline" onclick="closeModal('modalTiskKaret')">Zrušit</button>
+      <button class="btn btn-primary" onclick="potvrditTiskKaret()">🖨️ Tisknout</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="modalVymena">
   <div class="modal" style="max-width:720px">
     <h3>🔄 Výměna zboží</h3>
@@ -6246,6 +6274,7 @@ const kcKarta = n => Number(n || 0).toLocaleString('cs-CZ') + ' Kč';
 const stavKartyHtml = s => `<span class="badge ${(STAVY_KARTY[s] || {}).badge || ''}">${(STAVY_KARTY[s] || {}).text || escH(s)}</span>`;
 
 async function loadKarty() {
+  if (!vzhledKarty) nacistVzhledKarty(); // kvůli kartičce s hodnotou (vlastní přední strana)
   try {
     const res = await adminFetch(API + '/poukazove-karty');
     const data = await res.json();
@@ -6315,6 +6344,7 @@ function vykreslitDetailKarty(k) {
   if (k.stav === 'nabita') tl.push(`<button class="btn btn-outline" onclick="tisknoutKartickuKarty()">🖨️ Kartička s hodnotou</button>`);
   if (p && p.stav !== 'zruseny' && Number(p.zustatek) > 0 && (k.stav === 'nabita' || k.stav === 'prosla')) tl.push(`<button class="btn btn-outline" onclick="prodlouzitPoukaz(${Number(p.id)}, true)">📅 Prodloužit platnost</button>`);
   if (k.stav === 'nabita') tl.push(`<button class="btn btn-red" onclick="zmenitBlokaciKarty(${k.id}, true)">⛔ Zablokovat (ztráta)</button>`);
+  tl.push(`<button class="btn btn-outline" onclick="tisknoutOtevrenouKartu()">🖨️ Vytisknout kartu</button>`);
   if (k.stav === 'prazdna' && !k.poukazy.length) tl.push(`<button class="btn btn-red btn-sm" onclick="smazatKartu(${k.id})">🗑️ Smazat kartu</button>`);
   const historie = k.udalosti.map(u => `<li>${new Date(u.vytvoreno).toLocaleString('cs-CZ')} – ${AKCE_KARTY[u.akce] || escH(u.akce)}${u.poznamka ? ` (${escH(u.poznamka)})` : ''}</li>`).join('');
   const cerpani = k.pouziti.map(u => `<li>${new Date(u.vytvoreno).toLocaleString('cs-CZ')} – ${Number(u.castka) < 0 ? 'připsáno zpět ' + kcKarta(-u.castka) : 'čerpáno ' + kcKarta(u.castka)}${u.objednavka_id ? ' (e-shop)' : ''}</li>`).join('');
@@ -6404,8 +6434,8 @@ async function vygenerovatKarty() {
     const a = document.createElement('a');
     a.href = url; a.download = `detskekrucky-karty-${data.karty[0].cislo}-${data.karty[data.karty.length - 1].cislo}.csv`;
     a.click(); URL.revokeObjectURL(url);
-    alert(`✅ Vygenerováno ${data.karty.length} karet (${data.karty[0].cislo} – ${data.karty[data.karty.length - 1].cislo}). Soubor CSV pro výrobce se stáhnul.`);
     loadKarty();
+    if (confirm(`✅ Vygenerováno ${data.karty.length} karet (${data.karty[0].cislo} – ${data.karty[data.karty.length - 1].cislo}). Soubor CSV se stáhnul.\n\nVytisknout tyto karty teď?`)) otevritTiskKaret(data.karty);
   } catch (e) { alert('❌ Chyba spojení'); }
 }
 
@@ -6458,7 +6488,9 @@ function datumCesky(d) {
 // Kartička s hodnotou do obalu plastové karty (velikost platební karty 85 × 54 mm,
 // tiskne se na A4 s čárou ke střihu). Je jen informační – platí vždy stav v systému.
 function tisknoutKartickuPoukazu({ hodnota, platnost_do, karta, zustatek }) {
-  const logo = new URL('logo.jpg', location.href).href;
+  // ježek s botičkou z přední strany plastové karty, aby kartička ladila s kartou
+  const vlastni = vzhledKarty && vzhledKarty.predni ? vzhledKarty.predni.tisk_url : null;
+  const jezek = vlastni || new URL('karta-jezek.jpg', location.href).href;
   const castka = Number(zustatek != null && Number(zustatek) < Number(hodnota) ? zustatek : hodnota);
   const popisCastky = zustatek != null && Number(zustatek) < Number(hodnota) ? 'Zůstatek' : 'Hodnota';
   const pw = window.open('', '_blank', 'width=600,height=500');
@@ -6469,28 +6501,31 @@ function tisknoutKartickuPoukazu({ hodnota, platnost_do, karta, zustatek }) {
     @page{ size:A4; margin:15mm; }
     *{ box-sizing:border-box; }
     body{ margin:0; font-family:'Nunito',Arial,sans-serif; color:#5c3d2e; }
-    .karticka{ width:85mm; height:54mm; border:0.3mm dashed #b9a48f; border-radius:3mm; padding:4mm 5mm;
-      display:flex; flex-direction:column; justify-content:space-between;
-      background:linear-gradient(135deg,#fdf6ee 0%,#f6e9e4 100%); -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-    .hlava{ display:flex; align-items:center; gap:3mm; }
-    .hlava img{ width:11mm; height:11mm; border-radius:50%; object-fit:cover; }
-    .nazev{ font-family:'Dancing Script',cursive; font-size:15pt; line-height:1; color:#8b4a42; }
-    .podnazev{ font-size:6.5pt; letter-spacing:0.6pt; text-transform:uppercase; color:#7a816c; }
+    .karticka{ width:85mm; height:54mm; border:0.3mm dashed #b9a48f; border-radius:3mm; overflow:hidden;
+      display:flex; background:#fbf5e9; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .obsah{ flex:1; padding:4mm 2mm 3.5mm 5mm; display:flex; flex-direction:column; justify-content:space-between; }
+    .jezek{ width:39mm; flex:none; background:linear-gradient(to right,#fbf5e9 0,rgba(251,245,233,0) 9mm),
+      url('${escAttr(jezek)}') no-repeat ${vlastni ? 'center / cover' : '-55mm 62% / auto 112%'}; }
+    .nazev{ font-family:'Dancing Script',cursive; font-size:15pt; line-height:1; color:#6b7d4a; }
+    .podnazev{ font-size:6.5pt; letter-spacing:0.6pt; text-transform:uppercase; color:#b4583f; margin-top:0.8mm; }
     .popis{ font-size:6.5pt; text-transform:uppercase; letter-spacing:0.6pt; color:#7a816c; }
-    .castka{ font-family:'Cormorant',Georgia,serif; font-weight:700; font-size:26pt; line-height:1; color:#5c3d2e; }
-    .pata{ display:flex; justify-content:space-between; align-items:flex-end; font-size:7pt; }
+    .castka{ font-family:'Cormorant',Georgia,serif; font-weight:700; font-size:22pt; line-height:1; color:#5c3d2e; white-space:nowrap; }
+    .pata{ font-size:7pt; line-height:1.35; }
     .pata strong{ font-size:8pt; }
-    .web{ font-size:6pt; color:#7a816c; text-align:right; }
+    .web{ font-size:6pt; color:#7a816c; margin-top:1mm; }
     .navod{ font-size:9pt; color:#888; margin-top:4mm; }
     @media print{ .navod{ display:none; } }
   </style></head><body>
   <div class="karticka">
-    <div class="hlava"><img src="${escAttr(logo)}" alt=""><div><div class="nazev">Dětské krůčky</div><div class="podnazev">Dárkový poukaz</div></div></div>
-    <div><div class="popis">${popisCastky}</div><div class="castka">${castka.toLocaleString('cs-CZ')} Kč</div></div>
-    <div class="pata">
-      <div>Platí do <strong>${escH(datumCesky(platnost_do))}</strong>${karta ? `<br>Karta ${escH(karta)}` : ''}</div>
-      <div class="web">Zůstatek ověříte v prodejně<br>www.detskekrucky.cz</div>
+    <div class="obsah">
+      <div><div class="nazev">Dětské krůčky</div><div class="podnazev">Dárková karta</div></div>
+      <div><div class="popis">${popisCastky}</div><div class="castka">${castka.toLocaleString('cs-CZ')} Kč</div></div>
+      <div class="pata">
+        <div>Platí do <strong>${escH(datumCesky(platnost_do))}</strong>${karta ? `<br>Karta ${escH(karta)}` : ''}</div>
+        <div class="web">Zůstatek ověříte v prodejně · www.detskekrucky.cz</div>
+      </div>
     </div>
+    <div class="jezek"></div>
   </div>
   <div class="navod">Vystřihněte podle čárkované čáry a vložte do obalu ke kartě.</div>
   <script>window.onload = () => setTimeout(() => window.print(), 500);<\/script>
@@ -6503,6 +6538,258 @@ function tisknoutKartickuKarty() {
   const k = otevrenaKarta;
   if (!k || !k.poukaz) return;
   tisknoutKartickuPoukazu({ hodnota: Number(k.poukaz.hodnota), zustatek: Number(k.poukaz.zustatek), platnost_do: k.poukaz.platnost_do, karta: k.cislo });
+}
+
+// ===== Vzhled a tisk plastových karet =====
+// Majitelka si karty tiskne sama (a laminuje). Grafika přední a zadní strany se
+// nahrává v adminu (/api/vzhled-karty); na zadní stranu se při tisku doplní bílé
+// pole s čárovým kódem a číslem konkrétní karty. Bez nahrané grafiky: přední
+// strana = karta-jezek.jpg, zadní = jednoduchá strana s textem.
+const VYCHOZI_PREDNI_KARTY = 'karta-jezek.jpg';
+const POZICE_KODU_KARTY = { 'vpravo-dole': 'Vpravo dole', 'vlevo-dole': 'Vlevo dole', 'uprostred-dole': 'Uprostřed dole', 'vpravo-nahore': 'Vpravo nahoře', 'vlevo-nahore': 'Vlevo nahoře' };
+let vzhledKarty = null;
+
+const CSS_KARTY = `
+  .dk-karta{ position:relative; width:85.6mm; height:54mm; overflow:hidden; box-sizing:border-box; border-radius:3.2mm;
+    background:#fbf5e9 center / cover no-repeat; font-family:'Nunito',Arial,sans-serif; color:#5c3d2e;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .dk-kod{ position:absolute; width:38mm; background:#fff; border-radius:1.5mm; padding:1.4mm 2mm 1mm; text-align:center; box-sizing:border-box; }
+  .dk-kod svg{ display:block; width:100%; height:11mm; }
+  .dk-kod .dk-cislo{ font-size:7.5pt; font-weight:700; letter-spacing:0.4pt; margin-top:0.6mm; color:#3d2a1f; }
+  .dk-kod.vpravo-dole{ right:3.5mm; bottom:3.5mm; } .dk-kod.vlevo-dole{ left:3.5mm; bottom:3.5mm; }
+  .dk-kod.uprostred-dole{ left:50%; bottom:3.5mm; transform:translateX(-50%); }
+  .dk-kod.vpravo-nahore{ right:3.5mm; top:3.5mm; } .dk-kod.vlevo-nahore{ left:3.5mm; top:3.5mm; }
+  .dk-zadni{ position:absolute; inset:4mm 4.5mm; font-size:6.3pt; line-height:1.4; }
+  .dk-zadni .dk-nazev{ font-family:'Dancing Script',cursive; font-size:13pt; line-height:1; color:#6b7d4a; }
+  .dk-zadni .dk-pod{ font-size:5.8pt; letter-spacing:0.5pt; text-transform:uppercase; color:#b4583f; margin:0.6mm 0 2mm; }
+  .dk-zadni p{ margin:0 0 1.2mm; width:40mm; }
+  .dk-zadni .dk-adresa{ position:absolute; left:0; bottom:0; width:38mm; font-size:6pt; color:#7a816c; }`;
+
+function vychoziVzhledKarty() { return { predni: null, zadni: null, poziceKodu: 'vpravo-dole' }; }
+
+async function nacistVzhledKarty() {
+  try {
+    const res = await adminFetch(API + '/vzhled-karty');
+    vzhledKarty = res.ok ? await res.json() : vychoziVzhledKarty();
+  } catch (e) { vzhledKarty = vychoziVzhledKarty(); }
+  return vzhledKarty;
+}
+
+function urlStranyKarty(strana, proTisk) {
+  const v = (vzhledKarty || {})[strana];
+  if (v) return proTisk ? v.tisk_url : v.nahled_url;
+  return strana === 'predni' ? new URL(VYCHOZI_PREDNI_KARTY, location.href).href : null;
+}
+
+// Čárový kód karty: EAN-13 u našich karet, jinak (vlastní kód výrobce) CODE128
+function formatKoduKarty(kod) {
+  const s = String(kod || '');
+  if (!/^\d{13}$/.test(s)) return 'CODE128';
+  let soucet = 0;
+  for (let i = 0; i < 12; i++) soucet += Number(s[i]) * (i % 2 ? 3 : 1);
+  return String((10 - (soucet % 10)) % 10) === s[12] ? 'EAN13' : 'CODE128';
+}
+
+function htmlStranyKarty(strana, karta, proTisk) {
+  const obrazek = urlStranyKarty(strana, proTisk);
+  const pozadi = obrazek ? ` style="background-image:url('${escAttr(obrazek)}')"` : '';
+  if (strana === 'predni') return `<div class="dk-karta"${pozadi}></div>`;
+  const pozice = obrazek ? (vzhledKarty && vzhledKarty.poziceKodu) || 'vpravo-dole' : 'vpravo-dole';
+  const kod = `<div class="dk-kod ${escAttr(pozice)}"><svg data-kod="${escAttr(karta.ean)}"></svg><div class="dk-cislo">${escH(karta.cislo)}</div></div>`;
+  const text = obrazek ? '' : `<div class="dk-zadni">
+      <div class="dk-nazev">Dětské krůčky</div><div class="dk-pod">Dárková karta</div>
+      <p>Kartou zaplatíte v prodejně i na www.detskekrucky.cz. Zůstatek a platnost najdete na účtence, ověříte je v prodejně.</p>
+      <p>Kartu lze opakovaně nabít. Nelze ji vyměnit za hotovost.</p>
+      <div class="dk-adresa">Holešovská 752, Hulín<br>www.detskekrucky.cz</div>
+    </div>`;
+  return `<div class="dk-karta"${pozadi}>${text}${kod}</div>`;
+}
+
+// Vykreslí čárové kódy do <svg data-kod> (v adminu i v okně pro tisk)
+function vykreslitKodyKaret(koren, JsBarcodeFn) {
+  koren.querySelectorAll('svg[data-kod]').forEach(svg => {
+    try {
+      JsBarcodeFn(svg, svg.getAttribute('data-kod'), { format: formatKoduKarty(svg.getAttribute('data-kod')), width: 2, height: 60, displayValue: false, margin: 0, background: 'transparent' });
+      svg.setAttribute('viewBox', '0 0 ' + parseFloat(svg.getAttribute('width')) + ' ' + parseFloat(svg.getAttribute('height')));
+      svg.removeAttribute('width'); svg.removeAttribute('height');
+      svg.setAttribute('preserveAspectRatio', 'none');
+    } catch (e) { svg.outerHTML = '<div style="font-size:7pt">' + escH(svg.getAttribute('data-kod')) + '</div>'; }
+  });
+}
+
+async function prepnoutVzhledKarty() {
+  const panel = document.getElementById('vzhledKartyPanel');
+  if (panel.style.display !== 'none') { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  panel.innerHTML = '<div class="loading">Načítám…</div>';
+  await nacistVzhledKarty();
+  vykreslitVzhledKarty();
+}
+
+function vykreslitVzhledKarty(zprava = '') {
+  const panel = document.getElementById('vzhledKartyPanel');
+  if (!document.getElementById('dkKartaCss')) {
+    const st = document.createElement('style'); st.id = 'dkKartaCss'; st.textContent = CSS_KARTY; document.head.appendChild(st);
+  }
+  const ukazka = { cislo: 'DK-26-00001', ean: '2300000000016' };
+  const strana = (s, nazev, popis) => `
+    <div style="flex:1 1 300px">
+      <h4 style="margin:0 0 6px">${nazev}</h4>
+      <div style="box-shadow:0 2px 10px rgba(0,0,0,.12);border-radius:3.2mm;width:85.6mm;max-width:100%">${htmlStranyKarty(s, ukazka, false)}</div>
+      <p style="font-size:0.8rem;color:var(--text-light);margin:8px 0">${vzhledKarty[s] ? 'Vlastní grafika.' : popis}</p>
+      <label class="btn btn-outline btn-sm" style="cursor:pointer">📤 Nahrát ${s === 'predni' ? 'přední' : 'zadní'} stranu
+        <input type="file" accept="image/*" style="display:none" onchange="nahratVzhledKarty('${s}', this)"></label>
+      ${vzhledKarty[s] ? `<button class="btn btn-outline btn-sm" onclick="vratitVzhledKarty('${s}')">↩ Výchozí</button>` : ''}
+    </div>`;
+  panel.innerHTML = `
+    <div style="border:1px solid var(--border,#e8ddd0);border-radius:10px;padding:14px;margin-bottom:14px">
+      <h3 style="margin:0 0 4px">🎨 Vzhled karty</h3>
+      <p style="font-size:0.85rem;color:var(--text-light);margin:0 0 12px">Obrázek v poměru stran platební karty (85,6 × 54 mm), ideálně aspoň 1 000 px na šířku, JPG nebo PNG. Na zadní stranu se při tisku samo doplní bílé pole s čárovým kódem a číslem karty – nechte pro něj v grafice volné místo asi 40 × 18 mm.</p>
+      <div id="vzhledKartyMsg" role="status">${zprava}</div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap">
+        ${strana('predni', 'Přední strana', 'Výchozí: ježek s botičkou.')}
+        ${strana('zadni', 'Zadní strana', 'Výchozí: text s podmínkami a adresou.')}
+      </div>
+      ${vzhledKarty.zadni ? `<div class="form-group" style="margin-top:12px;max-width:320px"><label for="vzhledKartyPozice">Kde je na zadní straně čárový kód</label>
+        <select id="vzhledKartyPozice" onchange="ulozitPoziciKoduKarty(this.value)">${Object.entries(POZICE_KODU_KARTY).map(([k, n]) => `<option value="${k}"${vzhledKarty.poziceKodu === k ? ' selected' : ''}>${n}</option>`).join('')}</select></div>` : ''}
+    </div>`;
+  vykreslitKodyKaret(panel, JsBarcode);
+}
+
+async function nahratVzhledKarty(strana, input) {
+  if (!input.files.length) return;
+  const fd = new FormData();
+  fd.append('obrazek', input.files[0]);
+  document.getElementById('vzhledKartyMsg').innerHTML = '<div class="vzhled-ok">Nahrávám…</div>';
+  try {
+    const res = await adminFetch(API + '/vzhled-karty/' + strana, { method: 'POST', body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.chyba || 'Nahrání se nepodařilo.');
+    vzhledKarty = data;
+    vykreslitVzhledKarty('<div class="vzhled-ok">✅ Uloženo. Takhle se bude karta tisknout.</div>');
+  } catch (e) { document.getElementById('vzhledKartyMsg').innerHTML = `<div class="error-msg">${escH(e.message)}</div>`; }
+}
+
+async function vratitVzhledKarty(strana) {
+  if (!confirm(`Vrátit výchozí ${strana === 'predni' ? 'přední' : 'zadní'} stranu karty? Nahraný obrázek se smaže.`)) return;
+  try {
+    const res = await adminFetch(API + '/vzhled-karty/' + strana, { method: 'DELETE' });
+    if (!res.ok) throw new Error();
+    vzhledKarty = await res.json();
+    vykreslitVzhledKarty('<div class="vzhled-ok">✅ Vrácen výchozí vzhled.</div>');
+  } catch (e) { document.getElementById('vzhledKartyMsg').innerHTML = '<div class="error-msg">Nepodařilo se.</div>'; }
+}
+
+async function ulozitPoziciKoduKarty(pozice) {
+  try {
+    const res = await adminFetch(API + '/vzhled-karty/pozice', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ poziceKodu: pozice }) });
+    if (!res.ok) throw new Error();
+    vzhledKarty = await res.json();
+    vykreslitVzhledKarty('<div class="vzhled-ok">✅ Pozice kódu uložena.</div>');
+  } catch (e) { document.getElementById('vzhledKartyMsg').innerHTML = '<div class="error-msg">Nepodařilo se uložit.</div>'; }
+}
+
+// --- Tisk karet na A4 ---
+function otevritTiskKaret(karty) {
+  window._tiskKaretVybrane = karty || null;
+  const jedna = karty && karty.length;
+  document.getElementById('tkVyber').style.display = jedna ? 'none' : '';
+  document.getElementById('tkVybrane').textContent = jedna ? `Tisknou se karty: ${karty.map(k => k.cislo).join(', ')}` : '';
+  document.getElementById('tkMsg').innerHTML = '';
+  if (!jedna) {
+    const prazdne = vsechnyKarty.filter(k => k.stav === 'prazdna');
+    document.getElementById('tkPocetPrazdnych').textContent = prazdne.length;
+    const cisla = vsechnyKarty.map(k => k.cislo);
+    document.getElementById('tkOd').value = cisla[0] || '';
+    document.getElementById('tkDo').value = cisla[cisla.length - 1] || '';
+  }
+  openModal('modalTiskKaret');
+}
+
+function poradiKarty(cislo) { const m = /(\d+)$/.exec(String(cislo || '')); return m ? Number(m[1]) : NaN; }
+
+async function potvrditTiskKaret() {
+  let karty = window._tiskKaretVybrane;
+  if (!karty || !karty.length) {
+    const vyber = document.querySelector('input[name="tkKtere"]:checked').value;
+    if (vyber === 'prazdne') karty = vsechnyKarty.filter(k => k.stav === 'prazdna');
+    else {
+      const od = poradiKarty(normalizovatCisloKartyAdmin(document.getElementById('tkOd').value));
+      const doo = poradiKarty(normalizovatCisloKartyAdmin(document.getElementById('tkDo').value));
+      if (!(od > 0) || !(doo >= od)) { document.getElementById('tkMsg').innerHTML = '<div class="error-msg">Zadejte čísla karet od–do, např. DK-26-00001 až DK-26-00010.</div>'; return; }
+      karty = vsechnyKarty.filter(k => { const n = poradiKarty(k.cislo); return n >= od && n <= doo; });
+    }
+    karty = [...karty].sort((a, b) => poradiKarty(a.cislo) - poradiKarty(b.cislo));
+  }
+  if (!karty.length) { document.getElementById('tkMsg').innerHTML = '<div class="error-msg">Žádné karty k tisku.</div>'; return; }
+  const strany = document.querySelector('input[name="tkStrany"]:checked').value;
+  closeModal('modalTiskKaret');
+  await nacistVzhledKarty();
+  tisknoutKarty(karty, strany);
+}
+
+function normalizovatCisloKartyAdmin(text) {
+  const s = String(text || '').trim().toUpperCase();
+  const m = /^DK[-\s]?(\d{2})[-\s]?(\d{1,5})$/.exec(s);
+  return m ? `DK-${m[1]}-${m[2].padStart(5, '0')}` : s;
+}
+
+// A4 na výšku, 10 karet na list (2 × 5). Zadní strany jsou zrcadlově
+// prohozené (levý sloupec ↔ pravý), aby při oboustranném tisku (otočení
+// po delší straně) seděly přesně za přední stranou.
+function tisknoutKarty(karty, strany = 'obe') {
+  const NA_LIST = 10;
+  const listy = [];
+  for (let i = 0; i < karty.length; i += NA_LIST) listy.push(karty.slice(i, i + NA_LIST));
+  const mrizka = (davka, strana) => {
+    const bunky = [];
+    for (let r = 0; r < 5; r++) {
+      const radek = [davka[r * 2], davka[r * 2 + 1]];
+      if (strana === 'zadni') radek.reverse();
+      radek.forEach(k => bunky.push(k ? `<div class="bunka">${htmlStranyKarty(strana, k, true)}</div>` : '<div class="bunka prazdna"></div>'));
+    }
+    return `<div class="list">${bunky.join('')}</div>`;
+  };
+  const stranky = listy.map(d => [
+    strany !== 'zadni' ? mrizka(d, 'predni') : '',
+    strany !== 'predni' ? mrizka(d, 'zadni') : ''
+  ].join('')).join('');
+  const pw = window.open('', '_blank', 'width=900,height=900');
+  if (!pw) { alert('Prohlížeč zablokoval okno pro tisk – povolte vyskakovací okna.'); return; }
+  pw.document.write(`<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8"><title>Tisk karet ${escH(karty[0].cislo)}${karty.length > 1 ? ' – ' + escH(karty[karty.length - 1].cislo) : ''}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Nunito:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    @page{ size:A4 portrait; margin:0; }
+    *{ box-sizing:border-box; }
+    body{ margin:0; background:#ddd; }
+    .list{ width:210mm; height:297mm; background:#fff; margin:0 auto 8mm; padding:9.5mm 0; display:grid;
+      grid-template-columns:85.6mm 85.6mm; grid-auto-rows:54mm; gap:2mm 3mm; justify-content:center; align-content:start;
+      page-break-after:always; break-after:page; }
+    .bunka{ outline:0.15mm solid #ccc; border-radius:3.2mm; }
+    .bunka.prazdna{ outline:none; }
+    .navod{ font-family:Arial,sans-serif; font-size:13px; max-width:210mm; margin:10px auto; background:#fff8e8; padding:10px 14px; border-radius:8px; }
+    @media print{ body{ background:#fff; } .list{ margin:0; } .navod{ display:none; } }
+    ${CSS_KARTY}
+  </style></head><body>
+  <div class="navod">${strany === 'obe' ? '<strong>Oboustranný tisk:</strong> v tisku zvolte „Oboustranně – otočit po delší straně“, měřítko 100 % (ne „přizpůsobit stránce“). Lichá strana = přední strany karet, sudá = zadní.<br>Poprvé vytiskněte jen 1 list a proti světlu zkontrolujte, že zadní strany sedí.' : 'Měřítko tisku 100 % (ne „přizpůsobit stránce“).'} Šedé linky jsou ke stříhání.</div>
+  ${stranky}
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></scr` + `ipt>
+  </body></html>`);
+  pw.document.close();
+  // čárové kódy a tisk až po načtení knihovny a obrázků
+  const start = Date.now();
+  const cekat = () => {
+    if (pw.closed) return;
+    if (!pw.JsBarcode || pw.document.readyState !== 'complete') { if (Date.now() - start < 15000) return setTimeout(cekat, 200); alert('Nepodařilo se načíst čárové kódy – zkontrolujte připojení.'); return; }
+    vykreslitKodyKaret(pw.document, pw.JsBarcode);
+    setTimeout(() => { pw.focus(); pw.print(); }, 600);
+  };
+  setTimeout(cekat, 300);
+}
+
+function tisknoutOtevrenouKartu() {
+  if (!otevrenaKarta) return;
+  otevritTiskKaret([{ cislo: otevrenaKarta.cislo, ean: otevrenaKarta.ean }]);
 }
 
 // Prodloužení platnosti poukazu správcem – zapíše se do historie (server)
