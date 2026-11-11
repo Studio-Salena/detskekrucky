@@ -240,11 +240,11 @@ img { max-width: 100%; }
     </div>
 
     <ul class="rules">
-      <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7A816C" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Platí pro objednávky do 31.&nbsp;12.&nbsp;2026</li>
+      <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7A816C" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Platí pro objednávky do <span id="promo-do">31.&nbsp;12.&nbsp;2026</span></li>
       <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7A816C" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Při nákupu zboží od 500&nbsp;Kč (bez dopravy)</li>
       <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7A816C" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Platí v&nbsp;e-shopu i v&nbsp;prodejně v&nbsp;Hulíně</li>
       <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7A816C" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Nelze kombinovat s&nbsp;jinou slevou</li>
-      <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7A816C" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Platí pro prvních 50 nákupů v&nbsp;e-shopu a prodejně dohromady</li>
+      <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7A816C" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Platí pro prvních <span id="promo-pocet">50</span> nákupů v&nbsp;e-shopu a prodejně dohromady</li>
     </ul>
 
     <a class="btn btn-ghost" href="https://www.detskekrucky.cz/eshop.html">Přejít na e-shop</a>
@@ -342,6 +342,19 @@ img { max-width: 100%; }
     .catch(chyba);
 })();
 </script>
+<script>
+// Podmínky akce ze serveru – po prodloužení v adminu (E-shop → Slevové akce)
+// se tu samy opraví datum konce a počet slev. Bez spojení zůstane text výše.
+(function () {
+  fetch('https://detskekrucky1.onrender.com/api/promo/info/KRUCKY2026')
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function (a) {
+      var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(a && a.do_den || '');
+      if (m) document.getElementById('promo-do').textContent = Number(m[3]) + '. ' + Number(m[2]) + '. ' + m[1];
+      if (a && Number(a.max_pouziti) > 0) document.getElementById('promo-pocet').textContent = String(Number(a.max_pouziti));
+    })
+    .catch(function () {});
+})();
 <script>
 (function () {
   var btn = document.getElementById('copy-btn');

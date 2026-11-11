@@ -406,6 +406,21 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
 .pos-sleva{display:grid;grid-template-columns:1fr 80px auto;gap:6px;align-items:center;margin:8px 0;font-size:0.88rem;color:var(--brown);font-weight:700}
 .pos-promo{display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;margin:0 0 8px 0}
 .pos-promo input{text-transform:uppercase}
+.promo-akce{background:#fff;border-radius:16px;border:1px solid var(--tan-light);margin-bottom:20px;overflow:hidden}
+.promo-akce-telo{padding:16px 20px}
+.promo-pocet{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.promo-pocet strong{font-size:2rem;font-weight:800;color:var(--brown);font-variant-numeric:tabular-nums}
+.promo-lista{height:12px;background:var(--cream);border-radius:6px;overflow:hidden;margin-bottom:14px}
+.promo-lista span{display:block;height:100%;background:var(--sage);border-radius:6px}
+.promo-lista.plno span{background:var(--red)}
+.promo-lista.skoro span{background:#e67e22}
+.promo-uprava{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px 16px;align-items:end;background:var(--cream);border-radius:12px;padding:14px;margin:14px 0}
+.promo-uprava .form-group{margin:0}
+.promo-rychle{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.promo-zmeny{font-size:0.8rem;color:var(--text-light);margin:8px 0 0;padding-left:18px}
+.promo-tab td,.promo-tab th{white-space:nowrap}
+.promo-uvolneno td{color:var(--text-light);text-decoration:line-through}
+.promo-uvolneno td:last-child{text-decoration:none}
 .pos-promo-msg{grid-column:1 / -1;font-size:0.82rem}
 .pos-celkem{border-top:1px solid var(--tan);padding-top:8px;font-size:1.05rem}
 .pos-celkem strong:last-child{font-size:1.45rem;color:var(--brown);font-variant-numeric:tabular-nums}
@@ -517,6 +532,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           <button type="button" class="nav-item" onclick="showPage('zakaznici',this)"><span class="nav-text">Zákazníci</span></button>
           <button type="button" class="nav-item" onclick="showPage('vratkyzadosti',this)" id="navVratkyZadosti"><span class="nav-text">Vrácení</span><span class="nav-badge" id="navBadgeVratky" style="display:none">0</span></button>
           <button type="button" class="nav-item" onclick="showPage('poukazy',this)" id="navPoukazy"><span class="nav-text">Dárkové poukazy</span><span class="nav-badge" id="navBadgePoukazy" style="display:none">0</span></button>
+          <button type="button" class="nav-item" onclick="showPage('promo',this)"><span class="nav-text">Slevové akce</span></button>
         </div>
       </div>
 
@@ -690,6 +706,17 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     </div>
 
     <!-- POUKAZY -->
+    <div class="page" id="page-promo">
+      <div class="page-header">
+        <div class="page-title">🏷️ Slevové akce</div>
+        <div class="table-actions">
+          <button class="refresh-btn no-print" onclick="loadPromo()" aria-label="Načíst akce znovu">↻</button>
+        </div>
+      </div>
+      <p style="color:var(--text-light);font-size:0.85rem;margin:-8px 0 14px">Slevové kódy, které platí v e-shopu i v pokladně. Počet slev je společný pro obě místa. Zrušená objednávka nebo smazaný prodej slevu vrátí zpátky do počtu.</p>
+      <div id="promoAkce"><div class="loading">Načítám...</div></div>
+    </div>
+
     <div class="page" id="page-poukazy">
       <div class="page-header">
         <div class="page-title">🎁 Dárkové poukazy</div>
@@ -2353,6 +2380,7 @@ function showPage(name, el, kotva) {
   if (name==='newsletter') loadNewsletter();
   if (name==='vratkyzadosti') loadVratkyZadosti();
   if (name==='poukazy') loadPoukazy();
+  if (name==='promo') loadPromo();
   if (name==='reporty') loadReporty();
   // Zavřít menu na mobilu; záložka stránky, nebo kotva na její část, jinak nahoru
   toggleSidebar(false);
@@ -7743,6 +7771,145 @@ function formatDatum(d) {
 function normalizovat(s) {
   return String(s ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
+// ═══════════════════════════════
+// SLEVOVÉ AKCE (E-shop → Slevové akce) – počet použití, prodloužení, vypnutí
+// ═══════════════════════════════
+const promoDen = s => { if (!s) return '–'; const [r, m, d] = String(s).split('-'); return `${Number(d)}. ${Number(m)}. ${r}`; };
+const promoDnes = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' });
+const promoKc = n => Math.round(Number(n) || 0).toLocaleString('cs-CZ') + ' Kč';
+// Den v kalendáři + počet dní (YYYY-MM-DD, bez časových pásem)
+function promoPosunDen(s, dni) { const d = new Date(s + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + dni); return d.toISOString().slice(0, 10); }
+
+function promoStav(a, vypnutoNaServeru) {
+  const dnes = promoDnes();
+  if (vypnutoNaServeru) return ['badge-zruseno', 'Vypnuto na serveru'];
+  if (a.aktivni === false) return ['badge-zruseno', 'Vypnutá'];
+  if (a.od_den && dnes < a.od_den) return ['badge-vyrizuje', 'Ještě nezačala'];
+  if (dnes > a.do_den) return ['badge-odeslano', 'Skončila'];
+  if (a.pouzito >= a.max_pouziti) return ['badge-zruseno', 'Všechny slevy rozebrané'];
+  return ['badge-ok', 'Probíhá'];
+}
+
+async function loadPromo() {
+  const box = document.getElementById('promoAkce');
+  try {
+    const res = await adminFetch(API + '/promo/akce');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.chyba || 'Chyba serveru');
+    if (!data.akce.length) { box.innerHTML = '<div class="table-wrap"><div class="empty">Zatím žádná slevová akce.</div></div>'; return; }
+    box.innerHTML = data.akce.map(a => promoKarta(a, data.vypnutoNaServeru)).join('');
+    data.akce.forEach(a => nacistPromoPouziti(a.kod));
+  } catch (e) {
+    box.innerHTML = `<div class="error-msg">Akce se nepodařilo načíst: ${escH(e.message)}</div>`;
+  }
+}
+
+function promoKarta(a, vypnutoNaServeru) {
+  const id = escAttr(a.kod);
+  const idJs = escAttr(escJs(a.kod)); // do onclick: JS řetězec v HTML atributu
+  const [tridaStavu, textStavu] = promoStav(a, vypnutoNaServeru);
+  const procent = Math.min(100, Math.round(a.pouzito / a.max_pouziti * 100));
+  const zbyva = Math.max(0, a.max_pouziti - a.pouzito);
+  const lista = a.pouzito >= a.max_pouziti ? 'plno' : procent >= 80 ? 'skoro' : '';
+  const kde = [a.eshop && 'e-shop', a.prodejna && 'prodejna'].filter(Boolean).join(' + ');
+  return `<div class="promo-akce" data-kod="${id}">
+    <div class="table-header"><h3>🏷️ ${escH(a.kod)} – ${escH(a.nazev)}</h3><span class="badge ${tridaStavu}">${textStavu}</span></div>
+    <div class="promo-akce-telo">
+      ${vypnutoNaServeru ? '<div class="error-msg">Všechny akce jsou vypnuté proměnnou PROMO_AKTIVNI=false na Renderu. Dokud ji nesmažete, kód nikde neprojde.</div>' : ''}
+      <p style="margin:0 0 12px;font-size:0.88rem">Sleva <strong>${Number(a.sleva_procenta)} %</strong> ze zboží (ne ze zboží ve slevě) · nákup od <strong>${promoKc(a.min_nakup)}</strong> · platí <strong>${promoDen(a.od_den)} – ${promoDen(a.do_den)}</strong> · ${escH(kde)}</p>
+      <div class="promo-pocet"><strong>${a.pouzito} / ${a.max_pouziti}</strong><span>použito · zbývá <b>${zbyva}</b> ${zbyva === 1 ? 'sleva' : zbyva >= 2 && zbyva <= 4 ? 'slevy' : 'slev'}</span></div>
+      <div class="promo-lista ${lista}" role="progressbar" aria-valuemin="0" aria-valuemax="${a.max_pouziti}" aria-valuenow="${a.pouzito}" aria-label="Použité slevy"><span style="width:${procent}%"></span></div>
+      <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:0">
+        <div class="stat-card"><div class="stat-label">V e-shopu</div><div class="stat-value">${a.pouzito_eshop}×</div></div>
+        <div class="stat-card"><div class="stat-label">V prodejně</div><div class="stat-value">${a.pouzito_prodejna}×</div></div>
+        <div class="stat-card"><div class="stat-label">Sleva celkem</div><div class="stat-value">${promoKc(a.sleva_celkem)}</div></div>
+        <div class="stat-card"><div class="stat-label">Zboží se slevou za</div><div class="stat-value">${promoKc(a.zbozi_celkem)}</div><div class="stat-sub">před slevou</div></div>
+      </div>
+      <div class="promo-uprava">
+        <div class="form-group">
+          <label for="promoStrop-${id}">Počet slev celkem</label>
+          <input type="number" id="promoStrop-${id}" min="${Math.max(1, a.pouzito)}" max="10000" step="1" value="${a.max_pouziti}">
+          <div class="promo-rychle">
+            <button type="button" class="btn btn-outline btn-sm" onclick="pridatPromoStrop('${idJs}',25)">+25</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="pridatPromoStrop('${idJs}',50)">+50</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="promoDo-${id}">Platí do (včetně)</label>
+          <input type="date" id="promoDo-${id}" min="${escAttr(a.od_den || '')}" value="${escAttr(a.do_den)}">
+          <div class="promo-rychle">
+            <button type="button" class="btn btn-outline btn-sm" onclick="posunoutPromoDo('${idJs}',7)">+1 týden</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="posunoutPromoDo('${idJs}',14)">+2 týdny</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label style="display:flex;gap:8px;align-items:center;cursor:pointer"><input type="checkbox" id="promoAktivni-${id}" ${a.aktivni !== false ? 'checked' : ''} style="width:auto"> Akce zapnutá</label>
+          <button type="button" class="btn btn-primary" onclick="ulozitPromo('${idJs}')">Uložit změny</button>
+        </div>
+      </div>
+      <div id="promoMsg-${id}" role="status" aria-live="polite"></div>
+      <div id="promoPouziti-${id}"><div class="loading">Načítám nákupy…</div></div>
+    </div>
+  </div>`;
+}
+
+function pridatPromoStrop(kod, kolik) {
+  const el = document.getElementById('promoStrop-' + kod);
+  el.value = (Number(el.value) || 0) + kolik;
+}
+function posunoutPromoDo(kod, dni) {
+  const el = document.getElementById('promoDo-' + kod);
+  if (el.value) el.value = promoPosunDen(el.value, dni);
+}
+
+async function ulozitPromo(kod) {
+  const msg = document.getElementById('promoMsg-' + kod);
+  const telo = {
+    max_pouziti: Number(document.getElementById('promoStrop-' + kod).value),
+    do_den: document.getElementById('promoDo-' + kod).value,
+    aktivni: document.getElementById('promoAktivni-' + kod).checked
+  };
+  if (!telo.aktivni && !confirm(`Opravdu vypnout akci ${kod}? Kód pak nepůjde použít v e-shopu ani v pokladně.`)) return;
+  msg.innerHTML = '<div class="loading">Ukládám…</div>';
+  try {
+    const res = await adminFetch(API + '/promo/akce/' + encodeURIComponent(kod), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(telo) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.chyba || 'Chyba serveru');
+    await loadPromo();
+    const nove = document.getElementById('promoMsg-' + kod);
+    if (nove) nove.innerHTML = `<div class="success-msg">${data.zmeneno.length ? 'Uloženo: ' + escH(data.zmeneno.join(', ')) : 'Nic se nezměnilo.'}</div>`;
+  } catch (e) {
+    msg.innerHTML = `<div class="error-msg">${escH(e.message)}</div>`;
+  }
+}
+
+async function nacistPromoPouziti(kod) {
+  const box = document.getElementById('promoPouziti-' + kod);
+  if (!box) return;
+  try {
+    const res = await adminFetch(API + '/promo/akce/' + encodeURIComponent(kod) + '/pouziti');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.chyba || 'Chyba serveru');
+    const radky = data.pouziti.map(p => {
+      const kdy = new Date(p.vytvoreno).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
+      const kde = p.kanal === 'eshop'
+        ? (p.objednavka_id ? `🛒 <button type="button" class="btn btn-outline btn-sm" onclick="detailObjednavky(${Number(p.objednavka_id)})">obj. ${escH(p.objednavka_cislo || p.objednavka_id)}</button>` : '🛒 e-shop')
+        : `🏪 prodejna${p.prodej_id ? ' #' + Number(p.prodej_id) : ''}`;
+      const kdo = p.kanal === 'eshop' ? p.objednavka_jmeno : p.prodej_zakaznik;
+      const stav = p.uvolneno ? `<span class="badge badge-zruseno" title="${escAttr(p.duvod_uvolneni || '')}">vráceno</span>` : '<span class="badge badge-ok">použito</span>';
+      return `<tr class="${p.uvolneno ? 'promo-uvolneno' : ''}"><td>${kdy}</td><td>${kde}</td><td>${escH(kdo || '–')}</td><td>${promoKc(p.mezisoucet)}</td><td>−${promoKc(p.sleva)}</td><td>${stav}</td></tr>`;
+    }).join('');
+    const zmeny = data.zmeny.length
+      ? `<p style="font-size:0.8rem;font-weight:700;margin:14px 0 0">Historie změn</p><ul class="promo-zmeny">${data.zmeny.map(z => `<li>${new Date(z.vytvoreno).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague' })} – ${escH(z.popis)}</li>`).join('')}</ul>`
+      : '';
+    box.innerHTML = (radky
+      ? `<div style="overflow-x:auto"><table class="promo-tab"><thead><tr><th>Kdy</th><th>Kde</th><th>Zákazník</th><th>Zboží</th><th>Sleva</th><th>Stav</th></tr></thead><tbody>${radky}</tbody></table></div>`
+      : '<p style="color:var(--text-light);font-size:0.85rem;margin:8px 0 0">Kód zatím nikdo nepoužil.</p>') + zmeny;
+  } catch (e) {
+    box.innerHTML = `<div class="error-msg">Nákupy se nepodařilo načíst: ${escH(e.message)}</div>`;
+  }
+}
+
 function escH(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function escHtml(s) { return escH(s); }
 
