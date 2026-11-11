@@ -107,7 +107,7 @@ test('PostgreSQL: přehled, nákupy, prodloužení, ochrana stropu, vypnutí, hi
     await promo.migrovat(pool); // opakovaně bez chyby
 
     let [a] = await promo.prehledAkci(pool);
-    assert.equal(a.od_den, '2026-11-29');
+    assert.equal(a.od_den, '2026-11-30');
     assert.equal(a.do_den, '2026-12-31');
     assert.equal(a.aktivni, true);
     assert.equal(a.pouzito, 0);
@@ -158,7 +158,7 @@ test('PostgreSQL: přehled, nákupy, prodloužení, ochrana stropu, vypnutí, hi
     assert.equal((await promo.upravitAkci(pool, 'NEEXISTUJE', { aktivni: true })).status, 404);
 
     const info = await promo.verejneInfo(pool, 'KRUCKY2026');
-    assert.deepEqual(info, { kod: 'KRUCKY2026', sleva_procenta: 10, min_nakup: 500, max_pouziti: 80, aktivni: false, od_den: '2026-11-29', do_den: '2027-01-15' });
+    assert.deepEqual(info, { kod: 'KRUCKY2026', sleva_procenta: 10, min_nakup: 500, max_pouziti: 80, aktivni: false, od_den: '2026-11-30', do_den: '2027-01-15' });
   } finally {
     await pool.end();
     await admin.query(`DROP SCHEMA ${schema} CASCADE`);

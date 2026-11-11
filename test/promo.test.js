@@ -297,7 +297,7 @@ test('PostgreSQL: migrace jde spustit opakovaně, strop vydrží souběžné ná
     assert.equal(akce.length, 1);
     assert.equal(akce[0].kod, 'KRUCKY2026');
     assert.equal(akce[0].max_pouziti, 50);
-    assert.equal(new Date(akce[0].platnost_od).toISOString(), '2026-11-28T23:00:00.000Z');
+    assert.equal(new Date(akce[0].platnost_od).toISOString(), '2026-11-29T23:00:00.000Z');
     assert.equal(new Date(akce[0].platnost_do).toISOString(), '2026-12-31T23:00:00.000Z');
 
     // Úprava v databázi se další migrací nepřepíše
