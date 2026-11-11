@@ -207,7 +207,8 @@ async function odeslat_potvrzeni(objednavka) {
   const priplatek = Number(objednavka.platba_priplatek) || 0;
   const dopravaCena = objednavka.doprava_cena != null
     ? Number(objednavka.doprava_cena)
-    : objednavka.celkem - mezisoucet + Number(objednavka.sleva || 0) - priplatek;
+    : objednavka.celkem - mezisoucet + Number(objednavka.sleva || 0) + Number(objednavka.promo_sleva || 0) - priplatek;
+  const promoSleva = Number(objednavka.promo_sleva) || 0;
   const dopravaLabel = DOPRAVA_LABELY[objednavka.doprava] || objednavka.doprava || '—';
   const platbaLabel = PLATBA_LABELY[objednavka.platba] || objednavka.platba || '—';
 
@@ -284,6 +285,7 @@ async function odeslat_potvrzeni(objednavka) {
       </thead>
       <tbody>
         ${polozky_html}
+        ${promoSleva > 0 ? `<tr><td colspan="3" style="padding:10px 8px;font-size:14px">Sleva – slevový kód ${escH(objednavka.promo_kod)}</td><td style="padding:10px 8px;font-size:14px;text-align:right;color:#5a8a5a">−${promoSleva} Kč</td></tr>` : ''}
         <tr><td colspan="3" style="padding:10px 8px;font-size:14px">${escH(dopravaLabel)} (doprava)</td><td style="padding:10px 8px;font-size:14px;text-align:right">${dopravaCena === 0 ? 'Zdarma' : dopravaCena + ' Kč'}</td></tr>
         ${priplatek > 0 ? `<tr><td colspan="3" style="padding:10px 8px;font-size:14px">Dobírka (příplatek)</td><td style="padding:10px 8px;font-size:14px;text-align:right">${priplatek} Kč</td></tr>` : ''}
         ${objednavka.sleva > 0 ? `<tr><td colspan="3" style="padding:10px 8px;font-size:14px">Dárkový poukaz</td><td style="padding:10px 8px;font-size:14px;text-align:right;color:#5a8a5a">−${objednavka.sleva} Kč</td></tr>` : ''}
@@ -362,6 +364,7 @@ async function odeslat_upozorneni_objednavky(objednavka) {
       </thead>
       <tbody>${polozky_html}</tbody>
     </table>
+    ${Number(objednavka.promo_sleva) > 0 ? `<p style="margin:0 0 8px 0;font-size:14px;color:#5a8a5a">🏷️ Slevový kód ${escH(objednavka.promo_kod)}: −${Number(objednavka.promo_sleva)} Kč</p>` : ''}
     ${objednavka.sleva > 0 ? `<p style="margin:0 0 8px 0;font-size:14px;color:#5a8a5a">🎁 Uplatněný dárkový poukaz: −${objednavka.sleva} Kč</p>` : ''}
     <p style="margin:0 0 16px 0;font-size:18px;font-weight:bold;color:${BARVA_ZNACKA}">Celkem: ${objednavka.celkem} Kč</p>
     <table role="presentation" style="width:100%;background:${BARVA_POZADI_BOX};border:1px solid ${BARVA_RAMECEK};border-radius:8px">

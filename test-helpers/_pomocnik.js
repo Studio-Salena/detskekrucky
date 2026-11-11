@@ -141,7 +141,7 @@ function vytvoritMockClient(stav) {
         const [produkt_id, velikost] = params;
         const radek = stav.sklad.find(r => r.produkt_id === produkt_id && r.velikost === velikost);
         // na_eshopu má v DB výchozí hodnotu true - stejně tady, pokud test neřekne jinak
-        return { rows: radek ? [{ pocet_kusu: radek.pocet_kusu, dostupnost: radek.dostupnost, cena: radek.cena, nazev: radek.nazev, na_eshopu: radek.na_eshopu !== false }] : [] };
+        return { rows: radek ? [{ pocet_kusu: radek.pocet_kusu, dostupnost: radek.dostupnost, cena: radek.cena, nazev: radek.nazev, na_eshopu: radek.na_eshopu !== false, cena_pred_slevou: radek.cena_pred_slevou == null ? null : radek.cena_pred_slevou }] : [] };
       }
 
       if (s.startsWith('SELECT * FROM poukazove_karty')) return { rows: [] };
@@ -257,10 +257,10 @@ function vytvoritMockClient(stav) {
         const existuje = (stav.vratky || []).some(v => String(v.objednavka_id) === String(objednavka_id));
         return { rows: existuje ? [{}] : [] };
       }
-      if (s.startsWith('SELECT stav, poukaz_id, sleva FROM objednavky WHERE')) {
+      if (s.startsWith('SELECT stav, poukaz_id, sleva, promo_kod FROM objednavky WHERE')) {
         const [id] = params;
         const o = stav.objednavky.find(o => o.id === Number(id));
-        return { rows: o ? [{ stav: o.stav, poukaz_id: o.poukaz_id, sleva: o.sleva }] : [] };
+        return { rows: o ? [{ stav: o.stav, poukaz_id: o.poukaz_id, sleva: o.sleva, promo_kod: o.promo_kod || null }] : [] };
       }
       if (s.startsWith('SELECT produkt_id, velikost, pocet FROM pohyby_skladu')) {
         const [poznamka] = params;
@@ -369,6 +369,33 @@ function vytvoritMockClient(stav) {
       if (cas) {
         const o = stav.objednavky.find(o => o.id === Number(params[0]));
         if (o && !o[cas[1]]) o[cas[1]] = new Date();
+        return {};
+      }
+
+      // Slevové kódy akce (lib/promo.js)
+      if (s.startsWith('SELECT * FROM promo_akce WHERE kod = $1')) {
+        const a = (stav.promoAkce || []).find(a => a.kod === params[0]);
+        return { rows: a ? [{ ...a }] : [] };
+      }
+      if (s.startsWith('SELECT COUNT(*)::int AS pocet FROM promo_pouziti WHERE kod = $1 AND uvolneno IS NULL')) {
+        return { rows: [{ pocet: (stav.promoPouziti || []).filter(p => p.kod === params[0] && !p.uvolneno).length }] };
+      }
+      if (s.startsWith('INSERT INTO promo_pouziti')) {
+        const [kod, kanal, objednavka_id, prodej_id, mezisoucet, sleva] = params;
+        (stav.promoPouziti = stav.promoPouziti || []).push({ kod, kanal, objednavka_id, prodej_id, mezisoucet, sleva, uvolneno: null });
+        return {};
+      }
+      if (s.startsWith('UPDATE promo_pouziti SET uvolneno = NOW()')) {
+        const sloupec = s.includes('WHERE objednavka_id') ? 'objednavka_id' : 'prodej_id';
+        let pocet = 0;
+        for (const p of stav.promoPouziti || []) {
+          if (Number(p[sloupec]) === Number(params[0]) && !p.uvolneno) { p.uvolneno = new Date(); p.duvod_uvolneni = params[1]; pocet++; }
+        }
+        return { rowCount: pocet };
+      }
+      if (s.startsWith('UPDATE objednavky SET promo_kod = $1, promo_sleva = $2 WHERE id = $3')) {
+        const o = stav.objednavky.find(o => o.id === Number(params[2]));
+        if (o) { o.promo_kod = params[0]; o.promo_sleva = params[1]; }
         return {};
       }
 

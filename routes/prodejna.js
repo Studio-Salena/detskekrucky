@@ -5,6 +5,7 @@ const { pripravit } = require('../lib/startServeru');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const { poukazPoPlatnosti } = require('../lib/poukazPlatnost');
 const { najitPoukaz } = require('../lib/poukazKarty');
+const promo = require('../lib/promo');
 
 // Vše v tomto souboru je admin-only (prodejna i vratky jsou interní data)
 router.use(vyzadovatAdmina);
@@ -62,12 +63,83 @@ router.get('/', async (req, res) => {
   }
 });
 
+// ═══════════════════════════════
+// SLEVOVÝ KÓD AKCE (lib/promo.js) – stejný kód a strop jako v e-shopu
+// ═══════════════════════════════
+
+// Mezisoučet a základ slevy z položek prodeje. Ceny jsou z pokladny (prodavačka
+// je může upravit), zboží ve slevě (produkty.cena_pred_slevou) se do základu
+// nepočítá - stejně jako v e-shopu.
+async function zakladProdeje(db, polozky) {
+  let mezisoucet = 0;
+  const ids = [];
+  for (const p of polozky) {
+    const pocet = Number(p && p.pocet), cena = Number(p && p.cena);
+    if (!Number.isFinite(pocet) || !Number.isFinite(cena) || pocet <= 0 || cena < 0) return null;
+    mezisoucet += pocet * cena;
+    if (Number.isInteger(p.produkt_id)) ids.push(p.produkt_id);
+  }
+  const veSleve = new Set(ids.length
+    ? (await db.query('SELECT id FROM produkty WHERE id = ANY($1::int[]) AND cena_pred_slevou IS NOT NULL', [ids])).rows.map(r => r.id)
+    : []);
+  const zaklad = polozky.reduce((s, p) => s + (veSleve.has(p.produkt_id) ? 0 : Number(p.pocet) * Number(p.cena)), 0);
+  return { mezisoucet, zaklad };
+}
+
+const popisProdejna = v => `kód ${v.kod} – ${v.procenta} %`;
+
+// POST /api/prodejna/promo/overit { kod, polozky } – náhled slevy v pokladně
+router.post('/promo/overit', async (req, res) => {
+  const { kod, polozky } = req.body || {};
+  if (!Array.isArray(polozky) || !polozky.length) return res.status(400).json({ chyba: 'Nejdřív přidejte zboží.' });
+  try {
+    const z = await zakladProdeje(pool, polozky);
+    if (!z) return res.status(400).json({ chyba: 'Neplatná položka prodeje.' });
+    const v = await promo.overit(pool, kod, { zaklad: z.zaklad, kanal: 'prodejna' });
+    if (!v.ok) return res.status(400).json({ chyba: v.chyba });
+    res.json({ kod: v.kod, procenta: v.procenta, sleva: v.sleva, popis: popisProdejna(v), zaklad: z.zaklad });
+  } catch (err) {
+    res.status(500).json({ chyba: err.message });
+  }
+});
+
+// Prodej se slevovým kódem: v jedné transakci zámek akce, kontrola stropu,
+// uložení prodeje se slevou spočítanou serverem a zápis použití kódu.
+async function prodejSKodem(req, res) {
+  const { zakaznik, platba, poznamka, polozky, hotovost_prijato, promo_kod } = req.body;
+  if (req.body.poukaz_kod) return res.status(400).json({ chyba: 'Slevový kód a doplatek k dárkovému poukazu nejde v pokladně kombinovat. Zaplaťte poukazem celý nákup, nebo bez poukazu.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const z = await zakladProdeje(client, polozky);
+    if (!z) { await client.query('ROLLBACK'); return res.status(400).json({ chyba: 'Neplatná položka prodeje.' }); }
+    const v = await promo.overit(client, promo_kod, { zaklad: z.zaklad, kanal: 'prodejna', zamknout: true });
+    if (!v.ok) { await client.query('ROLLBACK'); return res.status(400).json({ chyba: v.chyba }); }
+    const celkem = z.mezisoucet - v.sleva;
+    const prijato = platba === 'hotovost' && Number(hotovost_prijato) > 0 ? Number(hotovost_prijato) : null;
+    const prodej = (await client.query(
+      'INSERT INTO prodejna_prodeje (zakaznik, platba, poznamka, polozky, celkem, mezisoucet, sleva, sleva_popis, hotovost_prijato, hotovost_vraceno) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *',
+      [zakaznik || null, platba || null, poznamka || null, JSON.stringify(polozky), celkem, z.mezisoucet, v.sleva, popisProdejna(v),
+       prijato, prijato != null ? Math.max(0, prijato - celkem) : null]
+    )).rows[0];
+    await promo.zapsatPouziti(client, { kod: v.kod, kanal: 'prodejna', prodejId: prodej.id, zaklad: z.zaklad, sleva: v.sleva });
+    await client.query('COMMIT');
+    res.json(prodej);
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ chyba: err.message });
+  } finally {
+    client.release();
+  }
+}
+
 // POST /api/prodejna – vytvořit nový prodej
 router.post('/', async (req, res) => {
   const { zakaznik, platba, poznamka, polozky, celkem, mezisoucet, sleva, sleva_popis, hotovost_prijato, hotovost_vraceno } = req.body;
   if (!Array.isArray(polozky) || !polozky.length) {
     return res.status(400).json({ chyba: 'Chybí položky prodeje.' });
   }
+  if (req.body.promo_kod) return prodejSKodem(req, res);
   if (req.body.poukaz_kod) return prodejSDoplatkem(req, res);
   try {
     const result = await pool.query(
@@ -144,6 +216,8 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     await pool.query('DELETE FROM prodejna_prodeje WHERE id=$1', [req.params.id]);
+    // Smazaný prodej uvolní slevový kód akce (místo ve stropu se vrátí)
+    await promo.uvolnit(pool, { prodejId: Number(req.params.id) }, 'Smazání prodeje v pokladně');
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ chyba: err.message });

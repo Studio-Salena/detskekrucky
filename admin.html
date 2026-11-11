@@ -404,6 +404,9 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
 .pos-souhrn{background:#fff;border:1px solid var(--app-line);border-radius:12px;padding:10px 12px;margin-bottom:10px}
 .pos-radek{display:flex;justify-content:space-between;align-items:center;font-size:0.92rem}
 .pos-sleva{display:grid;grid-template-columns:1fr 80px auto;gap:6px;align-items:center;margin:8px 0;font-size:0.88rem;color:var(--brown);font-weight:700}
+.pos-promo{display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;margin:0 0 8px 0}
+.pos-promo input{text-transform:uppercase}
+.pos-promo-msg{grid-column:1 / -1;font-size:0.82rem}
 .pos-celkem{border-top:1px solid var(--tan);padding-top:8px;font-size:1.05rem}
 .pos-celkem strong:last-child{font-size:1.45rem;color:var(--brown);font-variant-numeric:tabular-nums}
 .pos-dvojice{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
@@ -1546,9 +1549,15 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
               <option value="zadna">Bez slevy</option>
               <option value="procenta">Sleva v %</option>
               <option value="castka">Sleva v Kč</option>
+              <option value="kod">Slevový kód</option>
             </select>
             <input type="number" id="prodejnaSlevaHodnota" min="0" value="0" oninput="prepocitatCelkem()" disabled aria-label="Hodnota slevy">
             <span id="prodejnaSlevaCastka">−0 Kč</span>
+          </div>
+          <div class="pos-promo" id="prodejnaPromoBox" hidden>
+            <input type="text" id="prodejnaPromoKod" placeholder="např. KRUCKY2026" autocomplete="off" aria-label="Slevový kód" oninput="zrusitPromoProdejna()">
+            <button type="button" class="btn btn-outline btn-sm" onclick="overitPromoProdejna()">Ověřit</button>
+            <div class="pos-promo-msg" id="prodejnaPromoMsg" role="status" aria-live="polite"></div>
           </div>
           <div class="pos-radek pos-celkem"><strong>Celkem</strong><strong id="prodejnaCelkem">0 Kč</strong></div>
         </div>
@@ -2672,6 +2681,7 @@ async function detailObjednavky(id) {
         <td><strong>${escH(p.nazev)||'Produkt'}</strong></td><td>${escH(p.velikost)}</td><td>${escH(p.pocet)}</td>
         <td>${p.cena.toLocaleString('cs-CZ')} Kč</td><td><strong>${(p.cena*p.pocet).toLocaleString('cs-CZ')} Kč</strong></td>
       </tr>`).join('')}
+      ${Number(data.promo_sleva)>0?`<tr><td colspan="4">🏷️ Slevový kód ${escH(data.promo_kod)}</td><td style="color:var(--sage)">−${Number(data.promo_sleva).toLocaleString('cs-CZ')} Kč</td></tr>`:''}
       ${Number(data.sleva)>0?`<tr><td colspan="4">🎁 Poukaz${data.poukaz_kod?' '+escH(data.poukaz_kod):''}</td><td style="color:var(--sage)">−${Number(data.sleva).toLocaleString('cs-CZ')} Kč</td></tr>`:''}
       <tr style="background:var(--cream)"><td colspan="4"><strong>CELKEM</strong></td>
         <td><strong style="color:var(--brown);font-size:1.1rem">${data.celkem.toLocaleString('cs-CZ')} Kč</strong></td></tr>
@@ -5360,7 +5370,10 @@ function spocitatProdej() {
   if (hodnota < 0) hodnota = 0;
 
   let sleva = 0, popis = '';
-  if (typ === 'procenta') {
+  if (typ === 'kod') {
+    // Slevu z kódu spočítal server (bez zboží ve slevě); po změně košíku se musí ověřit znovu
+    if (promoProdejna && promoProdejna.mezisoucet === mezisoucet) { sleva = promoProdejna.sleva; popis = promoProdejna.popis; }
+  } else if (typ === 'procenta') {
     if (hodnota > 100) hodnota = 100;
     sleva = Math.round(mezisoucet * hodnota / 100);
     popis = hodnota + ' %';
@@ -5373,9 +5386,52 @@ function spocitatProdej() {
   return { mezisoucet, typ, hodnota, sleva, popis, celkem: mezisoucet - sleva };
 }
 
+// Slevový kód akce (KRUCKY2026) - ověří server, stejný strop jako v e-shopu
+let promoProdejna = null;
+function polozkyProPromo() {
+  const polozky = [];
+  document.querySelectorAll('.polozka-row').forEach(row => {
+    const prodSel = row.querySelector('.prod-select');
+    const pocet = parseInt(row.querySelector('.pocet-input')?.value) || 0;
+    const cena = parseInt(row.querySelector('.cena-input')?.value) || 0;
+    if (prodSel && prodSel.value && pocet > 0) polozky.push({ produkt_id: parseInt(prodSel.value), pocet, cena });
+  });
+  return polozky;
+}
+function zrusitPromoProdejna() {
+  if (!promoProdejna) return;
+  promoProdejna = null;
+  document.getElementById('prodejnaPromoMsg').innerHTML = '';
+  prepocitatCelkem();
+}
+async function overitPromoProdejna() {
+  const msg = document.getElementById('prodejnaPromoMsg');
+  const kod = document.getElementById('prodejnaPromoKod').value.trim();
+  promoProdejna = null;
+  if (!kod) { msg.innerHTML = '<span style="color:#c0392b">Zadejte slevový kód.</span>'; prepocitatCelkem(); return; }
+  const polozky = polozkyProPromo();
+  try {
+    const res = await adminFetch(API + '/prodejna/promo/overit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kod, polozky }) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { msg.innerHTML = `<span style="color:#c0392b">${escH(data.chyba || 'Kód se nepodařilo ověřit.')}</span>`; prepocitatCelkem(); return; }
+    const mezisoucet = polozky.reduce((s, p) => s + p.pocet * p.cena, 0);
+    promoProdejna = { kod: data.kod, sleva: Number(data.sleva), popis: data.popis, mezisoucet };
+    msg.innerHTML = `<span style="color:#2e7d32">✅ ${escH(data.popis)}: −${Number(data.sleva).toLocaleString('cs-CZ')} Kč</span>`;
+  } catch (e) {
+    msg.innerHTML = '<span style="color:#c0392b">Chyba spojení – kód se nepodařilo ověřit.</span>';
+  }
+  prepocitatCelkem();
+}
+
 function prepocitatCelkem() {
   const s = spocitatProdej();
   document.getElementById('prodejnaSlevaHodnota').disabled = (s.typ === 'zadna');
+  document.getElementById('prodejnaSlevaHodnota').hidden = (s.typ === 'kod');
+  document.getElementById('prodejnaPromoBox').hidden = (s.typ !== 'kod');
+  if (s.typ === 'kod' && promoProdejna && promoProdejna.mezisoucet !== s.mezisoucet) {
+    promoProdejna = null;
+    document.getElementById('prodejnaPromoMsg').innerHTML = '<span style="color:#b45309">Košík se změnil – klikněte znovu na Ověřit.</span>';
+  }
   document.getElementById('prodejnaMezisoucet').textContent = s.mezisoucet.toLocaleString('cs-CZ')+' Kč';
   document.getElementById('prodejnaSlevaCastka').textContent = '−'+s.sleva.toLocaleString('cs-CZ')+' Kč';
   document.getElementById('prodejnaCelkem').textContent = s.celkem.toLocaleString('cs-CZ')+' Kč';
@@ -5439,7 +5495,12 @@ async function ulozitProdejnaProdat() {
     return;
   }
 
-  const { mezisoucet, sleva, popis: sleva_popis, celkem } = spocitatProdej();
+  const { mezisoucet, sleva, popis: sleva_popis, celkem, typ: slevaTyp } = spocitatProdej();
+  if (slevaTyp === 'kod' && !promoProdejna) {
+    document.getElementById('prodejnaMsg').innerHTML = '<div class="error-msg">Ověřte slevový kód (tlačítko Ověřit), nebo zvolte Bez slevy.</div>';
+    return;
+  }
+  const promoKod = slevaTyp === 'kod' ? promoProdejna.kod : null;
 
   const platba = document.getElementById('prodejnaPlatba').value;
   const poukazKod = document.getElementById('prodejnaPoukazKod').value.trim();
@@ -5455,6 +5516,7 @@ async function ulozitProdejnaProdat() {
       if (!overRes.ok) { document.getElementById('prodejnaMsg').innerHTML = `<div class="error-msg">${overData.chyba}</div>`; return; }
       poukazProdejnaZustatek = Number(overData.zustatek);
       if (poukazProdejnaZustatek < celkem) doplatekPlatba = document.getElementById('prodejnaDoplatekPlatba').value;
+      if (doplatekPlatba && promoKod) { document.getElementById('prodejnaMsg').innerHTML = '<div class="error-msg">Slevový kód a doplatek k poukazu nejde kombinovat. Zaplaťte poukazem celý nákup, nebo bez poukazu.</div>'; return; }
     } catch(e) { document.getElementById('prodejnaMsg').innerHTML = '<div class="error-msg">Chyba při ověřování poukazu</div>'; return; }
   }
 
@@ -5474,12 +5536,14 @@ async function ulozitProdejnaProdat() {
     polozky, celkem,
     mezisoucet, sleva, sleva_popis: sleva_popis || null,
     hotovost_prijato, hotovost_vraceno,
-    ...(doplatekPlatba ? { poukaz_kod: poukazKod, doplatek_platba: doplatekPlatba } : {})
+    ...(doplatekPlatba ? { poukaz_kod: poukazKod, doplatek_platba: doplatekPlatba } : {}),
+    ...(promoKod ? { promo_kod: promoKod } : {})
   };
 
-  // Prodej s doplatkem uloží server i s uplatněním poukazu najednou - při chybě se nic neodečte
+  // Prodej s doplatkem nebo se slevovým kódem uloží server najednou (poukaz / strop
+  // kódu se ověří pod zámkem) PŘED odečtením skladu - při chybě se nic neodečte
   let ulozenySDoplatkem = null;
-  if (doplatekPlatba) {
+  if (doplatekPlatba || promoKod) {
     try {
       const res = await adminFetch(API+'/prodejna', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(prodej) });
       const data = await res.json().catch(() => ({}));
@@ -5509,7 +5573,7 @@ async function ulozitProdejnaProdat() {
   } catch(e) { console.error('Chyba ukládání prodeje na server'); }
 
   // Pokud platba poukazem, teď ho skutečně uplatnit (odečíst zůstatek)
-  if (platba === 'poukaz' && !ulozenySDoplatkem && ulozenyProdej.id) {
+  if (platba === 'poukaz' && !doplatekPlatba && ulozenyProdej.id) {
     try {
       await adminFetch(API+'/poukazy/pouzit', {
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -5534,6 +5598,9 @@ async function ulozitProdejnaProdat() {
   document.getElementById('prodejnaPlatba').value = 'hotovost';
   document.getElementById('prodejnaSlevaTyp').value = 'zadna';
   document.getElementById('prodejnaSlevaHodnota').value = '0';
+  document.getElementById('prodejnaPromoKod').value = '';
+  document.getElementById('prodejnaPromoMsg').innerHTML = '';
+  promoProdejna = null;
   document.getElementById('prodejnaHotovostPrijato').value = '';
   prepnoutPoukazPole();
   document.getElementById('prodejnaMsg').innerHTML = '';

@@ -3,6 +3,7 @@ const { fakturaHtml } = require('../lib/faktura');
 const { migrovatFaktury, vystavitFakturu, vystavitStorno, overitUlozenou, HISTORICKA_UPOZORNENI, NAZEV_BEZ_PRODUKTU } = require('../lib/vystaveniFaktury');
 const { poukazPoPlatnosti } = require('../lib/poukazPlatnost');
 const { najitPoukaz } = require('../lib/poukazKarty');
+const promo = require('../lib/promo');
 
 // Stavy, u kterých se zákazníkovi posílá informační e-mail o změně stavu
 // (viz STAV_OBJEDNAVKY_EMAIL v routes/emaily.js).
@@ -68,6 +69,10 @@ async function initObjednavkySloupce() {
       ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS vydejni_misto_stat TEXT;
       -- Příplatek za způsob platby (dobírka) v době objednávky; jinak 0 / NULL
       ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS platba_priplatek NUMERIC;
+      -- Slevový kód akce (lib/promo.js, např. KRUCKY2026) - sleva z ceny zboží,
+      -- odděleně od dárkového poukazu (sloupec sleva), který je způsob platby
+      ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS promo_kod TEXT;
+      ALTER TABLE objednavky ADD COLUMN IF NOT EXISTS promo_sleva NUMERIC NOT NULL DEFAULT 0;
       CREATE TABLE IF NOT EXISTS objednavky_cislovani (
         rok INTEGER PRIMARY KEY,
         posledni_cislo INTEGER NOT NULL DEFAULT 0
@@ -80,6 +85,13 @@ async function initObjednavkySloupce() {
     console.log('Objednavky sloupce OK');
   } catch (e) {
     console.log('Objednavky sloupce chyba:', e.message);
+  }
+  // Běžná cena zboží ve slevě (zakládá ji lib/cenyHistorie.js) - tady zvlášť jen
+  // pro jistotu, ať objednávka se slevovým kódem pozná zboží ve slevě i bez ní
+  try {
+    await pool.query('ALTER TABLE produkty ADD COLUMN IF NOT EXISTS cena_pred_slevou INTEGER');
+  } catch (e) {
+    console.log('Produkty cena_pred_slevou chyba:', e.message);
   }
   // Zvlášť: víc příkazů v jednom dotazu běží jako jedna transakce, takže chyba
   // u zásilek by jinak vrátila i nové sloupce objednávek, na kterých stojí ukládání objednávek.
@@ -177,7 +189,7 @@ function validovatObjednavku({ jmeno, email, telefon, ulice, mesto, psc }) {
 
 // Vytvorit novou objednavku
 router.post('/', async (req, res) => {
-  const { jmeno, email, telefon, ulice, mesto, psc, doprava, platba, poznamka, polozky, webova_stranka, poukaz_kod, vydejni_misto_id, vydejni_misto_zasilkovna } = req.body;
+  const { jmeno, email, telefon, ulice, mesto, psc, doprava, platba, poznamka, polozky, webova_stranka, poukaz_kod, promo_kod, vydejni_misto_id, vydejni_misto_zasilkovna } = req.body;
 
   // Honeypot - skryté pole, které reální uživatelé nikdy nevyplní, ale
   // formulářoví boti ano. Předstíráme úspěch, aby se bot nenaučil rozpoznat blokaci.
@@ -297,6 +309,7 @@ router.post('/', async (req, res) => {
     // Položky "u dodavatele" nemají reálnou sledovanou zásobu - projdou bez ohledu
     // na pocet_kusu a při expedici se ze skladu neodečítají (viz níže).
     let celkem = 0;
+    let zakladPromo = 0; // zboží, které není ve slevě - jen z něj se počítá slevový kód
     const dostupnostMap = new Map(); // "produkt_id_velikost" -> 'skladem' | 'dodavatel'
     const cenaMap = new Map(); // "produkt_id_velikost" -> aktuální cena z DB (autoritativní, klientovi se nevěří)
     const nazevMap = new Map(); // "produkt_id_velikost" -> název produktu (pro e-maily s potvrzením)
@@ -308,7 +321,7 @@ router.post('/', async (req, res) => {
     );
     for (const p of polozkyKZamceni) {
       const sklad = await client.query(
-        'SELECT s.pocet_kusu, s.dostupnost, p.cena, p.nazev, p.na_eshopu FROM sklad s JOIN produkty p ON p.id = s.produkt_id WHERE s.produkt_id = $1 AND s.velikost = $2 FOR UPDATE',
+        'SELECT s.pocet_kusu, s.dostupnost, p.cena, p.nazev, p.na_eshopu, p.cena_pred_slevou FROM sklad s JOIN produkty p ON p.id = s.produkt_id WHERE s.produkt_id = $1 AND s.velikost = $2 FOR UPDATE',
         [p.produkt_id, p.velikost]
       );
       if (sklad.rows.length === 0) {
@@ -333,9 +346,24 @@ router.post('/', async (req, res) => {
       cenaMap.set(klic, cenaSkutecna);
       nazevMap.set(klic, radek.nazev);
       celkem += cenaSkutecna * p.pocet;
+      if (radek.cena_pred_slevou == null) zakladPromo += cenaSkutecna * p.pocet;
     }
 
     const mezisoucet = celkem;
+
+    // Slevový kód akce (lib/promo.js) - ověří se pod zámkem akce, který drží do
+    // COMMIT, takže strop použití mezi ověřením a zápisem nikdo nepředběhne.
+    // Sleva snižuje cenu zboží; dárkový poukaz pak platí, co zbude.
+    let promoVysledek = null;
+    if (promo_kod) {
+      promoVysledek = await promo.overit(client, promo_kod, { zaklad: zakladPromo, kanal: 'eshop', zamknout: true });
+      if (!promoVysledek.ok) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ chyba: promoVysledek.chyba });
+      }
+    }
+    const promoSleva = promoVysledek ? promoVysledek.sleva : 0;
+    const zbozi = mezisoucet - promoSleva;
 
     // Uplatnit dárkový poukaz (pokud je zadaný) - stejná transakce jako sklad,
     // ať se poukaz odečte, jen když se objednávka opravdu založí (a naopak).
@@ -363,13 +391,13 @@ router.post('/', async (req, res) => {
     }
 
     // Doprava - podle zvoleného způsobu, osobní odběr je vždy zdarma. Hranice
-    // dopravy zdarma se počítá ze zboží po odečtení poukazu.
-    const dopravaCena = vypocitatCenuDopravy(nastaveniDopravy, doprava, mezisoucet - Math.min(poukazZustatek, mezisoucet));
+    // dopravy zdarma se počítá ze zboží po odečtení slevového kódu a poukazu.
+    const dopravaCena = vypocitatCenuDopravy(nastaveniDopravy, doprava, zbozi - Math.min(poukazZustatek, zbozi));
     // Příplatek za dobírku se platí vždy (i při dopravě zdarma)
     const platbaPriplatek = priplatekPlatby(nastaveniDopravy, doprava, platba);
     // Poukaz platí i dopravu a příplatek; co z něj zbude, zůstává na poukazu
-    sleva = Math.min(poukazZustatek, mezisoucet + dopravaCena + platbaPriplatek);
-    celkem = mezisoucet - sleva + dopravaCena + platbaPriplatek;
+    sleva = Math.min(poukazZustatek, zbozi + dopravaCena + platbaPriplatek);
+    celkem = zbozi - sleva + dopravaCena + platbaPriplatek;
     if (poukaz_id && celkem === 0 && platba === 'dobirka') {
       await client.query('ROLLBACK');
       return res.status(400).json({ chyba: 'Objednávku celou uhradí poukaz – dobírka tu nedává smysl. Zvolte prosím jinou platbu.' });
@@ -391,6 +419,11 @@ router.post('/', async (req, res) => {
     );
     const objednavka_id = objednavka.rows[0].id;
     const cislo = await pridelitCisloObjednavky(client, objednavka_id);
+
+    if (promoVysledek) {
+      await client.query('UPDATE objednavky SET promo_kod = $1, promo_sleva = $2 WHERE id = $3', [promoVysledek.kod, promoSleva, objednavka_id]);
+      await promo.zapsatPouziti(client, { kod: promoVysledek.kod, kanal: 'eshop', objednavkaId: objednavka_id, zaklad: zakladPromo, sleva: promoSleva });
+    }
 
     // Pokud byl uplatněn poukaz, teď skutečně odečíst zůstatek
     if (poukaz_id) {
@@ -451,6 +484,8 @@ try {
     platba,
     polozky: polozkySkutecne,
     sleva,
+    promo_kod: promoVysledek ? promoVysledek.kod : null,
+    promo_sleva: promoSleva,
     poukaz_zbyva: poukazZbyva,
     doprava_cena: dopravaCena,
     platba_priplatek: platbaPriplatek,
@@ -462,12 +497,13 @@ try {
   console.error('Chyba pri odesilani emailu:', emailErr.message);
 }
 
-res.json({ zprava: 'Objednavka uspesne vytvorena', objednavka_id, cislo, celkem, poukaz_zbyva: poukazZbyva });
+res.json({ zprava: 'Objednavka uspesne vytvorena', objednavka_id, cislo, celkem, poukaz_zbyva: poukazZbyva, promo_sleva: promoSleva });
 
 // Upozornění majitelce se posílá až po odpovědi zákazníkovi, ať prodleva/chyba
 // s odesláním objednávku nezablokuje (stejný vzor jako u rezervací).
 odeslat_upozorneni_objednavky({
   objednavka_id, cislo, celkem, jmeno, email, telefon, ulice, mesto, psc, doprava, platba, polozky: polozkySkutecne, sleva,
+  promo_kod: promoVysledek ? promoVysledek.kod : null, promo_sleva: promoSleva,
   doprava_cena: dopravaCena, platba_priplatek: platbaPriplatek, vydejni_misto: vydejniMisto
 }).catch(e => console.error('Upozorneni majitelce o objednavce se nepodarilo odeslat:', e.message));
 
@@ -810,7 +846,7 @@ router.patch('/:id/stav', vyzadovatAdmina, async (req, res) => {
     // FOR UPDATE zamkne řádek objednávky do konce transakce - dvě souběžná
     // zrušení téže objednávky se tak serializují a druhé z nich už uvidí
     // aktuální (zrušený) stav, takže vrácení skladu/poukazu níže neproběhne dvakrát.
-    const soucasna = await client.query('SELECT stav, poukaz_id, sleva FROM objednavky WHERE id = $1 FOR UPDATE', [req.params.id]);
+    const soucasna = await client.query('SELECT stav, poukaz_id, sleva, promo_kod FROM objednavky WHERE id = $1 FOR UPDATE', [req.params.id]);
     if (soucasna.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ chyba: 'Objednávka nenalezena.' });
@@ -868,6 +904,11 @@ router.patch('/:id/stav', vyzadovatAdmina, async (req, res) => {
           [sleva, poukaz_id]
         );
         await client.query('DELETE FROM poukazy_pouziti WHERE objednavka_id = $1', [req.params.id]);
+      }
+
+      // Uvolnit slevový kód akce - místo ve stropu použití se vrátí
+      if (soucasna.rows[0].promo_kod) {
+        await promo.uvolnit(client, { objednavkaId: Number(req.params.id) }, 'Zrušení objednávky');
       }
 
       // Faktura zůstává, zruší ji opravný doklad (storno) - ve stejné transakci,

@@ -3,3 +3,5 @@ node_modules/
 *.log
 .DS_Store
 etiketa*.pdf
+index-1.html
+Claude outputs/

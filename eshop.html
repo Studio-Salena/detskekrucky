@@ -1383,6 +1383,14 @@ body:has(.katalog-filtry.open) #back-to-top{display:none}
     <section class="krok-objednavky" data-krok="3" aria-label="Shrnutí" hidden>
       <div class="order-summary" id="orderSummary"></div>
       <div class="form-group">
+        <label for="chPromoKod">Mám slevový kód</label>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="chPromoKod" placeholder="např. KRUCKY2026" autocomplete="off" style="text-transform:uppercase">
+          <button type="button" onclick="uplatnitPromoEshop()" style="padding:0 16px;background:var(--sage);color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;white-space:nowrap">Uplatnit</button>
+        </div>
+        <div id="chPromoMsg" style="margin-top:6px" role="status" aria-live="polite"></div>
+      </div>
+      <div class="form-group">
         <label for="chPoukazKod">Mám dárkový poukaz</label>
         <div style="display:flex;gap:8px">
           <input type="text" id="chPoukazKod" placeholder="Kód nebo číslice EAN z poukazu" inputmode="text">
@@ -3301,12 +3309,17 @@ function closeCart() {
 }
 
 let uplatnenyPoukaz = null;
+// Slevový kód akce (např. KRUCKY2026) - slevu spočítá server z košíku
+let uplatnenaPromo = null;
 
 function openCheckout() {
   closeCart();
   uplatnenyPoukaz = null;
+  uplatnenaPromo = null;
   document.getElementById('chPoukazKod').value = '';
   document.getElementById('chPoukazMsg').innerHTML = '';
+  document.getElementById('chPromoKod').value = '';
+  document.getElementById('chPromoMsg').innerHTML = '';
   document.getElementById('potvrzeniObjednavky').innerHTML = '';
   prejitNaKrok(1);
   document.getElementById('modalCheckout').classList.add('open');
@@ -3609,21 +3622,25 @@ function dobirkaMozna(doprava) {
   return Number.isInteger(nastaveniDopravy.dobirka) && !!m && !m.vzdyZdarma;
 }
 
-// Součty objednávky - stejné pravidlo jako server (doprava zdarma od 2 000 Kč za zboží
-// po odečtení poukazu, příplatek za dobírku vždy, poukaz platí i dopravu a příplatek)
-function spocitatObjednavku(polozky, poukaz, doprava, platba) {
+// Součty objednávky - stejné pravidlo jako server: slevový kód snižuje cenu zboží,
+// doprava zdarma od 2 000 Kč za zboží po odečtení kódu a poukazu, příplatek za
+// dobírku vždy, poukaz platí i dopravu a příplatek
+function spocitatObjednavku(polozky, poukaz, doprava, platba, promo) {
   const mezisoucet = polozky.reduce((s, i) => s + i.cena * i.pocet, 0);
+  const promoSleva = promo ? Math.min(Number(promo.sleva) || 0, mezisoucet) : 0;
+  const zbozi = mezisoucet - promoSleva;
   const zustatek = poukaz ? Number(poukaz.zustatek) : 0;
-  const dopravaCena = vypocitatDopravu(doprava, mezisoucet - Math.min(zustatek, mezisoucet));
+  const dopravaCena = vypocitatDopravu(doprava, zbozi - Math.min(zustatek, zbozi));
   const priplatek = platba === 'dobirka' && dobirkaMozna(doprava) ? nastaveniDopravy.dobirka : 0;
-  const sleva = Math.min(zustatek, mezisoucet + dopravaCena + priplatek);
-  return { mezisoucet, sleva, dopravaCena, priplatek, celkem: mezisoucet - sleva + dopravaCena + priplatek, zbyva: zustatek - sleva };
+  const sleva = Math.min(zustatek, zbozi + dopravaCena + priplatek);
+  return { mezisoucet, promoSleva, sleva, dopravaCena, priplatek, celkem: zbozi - sleva + dopravaCena + priplatek, zbyva: zustatek - sleva };
 }
 
-function souhrnObjednavkyHtml(polozky, poukaz, doprava, platba) {
-  const s = spocitatObjednavku(polozky, poukaz, doprava, platba);
+function souhrnObjednavkyHtml(polozky, poukaz, doprava, platba, promo) {
+  const s = spocitatObjednavku(polozky, poukaz, doprava, platba, promo);
   return `
     ${polozky.map(i => `<div class="order-summary-item"><span>${escHtml(i.nazev)} ${escHtml(popisVelikosti(produktPolozky(i), i.velikost))} × ${Number(i.pocet)}</span><span>${i.cena * i.pocet} Kč</span></div>`).join('')}
+    ${s.promoSleva > 0 ? `<div class="order-summary-item" style="color:var(--sage);font-weight:700"><span>${escHtml(promo.popis || 'Slevový kód ' + promo.kod)}</span><span>−${s.promoSleva} Kč</span></div>` : ''}
     <div class="order-summary-item"><span>Doprava (${escHtml(DOPRAVA_NAZVY[doprava] || doprava)})</span><span>${s.dopravaCena === 0 ? 'Zdarma' : s.dopravaCena + ' Kč'}</span></div>
     ${s.priplatek > 0 ? `<div class="order-summary-item"><span>Dobírka (příplatek)</span><span>${s.priplatek} Kč</span></div>` : ''}
     ${s.sleva > 0 ? `<div class="order-summary-item" style="color:var(--sage);font-weight:700"><span>Dárkový poukaz ${escHtml(poukaz.kod)}</span><span>−${s.sleva} Kč</span></div>` : ''}
@@ -3633,8 +3650,9 @@ function souhrnObjednavkyHtml(polozky, poukaz, doprava, platba) {
 
 function vykreslitSouhrnObjednavky() {
   const doprava = zvolenaDoprava();
-  const { mezisoucet, celkem } = spocitatObjednavku(kosik, uplatnenyPoukaz, doprava);
-  const slevaZbozi = uplatnenyPoukaz ? Math.min(Number(uplatnenyPoukaz.zustatek), mezisoucet) : 0;
+  const { mezisoucet, promoSleva, celkem } = spocitatObjednavku(kosik, uplatnenyPoukaz, doprava, undefined, uplatnenaPromo);
+  const zbozi = mezisoucet - promoSleva;
+  const slevaZbozi = promoSleva + (uplatnenyPoukaz ? Math.min(Number(uplatnenyPoukaz.zustatek), zbozi) : 0);
   // Ceny u voleb dopravy podle aktuálního košíku (zdarma od 2 000 Kč)
   document.querySelectorAll('[data-doprava-cena]').forEach(el => {
     const cena = vypocitatDopravu(el.dataset.dopravaCena, mezisoucet - slevaZbozi);
@@ -3645,7 +3663,7 @@ function vykreslitSouhrnObjednavky() {
   dobirka.hidden = !dobirkaMozna(doprava) || (!!uplatnenyPoukaz && celkem === 0);
   document.getElementById('dobirkaCena').textContent = dobirka.hidden ? '' : '+' + nastaveniDopravy.dobirka + ' Kč';
   if (dobirka.hidden && zvolenaPlatba() === 'dobirka') document.querySelector('#chPlatba input[value="prevod"]').checked = true;
-  document.getElementById('orderSummary').innerHTML = souhrnObjednavkyHtml(kosik, uplatnenyPoukaz, doprava, zvolenaPlatba());
+  document.getElementById('orderSummary').innerHTML = souhrnObjednavkyHtml(kosik, uplatnenyPoukaz, doprava, zvolenaPlatba(), uplatnenaPromo);
   document.getElementById('vyzkouseniInfo').style.display = doprava === 'osobni_odber' ? 'block' : 'none';
   if (doprava === 'osobni_odber') ukazatMapuProdejny();
   document.getElementById('dodaciLhuta').hidden = doprava === 'osobni_odber';
@@ -3765,6 +3783,25 @@ async function uplatnitPoukazEshop() {
   } catch(e) { msg.innerHTML = '<div class="msg msg-error">Chyba spojení</div>'; }
 }
 
+async function uplatnitPromoEshop() {
+  const kod = document.getElementById('chPromoKod').value.trim();
+  const msg = document.getElementById('chPromoMsg');
+  uplatnenaPromo = null;
+  if (!kod) { msg.innerHTML = '<div class="msg msg-error">Zadejte slevový kód.</div>'; vykreslitSouhrnObjednavky(); return; }
+  try {
+    const res = await fetch(API + '/promo/overit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kod, polozky: kosik.map(i => ({ produkt_id: i.id, velikost: i.velikost, pocet: i.pocet })) })
+    });
+    const data = await res.json();
+    if (!res.ok) { msg.innerHTML = `<div class="msg msg-error">${escHtml(data.chyba || 'Slevový kód se nepodařilo ověřit.')}</div>`; vykreslitSouhrnObjednavky(); return; }
+    uplatnenaPromo = data;
+    msg.innerHTML = `<div class="msg msg-success">✅ ${escHtml(data.popis)} – ušetříte ${Number(data.sleva).toLocaleString('cs-CZ')} Kč</div>`;
+    vykreslitSouhrnObjednavky();
+  } catch (e) { msg.innerHTML = '<div class="msg msg-error">Chyba spojení</div>'; }
+}
+
 function closeCheckout() {
   document.getElementById('modalCheckout').classList.remove('open');
   openCart();
@@ -3842,6 +3879,7 @@ async function odeslatObjednavku() {
         doprava, platba, celkem: total, webova_stranka,
         polozky: kosik.map(i => ({produkt_id: i.id, velikost: i.velikost, pocet: i.pocet, cena: i.cena})),
         poukaz_kod: uplatnenyPoukaz ? uplatnenyPoukaz.kod : null,
+        promo_kod: uplatnenaPromo ? uplatnenaPromo.kod : null,
         vydejni_misto_id: jeVydejniMistoGls(doprava) && glsVydejniMisto ? glsVydejniMisto.id : undefined,
         vydejni_misto_zasilkovna: jeVydejniMistoZasilkovny(doprava) && zasVydejniMisto ? zasVydejniMisto : undefined
       })
@@ -3852,6 +3890,7 @@ async function odeslatObjednavku() {
       kosik = [];
       ulozitKosik();
       uplatnenyPoukaz = null;
+      uplatnenaPromo = null;
       // Potvrzení zůstane otevřené (číslo objednávky, u převodu platba s VS),
       // dokud ho zákaznice sama nezavře. Částka je ta, kterou spočítal server.
       document.getElementById('potvrzeniObjednavky').innerHTML = potvrzeniObjednavkyHtml({ cislo: data.cislo, celkem: data.celkem, email, platba, poukazZbyva: data.poukaz_zbyva });
