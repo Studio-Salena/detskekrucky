@@ -5813,6 +5813,7 @@ function tiskUctenkyData(prodej, cislo) {
   ${prodej.polozky.map(p=>`
     <div style="margin:6px 0">
       <div>${escH(p.nazev)}${p.typ==='poukaz'?'':' — vel. '+escH(p.velikost)}</div>
+      ${p.typ==='poukaz'&&p.platnost_do?`<div style="font-size:11px">Platí do ${escH(datumCesky(p.platnost_do))} včetně${p.poukaz_kod?' · kód '+escH(p.poukaz_kod):''}</div>`:''}
       <div class="row"><span>${p.pocet} ks × ${Number(p.cena).toLocaleString('cs-CZ')} Kč</span><span><strong>${(p.pocet*Number(p.cena)).toLocaleString('cs-CZ')} Kč</strong></span></div>
     </div>`).join('')}
   <div class="divider"></div>
@@ -6215,6 +6216,7 @@ async function loadPoukazy() {
           <td style="display:flex;gap:4px">
             <button class="btn btn-outline btn-sm" onclick="zobrazitPoukazDetail(${p.id})">🖨️</button>
             ${p.stav !== 'zruseny' && Number(p.zustatek) < Number(p.hodnota) ? `<button class="btn btn-outline btn-sm" title="Připsat částku zpět na poukaz (vrácené zboží)" onclick="pripsatNaPoukaz(${p.id})">↩️</button>` : ''}
+            ${p.stav !== 'zruseny' && Number(p.zustatek) > 0 ? `<button class="btn btn-outline btn-sm" title="Prodloužit platnost" onclick="prodlouzitPoukaz(${p.id})">📅</button>` : ''}
             ${p.druh !== 'dar' ? `<button class="btn btn-outline btn-sm" title="Označit jako dar (nepočítá se do tržeb)" onclick="oznacitPoukazDar(${p.id}, ${!!p.vydano_prodej_id})">🎁</button>` : ''}
             <button class="btn btn-red btn-sm" onclick="smazatPoukaz(${p.id}, ${!!p.vydano_prodej_id})">🗑️</button>
           </td>
@@ -6238,7 +6240,7 @@ const STAVY_KARTY = {
   zablokovana: { text: '⛔ Zablokovaná', badge: 'badge-zruseno' }
 };
 const KARTY_K_UVOLNENI = ['vycerpana', 'prosla', 'zrusena'];
-const AKCE_KARTY = { pridani: 'Přidána do systému', nahrani: 'Nabita', uvolneni: 'Odblokována – zpět v oběhu', blokace: 'Zablokována', odblokovani: 'Blokace zrušena', prevod: 'Převod zůstatku' };
+const AKCE_KARTY = { pridani: 'Přidána do systému', nahrani: 'Nabita', uvolneni: 'Odblokována – zpět v oběhu', blokace: 'Zablokována', odblokovani: 'Blokace zrušena', prevod: 'Převod zůstatku', prodlouzeni: 'Platnost prodloužena' };
 let vsechnyKarty = [], kartyFiltr = 'vse', otevrenaKarta = null;
 const kcKarta = n => Number(n || 0).toLocaleString('cs-CZ') + ' Kč';
 const stavKartyHtml = s => `<span class="badge ${(STAVY_KARTY[s] || {}).badge || ''}">${(STAVY_KARTY[s] || {}).text || escH(s)}</span>`;
@@ -6310,6 +6312,8 @@ function vykreslitDetailKarty(k) {
   if (KARTY_K_UVOLNENI.includes(k.stav)) tl.push(`<button class="btn btn-primary" onclick="uvolnitKartu(${k.id})">🔓 Odblokovat a vrátit do oběhu</button>`);
   if (k.stav === 'zablokovana') tl.push(`<button class="btn btn-outline" onclick="zmenitBlokaciKarty(${k.id}, false)">Zrušit blokaci</button>`);
   if (p && p.stav === 'aktivni' && p.zustatek > 0 && (k.stav === 'nabita' || k.stav === 'zablokovana')) tl.push(`<button class="btn btn-outline" onclick="prevestKartu(${k.id})">↪ Převést zůstatek na jinou kartu</button>`);
+  if (k.stav === 'nabita') tl.push(`<button class="btn btn-outline" onclick="tisknoutKartickuKarty()">🖨️ Kartička s hodnotou</button>`);
+  if (p && p.stav !== 'zruseny' && Number(p.zustatek) > 0 && (k.stav === 'nabita' || k.stav === 'prosla')) tl.push(`<button class="btn btn-outline" onclick="prodlouzitPoukaz(${Number(p.id)}, true)">📅 Prodloužit platnost</button>`);
   if (k.stav === 'nabita') tl.push(`<button class="btn btn-red" onclick="zmenitBlokaciKarty(${k.id}, true)">⛔ Zablokovat (ztráta)</button>`);
   if (k.stav === 'prazdna' && !k.poukazy.length) tl.push(`<button class="btn btn-red btn-sm" onclick="smazatKartu(${k.id})">🗑️ Smazat kartu</button>`);
   const historie = k.udalosti.map(u => `<li>${new Date(u.vytvoreno).toLocaleString('cs-CZ')} – ${AKCE_KARTY[u.akce] || escH(u.akce)}${u.poznamka ? ` (${escH(u.poznamka)})` : ''}</li>`).join('');
@@ -6440,8 +6444,91 @@ async function ulozitNahraniKarty() {
     loadProdejna();
     najitKartu(data.karta.cislo);
     if (data.prodej && confirm(`✅ Karta ${data.karta.cislo} je nabitá na ${kcKarta(hodnota)}.\n\nVytisknout účtenku?`)) tiskUctenkyData(data.prodej, data.prodej.id);
+    if (confirm(`Vytisknout kartičku s hodnotou do obalu karty ${data.karta.cislo}?`)) tisknoutKartickuPoukazu({ hodnota: Number(data.hodnota), platnost_do: data.platnost_do, karta: data.karta.cislo });
   } catch (e) { msg.innerHTML = '<div class="error-msg">Chyba spojení</div>'; }
   finally { btn.disabled = false; }
+}
+
+// 'RRRR-MM-DD' (nebo Date / ISO) → '11. 11. 2027'
+function datumCesky(d) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d instanceof Date ? d.toISOString() : String(d || ''));
+  return m ? `${Number(m[3])}. ${Number(m[2])}. ${m[1]}` : '';
+}
+
+// Kartička s hodnotou do obalu plastové karty (velikost platební karty 85 × 54 mm,
+// tiskne se na A4 s čárou ke střihu). Je jen informační – platí vždy stav v systému.
+function tisknoutKartickuPoukazu({ hodnota, platnost_do, karta, zustatek }) {
+  const logo = new URL('logo.jpg', location.href).href;
+  const castka = Number(zustatek != null && Number(zustatek) < Number(hodnota) ? zustatek : hodnota);
+  const popisCastky = zustatek != null && Number(zustatek) < Number(hodnota) ? 'Zůstatek' : 'Hodnota';
+  const pw = window.open('', '_blank', 'width=600,height=500');
+  if (!pw) { alert('Prohlížeč zablokoval okno pro tisk – povolte vyskakovací okna.'); return; }
+  pw.document.write(`<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8"><title>Kartička ${escH(karta || '')}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant:wght@600;700&family=Dancing+Script:wght@700&family=Nunito:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    @page{ size:A4; margin:15mm; }
+    *{ box-sizing:border-box; }
+    body{ margin:0; font-family:'Nunito',Arial,sans-serif; color:#5c3d2e; }
+    .karticka{ width:85mm; height:54mm; border:0.3mm dashed #b9a48f; border-radius:3mm; padding:4mm 5mm;
+      display:flex; flex-direction:column; justify-content:space-between;
+      background:linear-gradient(135deg,#fdf6ee 0%,#f6e9e4 100%); -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .hlava{ display:flex; align-items:center; gap:3mm; }
+    .hlava img{ width:11mm; height:11mm; border-radius:50%; object-fit:cover; }
+    .nazev{ font-family:'Dancing Script',cursive; font-size:15pt; line-height:1; color:#8b4a42; }
+    .podnazev{ font-size:6.5pt; letter-spacing:0.6pt; text-transform:uppercase; color:#7a816c; }
+    .popis{ font-size:6.5pt; text-transform:uppercase; letter-spacing:0.6pt; color:#7a816c; }
+    .castka{ font-family:'Cormorant',Georgia,serif; font-weight:700; font-size:26pt; line-height:1; color:#5c3d2e; }
+    .pata{ display:flex; justify-content:space-between; align-items:flex-end; font-size:7pt; }
+    .pata strong{ font-size:8pt; }
+    .web{ font-size:6pt; color:#7a816c; text-align:right; }
+    .navod{ font-size:9pt; color:#888; margin-top:4mm; }
+    @media print{ .navod{ display:none; } }
+  </style></head><body>
+  <div class="karticka">
+    <div class="hlava"><img src="${escAttr(logo)}" alt=""><div><div class="nazev">Dětské krůčky</div><div class="podnazev">Dárkový poukaz</div></div></div>
+    <div><div class="popis">${popisCastky}</div><div class="castka">${castka.toLocaleString('cs-CZ')} Kč</div></div>
+    <div class="pata">
+      <div>Platí do <strong>${escH(datumCesky(platnost_do))}</strong>${karta ? `<br>Karta ${escH(karta)}` : ''}</div>
+      <div class="web">Zůstatek ověříte v prodejně<br>www.detskekrucky.cz</div>
+    </div>
+  </div>
+  <div class="navod">Vystřihněte podle čárkované čáry a vložte do obalu ke kartě.</div>
+  <script>window.onload = () => setTimeout(() => window.print(), 500);<\/script>
+  </body></html>`);
+  pw.document.close();
+}
+
+// Kartička pro právě otevřenou kartu v detailu (Dárkové poukazy → Plastové karty)
+function tisknoutKartickuKarty() {
+  const k = otevrenaKarta;
+  if (!k || !k.poukaz) return;
+  tisknoutKartickuPoukazu({ hodnota: Number(k.poukaz.hodnota), zustatek: Number(k.poukaz.zustatek), platnost_do: k.poukaz.platnost_do, karta: k.cislo });
+}
+
+// Prodloužení platnosti poukazu správcem – zapíše se do historie (server)
+async function prodlouzitPoukaz(id, zDetailuKarty) {
+  const p = (zDetailuKarty && otevrenaKarta && otevrenaKarta.poukaz && otevrenaKarta.poukaz.id === id)
+    ? otevrenaKarta.poukaz
+    : (typeof vsechnyPoukazy !== 'undefined' ? vsechnyPoukazy.find(x => x.id === id) : null);
+  if (!p) return;
+  const dosud = String(p.platnost_do).slice(0, 10);
+  // návrh: o 3 měsíce později než dosavadní konec (u propadlého od dneška)
+  const dnes = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' });
+  const zaklad = new Date((dosud > dnes ? dosud : dnes) + 'T12:00:00Z');
+  zaklad.setUTCMonth(zaklad.getUTCMonth() + 3);
+  const zadano = prompt(`Poukaz ${p.kod}: platí do ${datumCesky(dosud)}, zůstatek ${Number(p.zustatek).toLocaleString('cs-CZ')} Kč.\n\nNový poslední den platnosti (d. m. rrrr):`, datumCesky(zaklad.toISOString()));
+  if (zadano === null) return;
+  const m = /^\s*(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})\s*$/.exec(zadano) || /^\s*(\d{4})-(\d{2})-(\d{2})\s*$/.exec(zadano);
+  if (!m) { alert('Datum zadejte jako d. m. rrrr, např. 31. 12. 2027.'); return; }
+  const iso = m[1].length === 4 ? `${m[1]}-${m[2]}-${m[3]}` : `${m[3]}-${String(m[2]).padStart(2, '0')}-${String(m[1]).padStart(2, '0')}`;
+  try {
+    const res = await adminFetch(API + '/poukazy/' + id + '/prodlouzit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ platnost_do: iso }) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(data.chyba || 'Platnost se nepodařilo prodloužit.'); return; }
+    alert('✅ ' + data.zmena + '.');
+    if (typeof loadPoukazy === 'function') loadPoukazy();
+    if (zDetailuKarty && otevrenaKarta) najitKartu(otevrenaKarta.cislo);
+  } catch (e) { alert('Chyba spojení – nic se nezměnilo.'); }
 }
 
 // Vrácení peněz na poukaz (zákazník odstoupil od smlouvy a zboží platil poukazem)

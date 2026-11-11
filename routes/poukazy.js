@@ -5,7 +5,7 @@ const { pripravit } = require('../lib/startServeru');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const { jeZablokovana: jeZadostZablokovana, zaznamenatZadost } = require('../middleware/poukazyZadostLimiter');
 const { odeslat_upozorneni_zadost_poukaz, odeslat_poukaz_zakaznikovi } = require('./emaily');
-const { poukazPoPlatnosti } = require('../lib/poukazPlatnost');
+const { poukazPoPlatnosti, datumPlatnosti, chybaProdlouzeni } = require('../lib/poukazPlatnost');
 const { najitPoukaz } = require('../lib/poukazKarty');
 
 const POVOLENE_HODNOTY = [500, 1000, 1500];
@@ -79,6 +79,14 @@ async function initTabulky() {
         akce TEXT NOT NULL,
         poukaz_id INTEGER,
         poznamka TEXT,
+        vytvoreno TIMESTAMPTZ DEFAULT NOW()
+      );
+      -- Ruční změny poukazu správcem (2026-11-11: prodloužení platnosti) - kvůli
+      -- dohledatelnosti, co a kdy se měnilo
+      CREATE TABLE IF NOT EXISTS poukazy_zmeny (
+        id SERIAL PRIMARY KEY,
+        poukaz_id INTEGER NOT NULL REFERENCES darkove_poukazy(id) ON DELETE CASCADE,
+        popis TEXT NOT NULL,
         vytvoreno TIMESTAMPTZ DEFAULT NOW()
       );
     `);
@@ -237,7 +245,9 @@ router.post('/', vyzadovatAdmina, async (req, res) => {
     let prodej = null;
     if (platba) {
       const nazev = karta ? `Dárková karta ${karta.cislo} – ${hodnotaCislo} Kč` : `Dárkový poukaz ${hodnotaCislo} Kč`;
-      const polozky = [{ nazev, typ: 'poukaz', pocet: 1, cena: hodnotaCislo, poukaz_kod: kod }];
+      // platnost a karta i v položce účtenky - vytiskne se a zůstane při dotisku
+      const polozky = [{ nazev, typ: 'poukaz', pocet: 1, cena: hodnotaCislo, poukaz_kod: kod,
+        platnost_do: datumPlatnosti(poukaz.platnost_do), ...(karta ? { karta: karta.cislo } : {}) }];
       prodej = (await client.query(
         `INSERT INTO prodejna_prodeje (zakaznik, platba, poznamka, polozky, celkem, mezisoucet, sleva)
          VALUES ($1,$2,$3,$4,$5,$5,0) RETURNING *`,
@@ -343,6 +353,36 @@ router.post('/:id/pripsat', vyzadovatAdmina, async (req, res) => {
 // PATCH /api/poukazy/:id/dar – dodatečně označit už vydaný poukaz jako dar. EAN zůstává
 // (poukaz už může být vytištěný). Pokud k němu vznikl záznam prodeje, smaže se, ať
 // se do tržeb nepočítá ani vydání; útrata se pak vyřadí přes druh 'dar' (pouziti/vse).
+// POST /api/poukazy/:id/prodlouzit { platnost_do: 'RRRR-MM-DD' } – správce
+// prodlouží platnost (i propadlého poukazu se zůstatkem). Zapíše se do
+// poukazy_zmeny a u plastové karty i do její historie.
+router.post('/:id/prodlouzit', vyzadovatAdmina, async (req, res) => {
+  const novyDen = String((req.body && req.body.platnost_do) || '').trim();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const poukaz = (await client.query('SELECT * FROM darkove_poukazy WHERE id = $1 FOR UPDATE', [req.params.id])).rows[0];
+    const chyba = chybaProdlouzeni(poukaz, novyDen);
+    if (chyba) { await client.query('ROLLBACK'); return res.status(poukaz ? 400 : 404).json({ chyba }); }
+    const dosud = datumPlatnosti(poukaz.platnost_do);
+    const cesky = d => { const [r, m, dd] = d.split('-'); return `${Number(dd)}. ${Number(m)}. ${r}`; };
+    const popis = `Platnost prodloužena z ${cesky(dosud)} na ${cesky(novyDen)}`;
+    const upraveny = (await client.query('UPDATE darkove_poukazy SET platnost_do = $1 WHERE id = $2 RETURNING *', [novyDen, poukaz.id])).rows[0];
+    await client.query('INSERT INTO poukazy_zmeny (poukaz_id, popis) VALUES ($1, $2)', [poukaz.id, popis]);
+    if (poukaz.karta_id) {
+      await client.query("INSERT INTO poukazove_karty_udalosti (karta_id, akce, poukaz_id, poznamka) VALUES ($1, 'prodlouzeni', $2, $3)",
+        [poukaz.karta_id, poukaz.id, `z ${cesky(dosud)} na ${cesky(novyDen)}`]);
+    }
+    await client.query('COMMIT');
+    res.json({ ...upraveny, zmena: popis });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ chyba: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 router.patch('/:id/dar', vyzadovatAdmina, async (req, res) => {
   const client = await pool.connect();
   try {
