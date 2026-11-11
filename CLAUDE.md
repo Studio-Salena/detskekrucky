@@ -16,6 +16,7 @@ Web a e-shop pro obchod s barefoot obuví pro děti (majitelka: Monika Škarpich
 
 - `index.js` – hlavní backend entry point (registrace rout `/api/...`)
 - `routes/objednavky.js` – objednávky z e-shopu (sklad se odečítá při objednání, vrací se při zrušení; smazat jde jen zrušenou), podání do Zásilkovny a štítek
+- `routes/prodejna.js` (pokladna, vratky), `lib/vymena.js` – **výměna zboží** (Prodejna → Vratky → 🔄 Výměna, `POST /api/prodejna/vymeny`): v jedné transakci vratka z původní účtenky + nový prodej se zápočtem (`prodejna_prodeje.vymena_castka`, `celkem` = jen doplatek, platba `vymena` když se nedoplácí). `vratky.castka` = peníze opravdu vrácené zákazníkovi (u výměny rozdíl, často 0), `vratky.zpusob_vraceni` (hotovost/karta/qr/prevod/vymena, NULL = starší vratka bez údaje), `hodnota_zbozi`, `vymena_prodej_id`. Díky tomu sedí součty uzávěrek i účetnictví (prodeje.celkem − vratky.castka) bez dalších úprav; denní a měsíční uzávěrka navíc odečte hotově vrácené peníze („Hotovost v pokladně podle systému“). Dřív zadanou výměnu (vratka + běžný prodej) jde dodatečně převést tlačítkem „🔄 Byla to výměna“ (`POST /api/prodejna/vymeny/prevest`), původní hodnoty se uloží do `prodejna_opravy`. Účtenku výměny nejde smazat
 - `routes/sklad.js` – sklad po variantách (EAN, velikost, kusy, min. stav, pohyby)
 - `routes/modely.js`, `lib/modely.js` – modely bot (`modely`, `produkty.model_id`): katalog, vlastnosti, filtry
 - `routes/doprava.js`, `lib/doprava.js` – způsoby dopravy a ceny (`nastaveni.doprava`, admin Nastavení → Doprava); cenu vždy počítá server

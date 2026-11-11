@@ -225,6 +225,7 @@ function mockPoolProdejna(stav) {
         stav.promoPouziti.push({ kod: params[0], kanal: params[1], prodej_id: params[3], sleva: params[5], uvolneno: null });
         return {};
       }
+      if (s.startsWith('SELECT id FROM vratky WHERE vymena_prodej_id')) return { rows: [] };
       if (s.startsWith('DELETE FROM prodejna_prodeje')) return {};
       if (s.startsWith('UPDATE promo_pouziti SET uvolneno')) {
         let n = 0;

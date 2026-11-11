@@ -967,6 +967,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <div class="table-header"><h3>↩️ Vratky</h3>
           <div style="display:flex;gap:8px">
             <button class="btn btn-csv btn-sm no-print" onclick="exportCSV('vratky')">⬇ CSV</button>
+            <button class="btn btn-primary btn-sm" onclick="otevritVymenu()" title="Zákazník vrací zboží a bere si jiné">🔄 Výměna</button>
             <button class="btn btn-outline btn-sm" onclick="otevritNovaVratka()">+ Nová vratka</button>
           </div>
         </div>
@@ -1685,6 +1686,15 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     <div id="vratkaPolozky" style="display:flex;flex-direction:column;gap:10px;margin:12px 0"></div>
     <button class="btn btn-outline btn-sm" onclick="pridatVratkaRadek()">+ Přidat položku</button>
     <div class="form-group" style="margin-top:14px"><label>Částka k vrácení (Kč) *</label><input type="number" id="vratkaCastka" placeholder="0"></div>
+    <div class="form-group"><label for="vratkaZpusob">Jak jsme peníze vrátili *</label>
+      <select id="vratkaZpusob">
+        <option value="">— vyberte —</option>
+        <option value="hotovost">💵 Hotově z pokladny</option>
+        <option value="karta">💳 Na platební kartu</option>
+        <option value="qr">📱 QR platbou</option>
+        <option value="prevod">🏦 Převodem na účet</option>
+      </select>
+      <div style="font-size:0.78rem;color:var(--text-light);margin-top:4px">Hotově vrácené peníze se odečtou od hotovosti v uzávěrce. Když si zákazník místo peněz bere jiné zboží, použijte <strong>🔄 Výměnu</strong>.</div></div>
     <div class="form-group"><label>Důvod vrácení</label><input type="text" id="vratkaDuvod" placeholder="Volitelné, např. špatná velikost"></div>
     <div class="form-group" style="display:flex;align-items:center;gap:8px">
       <input type="checkbox" id="vratkaNaSklad" checked style="width:auto">
@@ -1693,6 +1703,53 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="zavritKameruVratka();closeModal('modalNovaVratka')">Zrušit</button>
       <button class="btn btn-primary" onclick="ulozitVratku()">💾 Uložit vratku</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalVymena">
+  <div class="modal" style="max-width:720px">
+    <h3>🔄 Výměna zboží</h3>
+    <p style="font-size:0.85rem;color:var(--text-light);margin:-4px 0 12px">Zákazník vrací zboží z dřívějšího nákupu a bere si jiné. Do tržeb jde jen doplatek nebo vrácený rozdíl.</p>
+    <div id="vymenaMsg" role="status" aria-live="polite"></div>
+    <div class="form-group">
+      <label for="vymenaUctenka">1. Číslo původní účtenky</label>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="vymenaUctenka" inputmode="numeric" placeholder="např. 272" onkeydown="if(event.key==='Enter'){event.preventDefault();nacistUctenkuVymena();}">
+        <button class="btn btn-outline" style="margin-bottom:0" onclick="nacistUctenkuVymena()">Načíst</button>
+      </div>
+    </div>
+    <div id="vymenaVracene" style="margin-bottom:12px"></div>
+    <div class="form-group">
+      <label for="vymenaEan">2. Nové zboží – naskenujte EAN</label>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="vymenaEan" placeholder="Naskenuj nebo napiš EAN" onkeydown="if(event.key==='Enter'){event.preventDefault();pridatNoveVymena();}">
+        <button class="btn btn-outline" style="margin-bottom:0" onclick="pridatNoveVymena()">Přidat</button>
+      </div>
+      <div id="vymenaEanMsg" style="margin-top:6px"></div>
+    </div>
+    <div id="vymenaNove" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px"></div>
+    <div class="promo-uprava" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+      <div class="form-group"><label for="vymenaZapocet">Hodnota vráceného zboží (Kč)</label><input type="number" id="vymenaZapocet" min="0" step="1" oninput="prepocitatVymenu()">
+        <div style="font-size:0.75rem;color:var(--text-light);margin-top:4px">Kolik za něj zákazník zaplatil (po slevě)</div></div>
+      <div class="form-group"><label>Nové zboží</label><div id="vymenaNoveCelkem" style="font-weight:800;font-size:1.1rem;padding:8px 0">0 Kč</div></div>
+      <div class="form-group"><label id="vymenaRozdilPopis">Rozdíl</label><div id="vymenaRozdil" style="font-weight:800;font-size:1.3rem;color:var(--brown);padding:6px 0">0 Kč</div></div>
+    </div>
+    <div class="form-group" id="vymenaPlatbaSkupina" hidden>
+      <label for="vymenaPlatba" id="vymenaPlatbaPopis">Jak zákazník doplácí</label>
+      <select id="vymenaPlatba" onchange="prepocitatVymenu()">
+        <option value="">— vyberte —</option>
+        <option value="hotovost">💵 Hotově</option>
+        <option value="karta">💳 Kartou</option>
+        <option value="qr">📱 QR platbou</option>
+        <option value="prevod">🏦 Převodem</option>
+      </select>
+    </div>
+    <div class="form-group" id="vymenaPrijatoSkupina" hidden><label for="vymenaPrijato">Přijato hotově (nepovinné, pro výpočet vrácení)</label><input type="number" id="vymenaPrijato" min="0" step="1"></div>
+    <div class="form-group"><label for="vymenaDuvod">Důvod</label><input type="text" id="vymenaDuvod" placeholder="např. jiná velikost"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modalVymena')">Zrušit</button>
+      <button class="btn btn-primary" id="vymenaUlozitBtn" onclick="ulozitVymenu()">🔄 Uložit výměnu</button>
     </div>
   </div>
 </div>
@@ -4704,8 +4761,8 @@ async function exportCSV(typ) {
       nazev='prodejna';
     } else if (typ==='vratky') {
       const d=await adminFetch(API+'/prodejna/vratky/vse').then(r=>r.json());
-      rows=[['Č.','Datum','Prodej #','Položky','Částka Kč','Důvod','Na sklad']];
-      d.forEach(v=>rows.push([v.id,new Date(v.vytvoreno).toLocaleDateString('cs-CZ'),v.prodej_id||'',(v.polozky||[]).map(x=>`${x.nazev||''} vel.${x.velikost} x${x.pocet}`).join('; '),v.castka,v.duvod||'',v.vraceno_na_sklad?'Ano':'Ne']));
+      rows=[['Č.','Datum','Prodej #','Položky','Vráceno zákazníkovi Kč','Jak vráceno','Výměna – účtenka #','Hodnota vráceného zboží Kč','Důvod','Na sklad']];
+      d.forEach(v=>rows.push([v.id,new Date(v.vytvoreno).toLocaleDateString('cs-CZ'),v.prodej_id||'',(v.polozky||[]).map(x=>`${x.nazev||''} vel.${x.velikost} x${x.pocet}`).join('; '),v.castka,zpusobVraceniText(v),v.vymena_prodej_id||'',v.hodnota_zbozi!=null?v.hodnota_zbozi:'',v.duvod||'',v.vraceno_na_sklad?'Ano':'Ne']));
       nazev='vratky';
     } else if (typ==='poukazy') {
       const d=await adminFetch(API+'/poukazy').then(r=>r.json());
@@ -5064,6 +5121,7 @@ async function tisknoutMesicniUzaverku(klicMesice) {
   <div class="row"><span>Z toho poukazem:</span><span>−${souhrn.poukaz.toLocaleString('cs-CZ')} Kč</span></div>
   <div class="row"><span>Vratky (${vratkyMesice.length}×):</span><span>−${vratkyCelkem.toLocaleString('cs-CZ')} Kč</span></div>
   <div class="row total"><span>Čistý příjem:</span><span>${(souhrn.celkem - souhrn.poukaz - vratkyCelkem).toLocaleString('cs-CZ')} Kč</span></div>
+  ${pokladnaRadkyUzaverky(hotovostVPokladne(souhrn.hotovost, prodejeMesice, vratkyMesice))}
   <div class="divider"></div>
   <div><strong>Po dnech:</strong></div>
   ${dnySeznam.map(([k,d])=>`
@@ -5080,6 +5138,31 @@ async function tisknoutMesicniUzaverku(klicMesice) {
   <script>window.onload=()=>{window.print();}<\/script>
   </body></html>`);
   pw.document.close();
+}
+
+// Hotovost a výměny pro uzávěrku: hotově vrácené peníze z vratek se odečtou
+// od hotovosti z prodejů (to má být v pokladně). Výměna = prodej se zápočtem
+// vráceného zboží - do tržeb jde jen doplatek, zápočet je jen pro informaci.
+function hotovostVPokladne(hotovostProdeje, prodeje, vratky) {
+  const vracenoHotove = vratky.filter(v => v.zpusob_vraceni === 'hotovost').reduce((s, v) => s + Number(v.castka), 0);
+  const vymeny = prodeje.filter(p => Number(p.vymena_castka) > 0);
+  return {
+    vracenoHotove,
+    vPokladne: hotovostProdeje - vracenoHotove,
+    vymenyPocet: vymeny.length,
+    vymenyZapocet: vymeny.reduce((s, p) => s + Number(p.vymena_castka), 0),
+    vymenyDoplatek: vymeny.reduce((s, p) => s + Number(p.celkem), 0),
+    vratkyBezUdaje: vratky.filter(v => !v.zpusob_vraceni && Number(v.castka) > 0).length
+  };
+}
+function pokladnaRadkyUzaverky(k) {
+  const kc = n => n.toLocaleString('cs-CZ') + ' Kč';
+  return (k.vymenyPocet ? `<div class="row"><span>Výměny (${k.vymenyPocet}×):</span><span>doplaceno ${kc(k.vymenyDoplatek)}</span></div>
+  <div class="row polozka"><span>zápočet vráceného zboží</span><span>${kc(k.vymenyZapocet)}</span></div>` : '') +
+  `<div class="divider"></div>
+  ${k.vracenoHotove ? `<div class="row"><span>Vráceno hotově:</span><span>−${kc(k.vracenoHotove)}</span></div>` : ''}
+  <div class="row"><span>Hotovost v pokladně podle systému:</span><span>${kc(k.vPokladne)}</span></div>
+  ${k.vratkyBezUdaje ? `<div class="polozka">${k.vratkyBezUdaje}× vratka bez údaje, jak byly peníze vráceny – není odečtena</div>` : ''}`;
 }
 
 // Tisk denní uzávěrky pro daný den (klíč YYYY-MM-DD)
@@ -5100,6 +5183,7 @@ async function tisknoutUzaverku(klicDne) {
     if (souhrn[p.platba] != null) souhrn[p.platba] += Number(p.celkem);
   });
   const vratkyCelkem = vratkyDne.reduce((s,v)=>s+Number(v.castka),0);
+  const pokladna = hotovostVPokladne(souhrn.hotovost, prodejeDne, vratkyDne);
   const datumHezky = new Date(klicDne).toLocaleDateString('cs-CZ', { day:'numeric', month:'long', year:'numeric' });
 
   const pw = window.open('','_blank','width=400,height=600');
@@ -5138,10 +5222,12 @@ async function tisknoutUzaverku(klicDne) {
   <div class="row"><span>Z toho poukazem:</span><span>−${souhrn.poukaz.toLocaleString('cs-CZ')} Kč</span></div>
   <div class="row"><span>Vratky (${vratkyDne.length}×):</span><span>−${vratkyCelkem.toLocaleString('cs-CZ')} Kč</span></div>
   <div class="row total"><span>Čistý příjem:</span><span>${(souhrn.celkem - souhrn.poukaz - vratkyCelkem).toLocaleString('cs-CZ')} Kč</span></div>
+  ${pokladnaRadkyUzaverky(pokladna)}
   <div class="divider"></div>
   <div><strong>Prodeje:</strong></div>
   ${prodejeDne.map(p=>`
-  <div class="row polozka"><span>${new Date(p.datum).toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})} ${platbaZkratka(p.platba)}</span><span>${Number(p.celkem).toLocaleString('cs-CZ')} Kč</span></div>`).join('')}
+  <div class="row polozka"><span>${new Date(p.datum).toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})} ${platbaZkratka(p.platba)}${Number(p.vymena_castka)>0&&p.platba!=='vymena'?' V':''}</span><span>${Number(p.celkem).toLocaleString('cs-CZ')} Kč</span></div>`).join('')}
+  ${pokladna.vymenyPocet?'<div class="polozka">V = výměna (jen doplatek)</div>':''}
   <div class="divider"></div>
   <div class="linka-popisek">Hotovost v pokladně (skutečnost):</div>
   <div class="linka"></div>
@@ -5737,9 +5823,14 @@ function tiskUctenkyData(prodej, cislo) {
   <div class="row"><span>Za zboží:</span><span>${(Number(prodej.celkem)+Number(prodej.poukaz_castka)).toLocaleString('cs-CZ')} Kč</span></div>
   <div class="row"><span>Poukaz:</span><span>−${Number(prodej.poukaz_castka).toLocaleString('cs-CZ')} Kč</span></div>
   ${prodej.poukaz_kod?`<div style="font-size:11px">${escH(prodej.poukaz_kod)}</div>`:''}`:''}
-  <div class="row total"><span>${Number(prodej.poukaz_castka)>0?'DOPLATEK':'CELKEM'}:</span><span>${Number(prodej.celkem).toLocaleString('cs-CZ')} Kč</span></div>
+  ${Number(prodej.vymena_castka)>0?`
+  <div style="font-size:12px;margin-top:4px">VÝMĚNA ZBOŽÍ</div>
+  <div class="row"><span>Za nové zboží:</span><span>${(Number(prodej.celkem)+Number(prodej.vymena_castka)).toLocaleString('cs-CZ')} Kč</span></div>
+  <div class="row"><span>Vrácené zboží:</span><span>−${Number(prodej.vymena_castka).toLocaleString('cs-CZ')} Kč</span></div>
+  ${prodej.poznamka?`<div style="font-size:11px">${escH(prodej.poznamka)}</div>`:''}`:''}
+  <div class="row total"><span>${Number(prodej.poukaz_castka)>0||Number(prodej.vymena_castka)>0?'DOPLATEK':'CELKEM'}:</span><span>${Number(prodej.celkem).toLocaleString('cs-CZ')} Kč</span></div>
   <div style="font-size:12px;margin-top:4px">Neplátce DPH</div>
-  <div class="row"><span>Platba:</span><span>${Number(prodej.poukaz_castka)>0?'Dárkový poukaz + ':''}${platbaLabel(prodej.platba)}</span></div>
+  <div class="row"><span>Platba:</span><span>${prodej.platba==='vymena'?'Výměna bez doplatku':(Number(prodej.poukaz_castka)>0?'Dárkový poukaz + ':'')+platbaLabel(prodej.platba)}</span></div>
   ${prodej.platba==='hotovost'&&Number(prodej.hotovost_prijato)>0?`
   <div class="row"><span>Přijato:</span><span>${Number(prodej.hotovost_prijato).toLocaleString('cs-CZ')} Kč</span></div>
   <div class="row"><span>Vráceno:</span><span>${Number(prodej.hotovost_vraceno||0).toLocaleString('cs-CZ')} Kč</span></div>`:''}
@@ -5831,16 +5922,57 @@ async function loadVratky() {
     return;
   }
   tbl.innerHTML = `
-    <table><thead><tr><th>Č.</th><th>Datum</th><th>Vázáno na prodej</th><th>Položky</th><th>Částka</th><th>Důvod</th><th>Na sklad</th></tr></thead>
-    <tbody>${vratkyData.map(v=>`<tr>
+    <table><thead><tr><th>Č.</th><th>Datum</th><th>Z účtenky</th><th>Položky</th><th>Vráceno</th><th>Jak</th><th>Důvod</th><th>Na sklad</th><th></th></tr></thead>
+    <tbody>${vratkyData.map(v=>{
+      const vymena = !!v.vymena_prodej_id;
+      const castka = Number(v.castka) > 0 ? '−'+Number(v.castka).toLocaleString('cs-CZ')+' Kč' : '0 Kč';
+      const jak = vymena
+        ? `🔄 výměna za účtenku <strong>#${Number(v.vymena_prodej_id)}</strong><div style="font-size:0.75rem;color:var(--text-light)">zboží za ${Number(v.hodnota_zbozi||0).toLocaleString('cs-CZ')} Kč${Number(v.castka)>0?' · rozdíl '+escH(ZPUSOB_VRACENI[v.zpusob_vraceni]||''):''}</div>`
+        : escH(ZPUSOB_VRACENI[v.zpusob_vraceni] || 'neuvedeno');
+      return `<tr>
       <td><strong>#${v.id}</strong></td>
       <td>${new Date(v.vytvoreno).toLocaleDateString('cs-CZ')}</td>
-      <td>${v.prodej_id ? '#'+v.prodej_id : '—'}</td>
+      <td>${v.prodej_id ? '#'+Number(v.prodej_id) : '—'}</td>
       <td>${(v.polozky||[]).map(x=>`${escH(x.nazev)} vel.${escH(x.velikost)} x${escH(x.pocet)}`).join(', ')}</td>
-      <td><strong style="color:var(--brown)">−${Number(v.castka).toLocaleString('cs-CZ')} Kč</strong></td>
+      <td><strong style="color:var(--brown)">${castka}</strong></td>
+      <td>${jak}</td>
       <td>${escH(v.duvod)||'—'}</td>
       <td>${v.vraceno_na_sklad ? '✅' : '—'}</td>
-    </tr>`).join('')}</tbody></table>`;
+      <td>${vymena ? '' : `<button class="btn btn-outline btn-sm" title="Zákazník si místo peněz vzal jiné zboží – zapsat dodatečně jako výměnu" onclick="prevestNaVymenu(${Number(v.id)})">🔄 Byla to výměna</button>`}</td>
+    </tr>`;}).join('')}</tbody></table>`;
+}
+
+// Dodatečný převod: vratka + pozdější prodej byly ve skutečnosti jedna výměna.
+// Přepočítá částky (prodej = doplatek, vratka = vrácený rozdíl), čistý příjem
+// se nemění, hotovost v uzávěrce začne sedět. Původní hodnoty si uloží server.
+async function prevestNaVymenu(vratkaId) {
+  const v = vratkyData.find(x => x.id === vratkaId);
+  if (!v) return;
+  const zadano = prompt(`Vratka #${v.id} (−${Number(v.castka).toLocaleString('cs-CZ')} Kč): zákazník si místo peněz vzal jiné zboží.\n\nNapište číslo účtenky, na kterou jste nové zboží prodali:`);
+  if (zadano === null) return;
+  const prodejId = parseInt(String(zadano).replace(/[^0-9]/g, ''), 10);
+  if (!prodejId) { alert('Zadejte číslo účtenky.'); return; }
+  const p = prodejnaData.find(x => x.id === prodejId);
+  if (!p) { alert(`Účtenka #${prodejId} nebyla mezi prodeji nalezena.`); return; }
+  const zapocet = Number(v.castka), nove = Number(p.celkem);
+  const kredit = Math.min(zapocet, nove);
+  const doplatek = nove - kredit, vraceno = zapocet - kredit;
+  const kc = n => n.toLocaleString('cs-CZ') + ' Kč';
+  const text = `Zapsat jako výměnu?\n\n` +
+    `Vrácené zboží (vratka #${v.id}): ${kc(zapocet)}\n` +
+    `Nové zboží (účtenka #${p.id}, ${new Date(p.datum).toLocaleString('cs-CZ')}): ${kc(nove)}\n\n` +
+    (doplatek > 0 ? `Zákazník doplatil: ${kc(doplatek)} (${platbaLabel(p.platba)})\n` : '') +
+    (vraceno > 0 ? `Zákazníkovi se vrátilo: ${kc(vraceno)}\n` : '') +
+    (doplatek === 0 && vraceno === 0 ? 'Stejná cena – žádné peníze.\n' : '') +
+    `\nÚčtenka #${p.id} bude v tržbách za ${kc(doplatek)}, vratka #${v.id} za ${kc(vraceno)}. Čistý příjem se nezmění, hotovost v uzávěrce začne sedět. Původní hodnoty zůstanou v evidenci.`;
+  if (!confirm(text)) return;
+  try {
+    const res = await adminFetch(API+'/prodejna/vymeny/prevest', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vratka_id: v.id, prodej_id: p.id }) });
+    const data = await res.json().catch(()=>({}));
+    if (!res.ok) { alert(data.chyba || 'Převod se nepodařil.'); return; }
+    alert(`Hotovo. Vratka #${v.id} a účtenka #${p.id} jsou zapsané jako výměna.`);
+    loadVratky(); loadProdejna(); loadPrehled();
+  } catch(e) { alert('Chyba spojení – nic se nezměnilo.'); }
 }
 
 function hledatEanVratka() {
@@ -6848,6 +6980,7 @@ function otevritNovaVratka() {
   naplnitVyberProdejVratka();
   document.getElementById('vratkaPolozky').innerHTML = '';
   document.getElementById('vratkaCastka').value = '';
+  document.getElementById('vratkaZpusob').value = '';
   document.getElementById('vratkaDuvod').value = '';
   document.getElementById('vratkaEan').value = '';
   document.getElementById('vratkaEanMsg').innerHTML = '';
@@ -6902,6 +7035,8 @@ async function ulozitVratku() {
 
   if (!polozky.length) { msg.innerHTML = '<div class="error-msg">Přidejte aspoň jednu vracenou položku.</div>'; return; }
   if (!castka || castka <= 0) { msg.innerHTML = '<div class="error-msg">Zadejte částku k vrácení.</div>'; return; }
+  const zpusobVraceni = document.getElementById('vratkaZpusob').value;
+  if (!zpusobVraceni) { msg.innerHTML = '<div class="error-msg">Vyberte, jak jste zákazníkovi peníze vrátili.</div>'; return; }
 
   // Položky bez produkt_id (ručně zadané) se nedají vrátit na sklad automaticky
   const polozkyProSklad = polozky.filter(p => p.produkt_id);
@@ -6917,7 +7052,7 @@ async function ulozitVratku() {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
         prodej_id: prodejId, objednavka_id: objednavkaId, polozky: polozkyProSklad.length ? polozkyProSklad : polozky,
-        castka, duvod, vratit_na_sklad: vratitNaSklad && polozkyProSklad.length > 0
+        castka, duvod, zpusob_vraceni: zpusobVraceni, vratit_na_sklad: vratitNaSklad && polozkyProSklad.length > 0
       })
     });
     if (res.ok) {
@@ -6935,6 +7070,153 @@ async function ulozitVratku() {
   } catch(e) { msg.innerHTML = '<div class="error-msg">Chyba spojení</div>'; }
 }
 
+
+// ═══════════════════════════════
+// VÝMĚNA ZBOŽÍ (Prodejna → Vratky → Výměna) – server: POST /api/prodejna/vymeny
+// ═══════════════════════════════
+let vymenaPuvodni = null; // načtená původní účtenka
+
+function otevritVymenu() {
+  vymenaPuvodni = null;
+  ['vymenaUctenka','vymenaEan','vymenaZapocet','vymenaPrijato','vymenaDuvod'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('vymenaPlatba').value = '';
+  ['vymenaMsg','vymenaVracene','vymenaNove','vymenaEanMsg'].forEach(id => { document.getElementById(id).innerHTML = ''; });
+  prepocitatVymenu();
+  openModal('modalVymena');
+  if (!prodejnaSkladData.length) nacistSkladProProdejna();
+  loadVratky(); // kvůli kusům, které už se z účtenky vrátily dřív
+  setTimeout(() => document.getElementById('vymenaUctenka').focus(), 150);
+}
+
+// Cena kusu, kterou zákazník opravdu zaplatil: sleva celé účtenky se rozpočítá
+// poměrně na položky (např. 1 840 Kč − 10 % = 1 656 Kč)
+function zaplacenaCenaKusu(prodej, polozka) {
+  const mezisoucet = Number(prodej.mezisoucet) || 0;
+  const sleva = Number(prodej.sleva) || 0;
+  const koef = mezisoucet > 0 && sleva > 0 ? (mezisoucet - sleva) / mezisoucet : 1;
+  return Math.round(Number(polozka.cena) * koef * 100) / 100;
+}
+
+function nacistUctenkuVymena() {
+  const cislo = parseInt(String(document.getElementById('vymenaUctenka').value).replace(/[^0-9]/g, ''), 10);
+  const box = document.getElementById('vymenaVracene');
+  vymenaPuvodni = null;
+  if (!cislo) { box.innerHTML = '<div class="error-msg">Zadejte číslo účtenky.</div>'; prepocitatVymenu(); return; }
+  const p = prodejnaData.find(x => x.id === cislo);
+  if (!p) { box.innerHTML = `<div class="error-msg">Účtenka #${cislo} nebyla nalezena.</div>`; prepocitatVymenu(); return; }
+  // kusy, které už se z této účtenky vrátily dřív
+  const vraceno = new Map();
+  vratkyData.filter(v => Number(v.prodej_id) === p.id).forEach(v => (v.polozky||[]).forEach(x => {
+    const k = x.produkt_id + '_' + x.velikost; vraceno.set(k, (vraceno.get(k)||0) + Number(x.pocet));
+  }));
+  const polozky = (p.polozky||[]).filter(x => x.typ !== 'poukaz' && Number.isInteger(x.produkt_id)).map(x => {
+    const zbyva = Number(x.pocet) - (vraceno.get(x.produkt_id + '_' + x.velikost) || 0);
+    return { ...x, zbyva, zaplaceno: zaplacenaCenaKusu(p, x) };
+  });
+  vymenaPuvodni = { prodej: p, polozky };
+  if (!polozky.length) { box.innerHTML = '<div class="error-msg">Na účtence není zboží, které by šlo vrátit.</div>'; prepocitatVymenu(); return; }
+  box.innerHTML = `<div style="font-size:0.85rem;margin-bottom:6px"><strong>Účtenka #${p.id}</strong> z ${new Date(p.datum).toLocaleDateString('cs-CZ')} – zaškrtněte, co zákazník vrací:</div>` +
+    polozky.map((x, i) => `<label style="display:flex;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--tan-light);border-radius:10px;margin-bottom:6px;${x.zbyva<=0?'opacity:0.5':''}">
+      <input type="checkbox" class="vym-vraci" data-i="${i}" ${x.zbyva<=0?'disabled':''} onchange="nastavitZapocetVymeny()" style="width:auto">
+      <span style="flex:1">${escH(x.nazev)} · vel. ${escH(x.velikost)}${x.zbyva<=0?' · už vráceno':''}</span>
+      <span>ks <input type="number" class="vym-pocet" data-i="${i}" value="${Math.max(1, Math.min(1, x.zbyva))}" min="1" max="${Math.max(1, x.zbyva)}" style="width:56px" onchange="nastavitZapocetVymeny()"></span>
+      <span style="white-space:nowrap">${x.zaplaceno.toLocaleString('cs-CZ')} Kč/ks</span>
+    </label>`).join('');
+  prepocitatVymenu();
+}
+
+function vybraneVraceneVymena() {
+  if (!vymenaPuvodni) return [];
+  return [...document.querySelectorAll('#vymenaVracene .vym-vraci:checked')].map(ch => {
+    const x = vymenaPuvodni.polozky[Number(ch.dataset.i)];
+    const pocet = Math.min(x.zbyva, Math.max(1, parseInt(document.querySelector(`#vymenaVracene .vym-pocet[data-i="${ch.dataset.i}"]`).value, 10) || 1));
+    return { produkt_id: x.produkt_id, nazev: x.nazev, velikost: x.velikost, pocet, cena: Number(x.cena), zaplaceno: x.zaplaceno };
+  });
+}
+
+function nastavitZapocetVymeny() {
+  const z = vybraneVraceneVymena().reduce((s, x) => s + x.zaplaceno * x.pocet, 0);
+  document.getElementById('vymenaZapocet').value = z ? Math.round(z) : '';
+  prepocitatVymenu();
+}
+
+function pridatNoveVymena() {
+  const input = document.getElementById('vymenaEan');
+  const msg = document.getElementById('vymenaEanMsg');
+  const ean = input.value.trim();
+  if (!ean) return;
+  const s = prodejnaSkladData.find(x => x.ean === ean);
+  if (!s) { msg.innerHTML = `<div class="error-msg">Produkt s EAN <strong>${escH(ean)}</strong> nebyl nalezen.</div>`; return; }
+  if (!(Number(s.pocet_kusu) > 0)) { msg.innerHTML = `<div class="error-msg">${escH(s.nazev)} vel. ${escH(s.velikost)} není skladem.</div>`; return; }
+  const div = document.createElement('div');
+  div.className = 'vym-nove polozka-grid';
+  div.dataset.produktId = s.id; div.dataset.velikost = s.velikost; div.dataset.nazev = s.nazev; div.dataset.skladem = s.pocet_kusu;
+  div.innerHTML = `
+    <div class="form-group" style="margin:0"><label>Produkt</label><div style="padding:8px 0;font-size:0.85rem">${escH(s.nazev)}</div></div>
+    <div class="form-group" style="margin:0"><label>Velikost</label><div style="padding:8px 0">${escH(s.velikost)} <span style="color:var(--text-light);font-size:0.75rem">(${Number(s.pocet_kusu)} ks)</span></div></div>
+    <div class="form-group" style="margin:0"><label>Ks</label><input type="number" class="vym-n-pocet" value="1" min="1" max="${Number(s.pocet_kusu)}" oninput="prepocitatVymenu()"></div>
+    <div class="form-group" style="margin:0"><label>Cena Kč</label><input type="number" class="vym-n-cena" value="${Number(s.cena)}" min="0" oninput="prepocitatVymenu()"></div>
+    <button class="btn btn-red btn-sm" style="align-self:end" onclick="this.closest('.vym-nove').remove();prepocitatVymenu()" aria-label="Odebrat">✕</button>`;
+  document.getElementById('vymenaNove').appendChild(div);
+  msg.innerHTML = '';
+  input.value = '';
+  input.focus();
+  prepocitatVymenu();
+}
+
+function noveZboziVymena() {
+  return [...document.querySelectorAll('#vymenaNove .vym-nove')].map(r => ({
+    produkt_id: Number(r.dataset.produktId), nazev: r.dataset.nazev, velikost: r.dataset.velikost,
+    pocet: parseInt(r.querySelector('.vym-n-pocet').value, 10) || 0,
+    cena: Number(r.querySelector('.vym-n-cena').value) || 0
+  }));
+}
+
+function prepocitatVymenu() {
+  const zapocet = Number(document.getElementById('vymenaZapocet').value) || 0;
+  const nove = noveZboziVymena().reduce((s, x) => s + x.pocet * x.cena, 0);
+  const rozdil = Math.round((nove - zapocet) * 100) / 100;
+  const kc = n => n.toLocaleString('cs-CZ') + ' Kč';
+  document.getElementById('vymenaNoveCelkem').textContent = kc(nove);
+  document.getElementById('vymenaRozdilPopis').textContent = rozdil > 0 ? 'Zákazník doplácí' : rozdil < 0 ? 'Vracíme zákazníkovi' : 'Rozdíl';
+  document.getElementById('vymenaRozdil').textContent = rozdil === 0 ? 'bez doplatku' : kc(Math.abs(rozdil));
+  const skupina = document.getElementById('vymenaPlatbaSkupina');
+  skupina.hidden = rozdil === 0;
+  document.getElementById('vymenaPlatbaPopis').textContent = rozdil > 0 ? 'Jak zákazník doplácí' : 'Jak jsme rozdíl vrátili';
+  document.getElementById('vymenaPrijatoSkupina').hidden = !(rozdil > 0 && document.getElementById('vymenaPlatba').value === 'hotovost');
+}
+
+async function ulozitVymenu() {
+  const msg = document.getElementById('vymenaMsg');
+  const chyba = t => { msg.innerHTML = `<div class="error-msg">${escH(t)}</div>`; msg.scrollIntoView({ block: 'nearest' }); };
+  if (!vymenaPuvodni) return chyba('Načtěte původní účtenku.');
+  const vracene = vybraneVraceneVymena().map(({ zaplaceno, ...x }) => x);
+  if (!vracene.length) return chyba('Zaškrtněte, co zákazník vrací.');
+  const nove = noveZboziVymena();
+  if (!nove.length) return chyba('Naskenujte nové zboží.');
+  const zapocet = Number(document.getElementById('vymenaZapocet').value);
+  if (!(zapocet >= 0) || document.getElementById('vymenaZapocet').value === '') return chyba('Zadejte hodnotu vráceného zboží.');
+  const platba = document.getElementById('vymenaPlatba').value;
+  if (!document.getElementById('vymenaPlatbaSkupina').hidden && !platba) return chyba(document.getElementById('vymenaPlatbaPopis').textContent + ' – vyberte.');
+  const btn = document.getElementById('vymenaUlozitBtn');
+  btn.disabled = true;
+  try {
+    const res = await adminFetch(API+'/prodejna/vymeny', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+      prodej_id: vymenaPuvodni.prodej.id, vracene, nove, zapocet, platba: platba || null,
+      hotovost_prijato: Number(document.getElementById('vymenaPrijato').value) || null,
+      duvod: document.getElementById('vymenaDuvod').value.trim() || null
+    }) });
+    const data = await res.json().catch(()=>({}));
+    if (!res.ok) return chyba(data.chyba || 'Výměnu se nepodařilo uložit.');
+    closeModal('modalVymena');
+    tiskUctenkyData(data.prodej, data.prodej.id);
+    loadVratky(); loadProdejna(); loadPrehled(); nacistSkladProProdejna();
+  } catch(e) {
+    chyba('Chyba spojení – výměna se neuložila.');
+  } finally {
+    btn.disabled = false;
+  }
+}
 
 // KATEGORIE
 async function loadKategorie() {
@@ -7913,9 +8195,15 @@ async function nacistPromoPouziti(kod) {
 function escH(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function escHtml(s) { return escH(s); }
 
-const PLATBA_POPISKY = { hotovost:'💵 Hotovost', karta:'💳 Karta', qr:'📱 QR', poukaz:'🎁 Poukaz', prevod:'🏦 Převod' };
+const PLATBA_POPISKY = { hotovost:'💵 Hotovost', karta:'💳 Karta', qr:'📱 QR', poukaz:'🎁 Poukaz', prevod:'🏦 Převod', vymena:'🔄 Výměna' };
 function platbaLabel(platba) { return PLATBA_POPISKY[platba] || (platba || '—'); }
-const PLATBA_ZKRATKY = { hotovost:'H', karta:'K', qr:'QR', poukaz:'P', prevod:'PŘ' };
+const PLATBA_ZKRATKY = { hotovost:'H', karta:'K', qr:'QR', poukaz:'P', prevod:'PŘ', vymena:'V' };
+// Jak byly peníze z vratky vráceny (u výměny bez doplatku zpět 'vymena')
+const ZPUSOB_VRACENI = { hotovost:'💵 hotově', karta:'💳 na kartu', qr:'📱 QR', prevod:'🏦 převodem', vymena:'🔄 výměna' };
+function zpusobVraceniText(v) {
+  if (v.vymena_prodej_id) return Number(v.castka) > 0 ? 'výměna + rozdíl ' + (ZPUSOB_VRACENI[v.zpusob_vraceni] || '') : 'výměna';
+  return ZPUSOB_VRACENI[v.zpusob_vraceni] || 'neuvedeno';
+}
 function platbaZkratka(platba) { return PLATBA_ZKRATKY[platba] || '?'; }
 function escAttr(s) { return escH(s).replace(/"/g,'&quot;'); }
 // Pro vkládání hodnoty do JS řetězcového literálu (např. při psaní do nového

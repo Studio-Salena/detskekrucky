@@ -145,6 +145,8 @@ function vytvoritMockClient(stav) {
       }
 
       if (s.startsWith('SELECT * FROM poukazove_karty')) return { rows: [] };
+      // výměna (routes/prodejna.js): prodej navázaný na vratku výměny nejde smazat
+      if (s.startsWith('SELECT id FROM vratky WHERE vymena_prodej_id')) return { rows: [] };
       if (s.startsWith('SELECT * FROM darkove_poukazy')) {
         const [kod] = params;
         const p = stav.poukazy.find(p => p.kod.toUpperCase() === kod || p.ean === kod);
