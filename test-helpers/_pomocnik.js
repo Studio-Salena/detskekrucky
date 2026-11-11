@@ -144,6 +144,7 @@ function vytvoritMockClient(stav) {
         return { rows: radek ? [{ pocet_kusu: radek.pocet_kusu, dostupnost: radek.dostupnost, cena: radek.cena, nazev: radek.nazev, na_eshopu: radek.na_eshopu !== false }] : [] };
       }
 
+      if (s.startsWith('SELECT * FROM poukazove_karty')) return { rows: [] };
       if (s.startsWith('SELECT * FROM darkove_poukazy')) {
         const [kod] = params;
         const p = stav.poukazy.find(p => p.kod.toUpperCase() === kod || p.ean === kod);

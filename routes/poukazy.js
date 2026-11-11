@@ -6,8 +6,11 @@ const vyzadovatAdmina = require('../middleware/adminAuth');
 const { jeZablokovana: jeZadostZablokovana, zaznamenatZadost } = require('../middleware/poukazyZadostLimiter');
 const { odeslat_upozorneni_zadost_poukaz, odeslat_poukaz_zakaznikovi } = require('./emaily');
 const { poukazPoPlatnosti } = require('../lib/poukazPlatnost');
+const { najitPoukaz } = require('../lib/poukazKarty');
 
 const POVOLENE_HODNOTY = [500, 1000, 1500];
+// Na plastovou kartu jde nahrát libovolná částka v celých korunách
+const KARTA_MIN = 100, KARTA_MAX = 50000;
 // Vzhled tištěného poukazu - volí se při vydání, ať jde i později vytisknout stejně
 const POVOLENE_VZHLEDY = ['klasicky', 'vanocni'];
 // Druh poukazu: prodej (zaplacený), dar (daný zdarma - nepočítá se do tržeb ani
@@ -57,6 +60,27 @@ async function initTabulky() {
       );
       -- vzhled, který si zákazník vybral v e-shopu (2026-10-09)
       ALTER TABLE poukazy_zadosti ADD COLUMN IF NOT EXISTS vzhled TEXT NOT NULL DEFAULT 'klasicky';
+      -- Plastové dárkové karty (2026-11-11): znovupoužitelný nosič poukazu, viz lib/poukazKarty.js
+      CREATE TABLE IF NOT EXISTS poukazove_karty (
+        id SERIAL PRIMARY KEY,
+        cislo TEXT UNIQUE NOT NULL,
+        ean TEXT UNIQUE NOT NULL,
+        aktualni_poukaz_id INTEGER UNIQUE REFERENCES darkove_poukazy(id) ON DELETE SET NULL,
+        zablokovana BOOLEAN NOT NULL DEFAULT false,
+        duvod_blokace TEXT,
+        poznamka TEXT,
+        vytvoreno TIMESTAMPTZ DEFAULT NOW()
+      );
+      ALTER TABLE darkove_poukazy ADD COLUMN IF NOT EXISTS karta_id INTEGER REFERENCES poukazove_karty(id) ON DELETE SET NULL;
+      -- Historie karty: nahrání, uvolnění, blokace, převod (kdo nic nemaže, jen přidává)
+      CREATE TABLE IF NOT EXISTS poukazove_karty_udalosti (
+        id SERIAL PRIMARY KEY,
+        karta_id INTEGER NOT NULL REFERENCES poukazove_karty(id) ON DELETE CASCADE,
+        akce TEXT NOT NULL,
+        poukaz_id INTEGER,
+        poznamka TEXT,
+        vytvoreno TIMESTAMPTZ DEFAULT NOW()
+      );
     `);
     console.log('Poukazy tabulky OK');
   } catch (e) {
@@ -89,18 +113,14 @@ function vygenerovatEan(druh = 'prodej') {
 // VEŘEJNÉ – ověření poukazu (volá prodejna i e-shop, bez přihlášení)
 // ═══════════════════════════════
 router.get('/overit/:kod', async (req, res) => {
-  const hledany = req.params.kod.trim().toUpperCase();
   try {
-    const result = await pool.query(
-      'SELECT * FROM darkove_poukazy WHERE UPPER(kod) = $1 OR ean = $1',
-      [hledany]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ chyba: 'Poukaz nebyl nalezen.' });
-    const poukaz = result.rows[0];
+    const nalez = await najitPoukaz(pool, req.params.kod);
+    if (nalez.chyba) return res.status(nalez.status).json({ chyba: nalez.chyba });
+    const poukaz = nalez.poukaz;
     if (poukaz.stav === 'zruseny') return res.status(400).json({ chyba: 'Tento poukaz byl zrušen.' });
     if (poukaz.stav === 'pouzity' || Number(poukaz.zustatek) <= 0) return res.status(400).json({ chyba: 'Tento poukaz je již plně vyčerpaný.' });
     if (poukazPoPlatnosti(poukaz.platnost_do)) return res.status(400).json({ chyba: 'Platnost poukazu vypršela.' });
-    res.json({ id: poukaz.id, kod: poukaz.kod, ean: poukaz.ean, hodnota: Number(poukaz.hodnota), zustatek: Number(poukaz.zustatek), platnost_do: poukaz.platnost_do });
+    res.json({ id: poukaz.id, kod: poukaz.kod, ean: poukaz.ean, hodnota: Number(poukaz.hodnota), zustatek: Number(poukaz.zustatek), platnost_do: poukaz.platnost_do, karta: nalez.karta ? nalez.karta.cislo : null });
   } catch (err) {
     res.status(500).json({ chyba: err.message });
   }
@@ -153,7 +173,12 @@ router.post('/', vyzadovatAdmina, async (req, res) => {
   const vzhled = req.body.vzhled || 'klasicky';
   const druh = req.body.druh || 'prodej';
   const hodnotaCislo = Number(hodnota);
-  if (!POVOLENE_HODNOTY.includes(hodnotaCislo)) {
+  const kartaEan = req.body.karta_ean ? String(req.body.karta_ean).trim() : null;
+  if (kartaEan) {
+    if (!Number.isInteger(hodnotaCislo) || hodnotaCislo < KARTA_MIN || hodnotaCislo > KARTA_MAX) {
+      return res.status(400).json({ chyba: `Na kartu jde nahrát ${KARTA_MIN}–${KARTA_MAX.toLocaleString('cs-CZ')} Kč v celých korunách.` });
+    }
+  } else if (!POVOLENE_HODNOTY.includes(hodnotaCislo)) {
     return res.status(400).json({ chyba: `Hodnota poukazu musí být jedna z: ${POVOLENE_HODNOTY.join(', ')} Kč.` });
   }
   if (platba && !['hotovost', 'karta', 'qr', 'prevod'].includes(platba)) {
@@ -184,19 +209,39 @@ router.post('/', vyzadovatAdmina, async (req, res) => {
 
     await client.query('BEGIN');
 
+    // Plastová karta: musí existovat, být prázdná a nezablokovaná. Zámek řádku
+    // karty brání tomu, aby se na ni souběžně nahrály dva poukazy.
+    let karta = null;
+    if (kartaEan) {
+      karta = (await client.query('SELECT * FROM poukazove_karty WHERE ean = $1 OR UPPER(cislo) = $2 FOR UPDATE', [kartaEan, kartaEan.toUpperCase()])).rows[0];
+      const chybaKarty = !karta ? 'Karta nebyla nalezena – nejdřív ji přidejte mezi karty.'
+        : karta.zablokovana ? `Karta ${karta.cislo} je zablokovaná.`
+        : karta.aktualni_poukaz_id ? `Na kartě ${karta.cislo} už poukaz je. Vyčerpanou kartu nejdřív uvolněte.`
+        : null;
+      if (chybaKarty) { await client.query('ROLLBACK'); return res.status(400).json({ chyba: chybaKarty }); }
+    }
+
     let poukaz = (await client.query(
       `INSERT INTO darkove_poukazy (kod, ean, hodnota, zustatek, platnost_do, stav, zakoupeno_kde, kupujici_jmeno, kupujici_email, poznamka, vzhled, druh)
        VALUES ($1,$2,$3,$3,$4,'aktivni',$5,$6,$7,$8,$9,$10) RETURNING *`,
       [kod, ean, hodnotaCislo, platnostDo.toISOString().slice(0,10), zakoupeno_kde || 'prodejna', kupujici_jmeno || null, kupujici_email || null, poznamka || null, vzhled, druh]
     )).rows[0];
 
+    if (karta) {
+      poukaz = (await client.query('UPDATE darkove_poukazy SET karta_id=$1 WHERE id=$2 RETURNING *', [karta.id, poukaz.id])).rows[0];
+      await client.query('UPDATE poukazove_karty SET aktualni_poukaz_id=$1 WHERE id=$2', [poukaz.id, karta.id]);
+      await client.query("INSERT INTO poukazove_karty_udalosti (karta_id, akce, poukaz_id, poznamka) VALUES ($1,'nahrani',$2,$3)",
+        [karta.id, poukaz.id, `${hodnotaCislo} Kč${druh === 'dar' ? ' (dar)' : ''}`]);
+    }
+
     let prodej = null;
     if (platba) {
-      const polozky = [{ nazev: `Dárkový poukaz ${hodnotaCislo} Kč`, typ: 'poukaz', pocet: 1, cena: hodnotaCislo, poukaz_kod: kod }];
+      const nazev = karta ? `Dárková karta ${karta.cislo} – ${hodnotaCislo} Kč` : `Dárkový poukaz ${hodnotaCislo} Kč`;
+      const polozky = [{ nazev, typ: 'poukaz', pocet: 1, cena: hodnotaCislo, poukaz_kod: kod }];
       prodej = (await client.query(
         `INSERT INTO prodejna_prodeje (zakaznik, platba, poznamka, polozky, celkem, mezisoucet, sleva)
          VALUES ($1,$2,$3,$4,$5,$5,0) RETURNING *`,
-        [kupujici_jmeno || null, platba, `Prodej dárkového poukazu ${kod}`, JSON.stringify(polozky), hodnotaCislo]
+        [kupujici_jmeno || null, platba, karta ? `Nahrání dárkové karty ${karta.cislo} (poukaz ${kod})` : `Prodej dárkového poukazu ${kod}`, JSON.stringify(polozky), hodnotaCislo]
       )).rows[0];
       poukaz = (await client.query(
         'UPDATE darkove_poukazy SET vydano_prodej_id=$1 WHERE id=$2 RETURNING *',
@@ -205,7 +250,7 @@ router.post('/', vyzadovatAdmina, async (req, res) => {
     }
 
     await client.query('COMMIT');
-    res.json({ ...poukaz, prodej });
+    res.json({ ...poukaz, prodej, karta: karta ? { id: karta.id, cislo: karta.cislo, ean: karta.ean } : null });
 
     // Kód pošleme zákazníkovi jen když máme e-mail (přímý prodej na prodejně
     // bez e-mailu ho prostě nedostane e-mailem - to je v pořádku, dostane ho
@@ -224,7 +269,8 @@ router.post('/', vyzadovatAdmina, async (req, res) => {
 // GET /api/poukazy – seznam všech vydaných poukazů
 router.get('/', vyzadovatAdmina, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM darkove_poukazy ORDER BY vytvoreno DESC');
+    const result = await pool.query(`SELECT dp.*, k.cislo AS karta_cislo FROM darkove_poukazy dp
+      LEFT JOIN poukazove_karty k ON k.id = dp.karta_id ORDER BY dp.vytvoreno DESC`);
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ chyba: err.message });
@@ -239,9 +285,9 @@ router.post('/pouzit', vyzadovatAdmina, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const result = await client.query('SELECT * FROM darkove_poukazy WHERE UPPER(kod) = $1 OR ean = $1 FOR UPDATE', [kod.trim().toUpperCase()]);
-    if (result.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ chyba: 'Poukaz nebyl nalezen.' }); }
-    const poukaz = result.rows[0];
+    const nalez = await najitPoukaz(client, kod, { zamknout: true });
+    if (nalez.chyba) { await client.query('ROLLBACK'); return res.status(nalez.status).json({ chyba: nalez.chyba }); }
+    const poukaz = nalez.poukaz;
     if (poukaz.stav !== 'aktivni') { await client.query('ROLLBACK'); return res.status(400).json({ chyba: 'Poukaz už není aktivní.' }); }
     // Server platnost ověřuje sám - nespoléhá na to, že admin předtím volal /overit
     if (poukazPoPlatnosti(poukaz.platnost_do)) { await client.query('ROLLBACK'); return res.status(400).json({ chyba: 'Platnost poukazu vypršela.' }); }
@@ -253,7 +299,7 @@ router.post('/pouzit', vyzadovatAdmina, async (req, res) => {
     await client.query('INSERT INTO poukazy_pouziti (poukaz_id, castka, prodej_id) VALUES ($1,$2,$3)', [poukaz.id, castka, prodej_id || null]);
 
     await client.query('COMMIT');
-    res.json({ ok: true, zustatek: novyZustatek });
+    res.json({ ok: true, zustatek: novyZustatek, karta: nalez.karta ? nalez.karta.cislo : null });
   } catch (err) {
     await client.query('ROLLBACK');
     res.status(500).json({ chyba: err.message });

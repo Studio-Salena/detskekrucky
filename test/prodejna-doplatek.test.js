@@ -21,6 +21,7 @@ function vytvoritMockClient(stav) {
       if (s.startsWith('SELECT * FROM darkove_poukazy')) {
         return { rows: stav.poukazy.filter(p => p.kod === params[0] || p.ean === params[0]).map(p => ({ ...p })) };
       }
+      if (s.startsWith('SELECT * FROM poukazove_karty')) return { rows: [] };
       if (s.startsWith('INSERT INTO prodejna_prodeje')) {
         const [zakaznik, platba, poznamka, polozky, celkem, mezisoucet, sleva, sleva_popis, hotovost_prijato, hotovost_vraceno, poukaz_castka, poukaz_kod] = params;
         const prodej = { id: 50, zakaznik, platba, celkem, mezisoucet, hotovost_prijato, hotovost_vraceno, poukaz_castka, poukaz_kod };

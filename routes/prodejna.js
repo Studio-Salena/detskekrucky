@@ -4,6 +4,7 @@ const pool = require('../db/pool');
 const { pripravit } = require('../lib/startServeru');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const { poukazPoPlatnosti } = require('../lib/poukazPlatnost');
+const { najitPoukaz } = require('../lib/poukazKarty');
 
 // Vše v tomto souboru je admin-only (prodejna i vratky jsou interní data)
 router.use(vyzadovatAdmina);
@@ -93,9 +94,10 @@ async function prodejSDoplatkem(req, res) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const nalezeny = await client.query('SELECT * FROM darkove_poukazy WHERE UPPER(kod) = $1 OR ean = $1 FOR UPDATE', [String(poukaz_kod).trim().toUpperCase()]);
-    const poukaz = nalezeny.rows[0];
-    const chyba = !poukaz ? 'Poukaz nebyl nalezen.'
+    // Kód poukazu, jeho EAN nebo EAN plastové karty (lib/poukazKarty.js)
+    const nalez = await najitPoukaz(client, poukaz_kod, { zamknout: true });
+    const poukaz = nalez.poukaz;
+    const chyba = nalez.chyba ? nalez.chyba
       : poukaz.stav !== 'aktivni' || Number(poukaz.zustatek) <= 0 ? 'Poukaz už není aktivní.'
       : poukazPoPlatnosti(poukaz.platnost_do) ? 'Platnost poukazu vypršela.'
       : Number(poukaz.zustatek) >= zaZbozi ? 'Poukaz pokryje celý nákup – zvolte platbu jen dárkovým poukazem.'

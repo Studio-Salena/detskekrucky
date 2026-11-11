@@ -2,6 +2,7 @@ const { odeslat_potvrzeni, odeslat_upozorneni_objednavky, odeslat_email_zmena_st
 const { fakturaHtml } = require('../lib/faktura');
 const { migrovatFaktury, vystavitFakturu, vystavitStorno, overitUlozenou, HISTORICKA_UPOZORNENI, NAZEV_BEZ_PRODUKTU } = require('../lib/vystaveniFaktury');
 const { poukazPoPlatnosti } = require('../lib/poukazPlatnost');
+const { najitPoukaz } = require('../lib/poukazKarty');
 
 // Stavy, u kterých se zákazníkovi posílá informační e-mail o změně stavu
 // (viz STAV_OBJEDNAVKY_EMAIL v routes/emaily.js).
@@ -341,16 +342,13 @@ router.post('/', async (req, res) => {
     // FOR UPDATE zamkne řádek poukazu, aby ho nešlo dvakrát souběžně přečerpat.
     let poukaz_id = null, sleva = 0, poukazZustatek = 0, poukazZbyva = null;
     if (poukaz_kod) {
-      const kodNorm = String(poukaz_kod).trim().toUpperCase();
-      const poukazRes = await client.query(
-        'SELECT * FROM darkove_poukazy WHERE (UPPER(kod) = $1 OR ean = $1) FOR UPDATE',
-        [kodNorm]
-      );
-      if (poukazRes.rows.length === 0) {
+      // Kód poukazu, jeho EAN nebo EAN plastové karty (lib/poukazKarty.js)
+      const nalez = await najitPoukaz(client, poukaz_kod, { zamknout: true });
+      if (nalez.chyba) {
         await client.query('ROLLBACK');
-        return res.status(400).json({ chyba: 'Poukaz nebyl nalezen.' });
+        return res.status(400).json({ chyba: nalez.chyba });
       }
-      const poukaz = poukazRes.rows[0];
+      const poukaz = nalez.poukaz;
       if (poukaz.stav !== 'aktivni' || Number(poukaz.zustatek) <= 0) {
         await client.query('ROLLBACK');
         return res.status(400).json({ chyba: 'Tento poukaz je již plně vyčerpaný nebo zrušený.' });

@@ -702,6 +702,37 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <div class="stat-card"><div class="stat-label">Počet vydaných</div><div class="stat-value" id="poukazyPocet">...</div></div>
         <div class="stat-card"><div class="stat-label">Plně využité</div><div class="stat-value" id="poukazyVyuzite">...</div></div>
       </div>
+      <div class="table-wrap" id="kartySekce">
+        <div class="table-header"><h3>💳 Plastové dárkové karty</h3>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-outline btn-sm no-print" onclick="vygenerovatKarty()" title="Nová čísla a EAN kódy pro výrobu karet">+ Vygenerovat karty</button>
+            <button class="btn btn-csv btn-sm no-print" onclick="exportCSV('karty')">⬇ CSV</button>
+            <button class="refresh-btn no-print" onclick="loadKarty()" aria-label="Načíst karty znovu">↻</button>
+          </div>
+        </div>
+        <div style="padding:0 16px 16px">
+        <p style="color:var(--text-light);font-size:0.85rem;margin:12px 0">Načtěte kartu čtečkou (nebo napište číslo, např. K0001). Prázdnou kartu nabijete při prodeji, nabitou zákazník platí v pokladně jako dárkovým poukazem. Vyčerpaná karta se sama zablokuje – vrátíte ji do oběhu tlačítkem Odblokovat.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+          <input type="text" class="search-input" id="kartyNacist" placeholder="💳 Načtěte kartu…" aria-label="Načíst plastovou kartu" autocomplete="off" style="width:280px;max-width:100%" onkeydown="if(event.key==='Enter'){event.preventDefault();najitKartu();}">
+          <button class="btn btn-primary btn-sm" onclick="najitKartu()">Najít kartu</button>
+        </div>
+        <div id="kartaDetail" role="status"></div>
+        <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-top:12px">
+          <div class="stat-card"><div class="stat-label">Prázdné (v oběhu)</div><div class="stat-value" id="kartyPrazdne">…</div></div>
+          <div class="stat-card"><div class="stat-label">Nabité</div><div class="stat-value" id="kartyNabite">…</div></div>
+          <div class="stat-card"><div class="stat-label">Čekají na odblokování</div><div class="stat-value" id="kartyKUvolneni">…</div></div>
+          <div class="stat-card"><div class="stat-label">Nevyčerpáno na kartách</div><div class="stat-value" id="kartyHodnota">…</div></div>
+        </div>
+        <div class="filter-pills" id="kartyFiltry" style="margin:4px 0 10px">
+          <span class="pill active" data-filtr="vse" onclick="filtrovatKarty('vse')">Vše</span>
+          <span class="pill" data-filtr="prazdna" onclick="filtrovatKarty('prazdna')">⚪ Prázdné</span>
+          <span class="pill" data-filtr="nabita" onclick="filtrovatKarty('nabita')">✅ Nabité</span>
+          <span class="pill" data-filtr="uvolnit" onclick="filtrovatKarty('uvolnit')">🔒 K odblokování</span>
+          <span class="pill" data-filtr="zablokovana" onclick="filtrovatKarty('zablokovana')">⛔ Zablokované</span>
+        </div>
+        </div>
+        <div id="kartyTable"><div class="loading">Načítám...</div></div>
+      </div>
       <div class="table-wrap">
         <div class="table-header"><h3>📋 Žádosti o koupi poukazu z e-shopu</h3></div>
         <div id="poukazyZadostiTable"><div class="loading">Načítám...</div></div>
@@ -1630,6 +1661,48 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
   </div>
 </div>
 
+<div class="modal-overlay" id="modalNahratKartu">
+  <div class="modal" style="max-width:480px">
+    <h3>💳 Nabít dárkovou kartu <span id="nkCislo"></span></h3>
+    <div id="nkMsg"></div>
+    <input type="hidden" id="nkEan">
+    <div class="form-group">
+      <label for="nkHodnota">Částka na kartu (Kč) *</label>
+      <input type="number" id="nkHodnota" min="100" max="50000" step="1" inputmode="numeric" placeholder="např. 1000">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+        <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('nkHodnota').value=500">500</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('nkHodnota').value=1000">1 000</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('nkHodnota').value=1500">1 500</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('nkHodnota').value=2000">2 000</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="nkDruh">Druh</label>
+      <select id="nkDruh" onchange="document.getElementById('nkPlatbaSkupina').style.display=this.value==='dar'?'none':''">
+        <option value="prodej">🛍️ Prodej – peníze jdou do tržeb</option>
+        <option value="dar">🎁 Dar – zdarma, nepočítá se do tržeb</option>
+      </select>
+    </div>
+    <div class="form-group" id="nkPlatbaSkupina">
+      <label for="nkPlatba">Jak zákazník zaplatil</label>
+      <select id="nkPlatba">
+        <option value="hotovost">💵 Hotovost</option>
+        <option value="karta">💳 Platební karta</option>
+        <option value="qr">📱 QR platba</option>
+        <option value="prevod">🏦 Bankovní převod</option>
+      </select>
+    </div>
+    <div class="form-group"><label for="nkJmeno">Jméno kupujícího (nepovinné)</label><input type="text" id="nkJmeno"></div>
+    <div class="form-group"><label for="nkEmail">E-mail kupujícího (nepovinné)</label><input type="email" id="nkEmail">
+      <div style="font-size:0.78rem;color:var(--text-light);margin-top:4px">Když ho vyplníte, přijde kupujícímu e-mail s kódem poukazu – jde použít i v e-shopu.</div></div>
+    <div class="form-group"><label for="nkPoznamka">Poznámka</label><input type="text" id="nkPoznamka"></div>
+    <p style="font-size:0.8rem;color:var(--text-light)">Platnost 1 rok od dnešního dne.</p>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modalNahratKartu')">Zrušit</button>
+      <button class="btn btn-primary" id="nkUlozitBtn" onclick="ulozitNahraniKarty()">💳 Nabít kartu</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="modalVydatPoukaz">
   <div class="modal" style="max-width:560px">
     <h3>🎁 Vydat dárkový poukaz</h3>
@@ -4572,6 +4645,11 @@ async function exportCSV(typ) {
       const d=await adminFetch(API+'/objednavky').then(r=>r.json());
       rows=[['ID','Datum','Zákazník','Email','Telefon','Ulice','Město','PSČ','Doprava','Platba','Celkem Kč','Stav']];
       d.forEach(o=>rows.push([o.cislo||o.id,new Date(o.vytvoreno).toLocaleDateString('cs-CZ'),o.jmeno||'',o.email||'',o.telefon||'',o.ulice||'',o.mesto||'',o.psc||'',o.doprava||'',o.platba||'',o.celkem,o.stav||'']));
+    } else if (typ==='karty') {
+      const d=await adminFetch(API+'/poukazove-karty').then(r=>r.json());
+      rows=[['Číslo karty','EAN','Stav','Nabito Kč','Zůstatek Kč','Platnost do','Kód poukazu','Počet nabití']];
+      d.forEach(k=>rows.push([k.cislo,k.ean,k.stav,k.poukaz?k.poukaz.hodnota:'',k.poukaz?k.poukaz.zustatek:'',k.poukaz?String(k.poukaz.platnost_do).slice(0,10):'',k.poukaz?k.poukaz.kod:'',k.pocet_nahrani]));
+      nazev='darkove-karty';
     } else if (typ==='zakaznici') {
       const d=await adminFetch(API+'/auth/zakaznici').then(r=>r.json());
       rows=[['ID','Jméno','Email','Telefon','Ulice','Město','PSČ','Registrace']];
@@ -5113,10 +5191,12 @@ async function hledatEan() {
         document.getElementById('prodejnaPlatba').value = 'poukaz';
         prepnoutPoukazPole();
         document.getElementById('prodejnaPoukazKod').value = data.kod;
-        msg.innerHTML = `<div class="success-msg">🎁 Poukaz přijat – zůstatek <strong>${Number(data.zustatek).toLocaleString('cs-CZ')} Kč</strong>. Platba je nastavená na Dárkový poukaz, teď jen přidej boty do košíku.</div>`;
+        msg.innerHTML = `<div class="success-msg">🎁 ${data.karta ? 'Dárková karta ' + escH(data.karta) + ' přijata' : 'Poukaz přijat'} – zůstatek <strong>${Number(data.zustatek).toLocaleString('cs-CZ')} Kč</strong>. Platba je nastavená na Dárkový poukaz, teď jen přidej boty do košíku.</div>`;
         document.getElementById('eanInput').value = '';
         return;
       }
+      // Poukaz/karta existuje, ale nejde použít (prázdná, vyčerpaná, zablokovaná…) – říct proč
+      if (res.status === 400 && data.chyba) { msg.innerHTML = `<div class="error-msg">🎁 ${escH(data.chyba)}</div>`; return; }
     } catch(e) {}
     msg.innerHTML = `<div class="error-msg">Produkt s EAN <strong>${escH(ean)}</strong> nebyl nalezen.</div>`;
     return;
@@ -5897,7 +5977,7 @@ async function loadPoukazy() {
       document.getElementById('poukazyTable').innerHTML = `
         <table><thead><tr><th>Kód</th><th>Druh</th><th>Hodnota</th><th>Zůstatek</th><th>Platnost do</th><th>Kde</th><th>Kupující</th><th>Stav</th><th>Akce</th></tr></thead>
         <tbody>${zobrazit.map(p=>`<tr>
-          <td><code style="background:var(--cream);padding:2px 6px;border-radius:4px">${escH(p.kod)}</code><br><small style="color:var(--text-light)">${escH(p.ean)}</small></td>
+          <td><code style="background:var(--cream);padding:2px 6px;border-radius:4px">${escH(p.kod)}</code><br><small style="color:var(--text-light)">${escH(p.ean)}</small>${p.karta_cislo ? `<br><small>💳 karta ${escH(p.karta_cislo)}</small>` : ''}</td>
           <td>${DRUHY_POUKAZU[p.druh] || DRUHY_POUKAZU.prodej}</td>
           <td><strong>${Number(p.hodnota).toLocaleString('cs-CZ')} Kč</strong></td>
           <td><strong style="color:${Number(p.zustatek)>0?'var(--sage)':'var(--text-light)'}">${Number(p.zustatek).toLocaleString('cs-CZ')} Kč</strong></td>
@@ -5916,6 +5996,225 @@ async function loadPoukazy() {
   } catch(e) { document.getElementById('poukazyTable').innerHTML = '<div class="error-msg">Chyba načítání</div>'; }
 
   loadPoukazyZadosti();
+  loadKarty();
+}
+
+// ═══════════════════════════════
+// PLASTOVÉ DÁRKOVÉ KARTY (routes/poukazoveKarty.js, lib/poukazKarty.js)
+// ═══════════════════════════════
+const STAVY_KARTY = {
+  prazdna: { text: '⚪ Prázdná', badge: 'badge-nova' },
+  nabita: { text: '✅ Nabitá', badge: 'badge-ok' },
+  vycerpana: { text: '🔒 Vyčerpaná – čeká na odblokování', badge: 'badge-vyrizuje' },
+  prosla: { text: '🔒 Po platnosti – čeká na odblokování', badge: 'badge-vyrizuje' },
+  zrusena: { text: '🔒 Poukaz zrušen – čeká na odblokování', badge: 'badge-vyrizuje' },
+  zablokovana: { text: '⛔ Zablokovaná', badge: 'badge-zruseno' }
+};
+const KARTY_K_UVOLNENI = ['vycerpana', 'prosla', 'zrusena'];
+const AKCE_KARTY = { pridani: 'Přidána do systému', nahrani: 'Nabita', uvolneni: 'Odblokována – zpět v oběhu', blokace: 'Zablokována', odblokovani: 'Blokace zrušena', prevod: 'Převod zůstatku' };
+let vsechnyKarty = [], kartyFiltr = 'vse', otevrenaKarta = null;
+const kcKarta = n => Number(n || 0).toLocaleString('cs-CZ') + ' Kč';
+const stavKartyHtml = s => `<span class="badge ${(STAVY_KARTY[s] || {}).badge || ''}">${(STAVY_KARTY[s] || {}).text || escH(s)}</span>`;
+
+async function loadKarty() {
+  try {
+    const res = await adminFetch(API + '/poukazove-karty');
+    const data = await res.json();
+    vsechnyKarty = Array.isArray(data) ? data : [];
+  } catch (e) {
+    document.getElementById('kartyTable').innerHTML = '<div class="error-msg">Karty se nepodařilo načíst</div>';
+    return;
+  }
+  const pocet = s => vsechnyKarty.filter(k => k.stav === s).length;
+  document.getElementById('kartyPrazdne').textContent = pocet('prazdna');
+  document.getElementById('kartyNabite').textContent = pocet('nabita');
+  document.getElementById('kartyKUvolneni').textContent = vsechnyKarty.filter(k => KARTY_K_UVOLNENI.includes(k.stav)).length;
+  document.getElementById('kartyHodnota').textContent = kcKarta(vsechnyKarty.filter(k => k.stav === 'nabita').reduce((s, k) => s + k.poukaz.zustatek, 0));
+  vykreslitKarty();
+}
+
+function filtrovatKarty(f) { kartyFiltr = f; vykreslitKarty(); }
+
+function vykreslitKarty() {
+  document.querySelectorAll('#kartyFiltry .pill').forEach(p => p.classList.toggle('active', p.dataset.filtr === kartyFiltr));
+  const seznam = vsechnyKarty.filter(k => kartyFiltr === 'vse' ? true : kartyFiltr === 'uvolnit' ? KARTY_K_UVOLNENI.includes(k.stav) : k.stav === kartyFiltr);
+  const el = document.getElementById('kartyTable');
+  if (!seznam.length) {
+    el.innerHTML = `<div class="empty">${vsechnyKarty.length ? 'Žádné karty v tomto filtru' : 'Zatím žádné karty – vygenerujte je pro výrobu, nebo načtěte kartu čtečkou a zaevidujte ji.'}</div>`;
+    return;
+  }
+  el.innerHTML = `<table><thead><tr><th>Karta</th><th>Stav</th><th>Zůstatek</th><th>Platnost do</th><th>Kupující</th><th>Nabití</th></tr></thead><tbody>
+    ${seznam.map(k => `<tr style="cursor:pointer" onclick="najitKartu('${escH(k.cislo)}')">
+      <td><strong>${escH(k.cislo)}</strong><br><small style="color:var(--text-light)">${escH(k.ean)}</small></td>
+      <td>${stavKartyHtml(k.stav)}</td>
+      <td>${k.poukaz ? `<strong>${kcKarta(k.poukaz.zustatek)}</strong> <small style="color:var(--text-light)">z ${kcKarta(k.poukaz.hodnota)}</small>` : '—'}</td>
+      <td>${k.poukaz ? new Date(k.poukaz.platnost_do).toLocaleDateString('cs-CZ') : '—'}</td>
+      <td>${k.poukaz ? (escH(k.poukaz.kupujici_jmeno) || '—') : '—'}</td>
+      <td>${k.pocet_nahrani}×</td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+// Načtení karty čtečkou / zadáním čísla → detail s akcemi podle stavu
+async function najitKartu(kod) {
+  const pole = document.getElementById('kartyNacist');
+  kod = String(kod || pole.value).trim();
+  const el = document.getElementById('kartaDetail');
+  if (!kod) { el.innerHTML = '<div class="error-msg">Načtěte kartu nebo napište její číslo.</div>'; pole.focus(); return; }
+  try {
+    const res = await adminFetch(API + '/poukazove-karty/najit/' + encodeURIComponent(kod));
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 404) {
+      otevrenaKarta = null;
+      el.innerHTML = `<div class="error-msg">Karta <strong>${escH(kod)}</strong> v systému není.
+        <button class="btn btn-primary btn-sm" style="margin-left:8px" onclick="zaevidovatKartu('${escH(kod).replace(/'/g, '')}')">+ Zaevidovat tuto kartu</button></div>`;
+      return;
+    }
+    if (!res.ok) { el.innerHTML = `<div class="error-msg">${escH(data.chyba || 'Chyba')}</div>`; return; }
+    otevrenaKarta = data;
+    pole.value = '';
+    vykreslitDetailKarty(data);
+  } catch (e) { el.innerHTML = '<div class="error-msg">Chyba spojení</div>'; }
+}
+
+function vykreslitDetailKarty(k) {
+  const p = k.poukaz;
+  const tl = [];
+  if (k.stav === 'prazdna') tl.push(`<button class="btn btn-primary" onclick="otevritNahraniKarty()">💳 Nabít kartu</button>`);
+  if (KARTY_K_UVOLNENI.includes(k.stav)) tl.push(`<button class="btn btn-primary" onclick="uvolnitKartu(${k.id})">🔓 Odblokovat a vrátit do oběhu</button>`);
+  if (k.stav === 'zablokovana') tl.push(`<button class="btn btn-outline" onclick="zmenitBlokaciKarty(${k.id}, false)">Zrušit blokaci</button>`);
+  if (p && p.stav === 'aktivni' && p.zustatek > 0 && (k.stav === 'nabita' || k.stav === 'zablokovana')) tl.push(`<button class="btn btn-outline" onclick="prevestKartu(${k.id})">↪ Převést zůstatek na jinou kartu</button>`);
+  if (k.stav === 'nabita') tl.push(`<button class="btn btn-red" onclick="zmenitBlokaciKarty(${k.id}, true)">⛔ Zablokovat (ztráta)</button>`);
+  if (k.stav === 'prazdna' && !k.poukazy.length) tl.push(`<button class="btn btn-red btn-sm" onclick="smazatKartu(${k.id})">🗑️ Smazat kartu</button>`);
+  const historie = k.udalosti.map(u => `<li>${new Date(u.vytvoreno).toLocaleString('cs-CZ')} – ${AKCE_KARTY[u.akce] || escH(u.akce)}${u.poznamka ? ` (${escH(u.poznamka)})` : ''}</li>`).join('');
+  const cerpani = k.pouziti.map(u => `<li>${new Date(u.vytvoreno).toLocaleString('cs-CZ')} – ${Number(u.castka) < 0 ? 'připsáno zpět ' + kcKarta(-u.castka) : 'čerpáno ' + kcKarta(u.castka)}${u.objednavka_id ? ' (e-shop)' : ''}</li>`).join('');
+  document.getElementById('kartaDetail').innerHTML = `
+    <div style="border:1px solid var(--cream);border-radius:12px;padding:16px;background:#fff">
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">
+        <div><div style="font-size:1.3rem;font-weight:700">💳 ${escH(k.cislo)}</div><small style="color:var(--text-light)">EAN ${escH(k.ean)}</small></div>
+        <div>${stavKartyHtml(k.stav)}</div>
+      </div>
+      ${k.stav === 'zablokovana' && k.duvod_blokace ? `<p style="margin:8px 0 0">Důvod blokace: ${escH(k.duvod_blokace)}</p>` : ''}
+      ${p ? `<div style="display:flex;gap:24px;flex-wrap:wrap;margin:14px 0">
+          <div><div class="stat-label">Zůstatek</div><div style="font-size:1.6rem;font-weight:700;color:${p.zustatek > 0 ? 'var(--sage)' : 'var(--text-light)'}">${kcKarta(p.zustatek)}</div></div>
+          <div><div class="stat-label">Nabito</div><div style="font-size:1.1rem">${kcKarta(p.hodnota)}${p.druh === 'dar' ? ' 🎁 dar' : ''}</div></div>
+          <div><div class="stat-label">Platnost do</div><div style="font-size:1.1rem">${new Date(p.platnost_do).toLocaleDateString('cs-CZ')}</div></div>
+          <div><div class="stat-label">Kupující</div><div style="font-size:1.1rem">${escH(p.kupujici_jmeno) || '—'}</div></div>
+        </div><small style="color:var(--text-light)">Kód poukazu: ${escH(p.kod)}</small>`
+        : `<p style="margin:12px 0">Na kartě není žádný poukaz – můžete ji prodat.</p>`}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">${tl.join('')}</div>
+      ${cerpani ? `<details style="margin-top:12px" open><summary>Čerpání aktuálního poukazu</summary><ul style="margin:6px 0 0 18px;font-size:0.85rem">${cerpani}</ul></details>` : ''}
+      ${historie ? `<details style="margin-top:8px"><summary>Historie karty (${k.poukazy.length}× nabita)</summary><ul style="margin:6px 0 0 18px;font-size:0.85rem">${historie}</ul></details>` : ''}
+    </div>`;
+}
+
+async function akceKarty(url, telo, zprava) {
+  try {
+    const res = await adminFetch(API + '/poukazove-karty' + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(telo || {}) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { alert('❌ ' + (data.chyba || 'Nepodařilo se.')); return null; }
+    if (zprava) alert(zprava);
+    loadKarty();
+    if (data.cislo) najitKartu(data.cislo);
+    return data;
+  } catch (e) { alert('❌ Chyba spojení'); return null; }
+}
+
+function uvolnitKartu(id) {
+  if (!confirm('Vrátit kartu do oběhu jako prázdnou? Historie poukazu zůstane v evidenci.')) return;
+  akceKarty(`/${id}/uvolnit`);
+}
+
+function zmenitBlokaciKarty(id, zablokovat) {
+  if (zablokovat) {
+    const duvod = prompt('Proč kartu blokujete? (např. ztráta) – poukaz na ní pak nepůjde použít.', 'ztráta');
+    if (duvod === null) return;
+    akceKarty(`/${id}/zablokovat`, { duvod });
+  } else {
+    if (!confirm('Zrušit blokaci karty? Poukaz na ní půjde zase použít.')) return;
+    akceKarty(`/${id}/odblokovat`);
+  }
+}
+
+function prevestKartu(id) {
+  const na = prompt('Načtěte čtečkou novou prázdnou kartu (nebo napište její číslo). Stará karta zůstane zablokovaná.');
+  if (!na) return;
+  akceKarty(`/${id}/prevest`, { na: na.trim() }, '✅ Zůstatek je převedený na novou kartu.');
+}
+
+async function zaevidovatKartu(ean) {
+  const data = await akceKarty('', { ean });
+  if (data) document.getElementById('kartyNacist').focus();
+}
+
+async function smazatKartu(id) {
+  if (!confirm('Smazat kartu ze systému? (jde jen u karty, na které nikdy nebyl poukaz)')) return;
+  try {
+    const res = await adminFetch(API + '/poukazove-karty/' + id, { method: 'DELETE' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { alert('❌ ' + (data.chyba || 'Nepodařilo se.')); return; }
+    document.getElementById('kartaDetail').innerHTML = '';
+    loadKarty();
+  } catch (e) { alert('❌ Chyba spojení'); }
+}
+
+// Dávka nových karet pro výrobce: čísla K0001… a EAN-13 se stáhnou jako CSV
+async function vygenerovatKarty() {
+  const zadano = prompt('Kolik nových karet vygenerovat? (čísla a EAN kódy pošlete výrobci karet)', '50');
+  if (zadano === null) return;
+  const pocet = Number(zadano);
+  if (!Number.isInteger(pocet) || pocet < 1 || pocet > 500) { alert('❌ Zadejte celé číslo 1–500.'); return; }
+  try {
+    const res = await adminFetch(API + '/poukazove-karty/davka', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pocet }) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { alert('❌ ' + (data.chyba || 'Nepodařilo se.')); return; }
+    const csv = [['Číslo karty', 'EAN-13'], ...data.karty.map(k => [k.cislo, k.ean])]
+      .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = `detskekrucky-karty-${data.karty[0].cislo}-${data.karty[data.karty.length - 1].cislo}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+    alert(`✅ Vygenerováno ${data.karty.length} karet (${data.karty[0].cislo} – ${data.karty[data.karty.length - 1].cislo}). Soubor CSV pro výrobce se stáhnul.`);
+    loadKarty();
+  } catch (e) { alert('❌ Chyba spojení'); }
+}
+
+function otevritNahraniKarty() {
+  if (!otevrenaKarta) return;
+  document.getElementById('nkCislo').textContent = otevrenaKarta.cislo;
+  document.getElementById('nkEan').value = otevrenaKarta.ean;
+  ['nkHodnota', 'nkJmeno', 'nkEmail', 'nkPoznamka'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('nkDruh').value = 'prodej';
+  document.getElementById('nkPlatba').value = 'hotovost';
+  document.getElementById('nkPlatbaSkupina').style.display = '';
+  document.getElementById('nkMsg').innerHTML = '';
+  openModal('modalNahratKartu');
+}
+
+async function ulozitNahraniKarty() {
+  const btn = document.getElementById('nkUlozitBtn');
+  const msg = document.getElementById('nkMsg');
+  if (btn.disabled) return;
+  const hodnota = Number(document.getElementById('nkHodnota').value);
+  if (!Number.isInteger(hodnota) || hodnota < 100 || hodnota > 50000) { msg.innerHTML = '<div class="error-msg">Zadejte částku 100–50 000 Kč v celých korunách.</div>'; return; }
+  const druh = document.getElementById('nkDruh').value;
+  const telo = {
+    karta_ean: document.getElementById('nkEan').value, hodnota, druh, zakoupeno_kde: 'prodejna', vzhled: 'klasicky',
+    platba: druh === 'dar' ? undefined : document.getElementById('nkPlatba').value,
+    kupujici_jmeno: document.getElementById('nkJmeno').value.trim(), kupujici_email: document.getElementById('nkEmail').value.trim(),
+    poznamka: document.getElementById('nkPoznamka').value.trim()
+  };
+  btn.disabled = true;
+  try {
+    const res = await adminFetch(API + '/poukazy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(telo) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { msg.innerHTML = `<div class="error-msg">${escH(data.chyba || 'Chyba')}</div>`; return; }
+    closeModal('modalNahratKartu');
+    loadPoukazy();
+    loadProdejna();
+    najitKartu(data.karta.cislo);
+    if (data.prodej && confirm(`✅ Karta ${data.karta.cislo} je nabitá na ${kcKarta(hodnota)}.\n\nVytisknout účtenku?`)) tiskUctenkyData(data.prodej, data.prodej.id);
+  } catch (e) { msg.innerHTML = '<div class="error-msg">Chyba spojení</div>'; }
+  finally { btn.disabled = false; }
 }
 
 // Vrácení peněz na poukaz (zákazník odstoupil od smlouvy a zboží platil poukazem)
