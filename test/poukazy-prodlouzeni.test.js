@@ -58,7 +58,7 @@ test('PostgreSQL: nabití karty zapíše platnost do účtenky, prodloužení s 
       polozky JSONB NOT NULL, celkem NUMERIC NOT NULL, mezisoucet NUMERIC, sleva NUMERIC DEFAULT 0, vytvoreno TIMESTAMPTZ DEFAULT NOW())`);
     const router = nacistRouterSMocky('../routes/poukazy.js', { '../db/pool': pool });
     await vsePripraveno();
-    await pool.query("INSERT INTO poukazove_karty (cislo, ean) VALUES ('K0001', '2300000000017')");
+    await pool.query("INSERT INTO poukazove_karty (cislo, ean) VALUES ('DK-26-00001', '2300000000017')");
 
     // nabití karty 1 000 Kč kartou
     let res = vytvoritRes();
@@ -66,7 +66,7 @@ test('PostgreSQL: nabití karty zapíše platnost do účtenky, prodloužení s 
     assert.equal(res.statusCode, 200, JSON.stringify(res.body));
     const polozka = res.body.prodej.polozky[0];
     assert.match(polozka.platnost_do, /^\d{4}-\d{2}-\d{2}$/);
-    assert.equal(polozka.karta, 'K0001');
+    assert.equal(polozka.karta, 'DK-26-00001');
     const poukazId = res.body.id;
 
     // prodloužení o 3 měsíce za původní konec
@@ -97,4 +97,13 @@ test('PostgreSQL: nabití karty zapíše platnost do účtenky, prodloužení s 
     await admin.query(`DROP SCHEMA ${schema} CASCADE`);
     await admin.end();
   }
+});
+
+test('platnost nového poukazu / nabití karty: 1 rok podle českého data', () => {
+  const { platnostNovehoPoukazu } = require('../lib/poukazPlatnost');
+  // 11. 11. 2026 0:30 v Praze = 10. 11. 23:30 UTC – dřív vycházelo o den méně
+  assert.equal(platnostNovehoPoukazu(new Date('2026-11-10T23:30:00Z')), '2027-11-11');
+  // léto (UTC+2): 1. 7. 2026 1:30 v Praze
+  assert.equal(platnostNovehoPoukazu(new Date('2026-06-30T23:30:00Z')), '2027-07-01');
+  assert.equal(platnostNovehoPoukazu(new Date('2026-11-11T10:00:00Z')), '2027-11-11');
 });

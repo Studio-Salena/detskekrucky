@@ -6,7 +6,7 @@ const router = express.Router();
 const pool = require('../db/pool');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const { poukazPoPlatnosti } = require('../lib/poukazPlatnost');
-const { jePlatnyEan13, vygenerovatEanKarty, cisloKarty, stavKarty, STAVY_K_UVOLNENI } = require('../lib/poukazKarty');
+const { jePlatnyEan13, vygenerovatEanKarty, cisloKarty, normalizovatCisloKarty, stavKarty, STAVY_K_UVOLNENI } = require('../lib/poukazKarty');
 
 router.use(vyzadovatAdmina);
 
@@ -38,9 +38,10 @@ async function zalogovat(db, kartaId, akce, poukazId, poznamka) {
     [kartaId, akce, poukazId || null, poznamka || null]);
 }
 
-// Další volné pořadí karty (K0001, K0002…). Volat v transakci po zámku tabulky.
+// Další volné pořadí karty (poslední skupina číslic v DK-26-00481). Pořadí běží
+// dál i v novém roce, takže je samo o sobě jedinečné. Volat v transakci po zámku tabulky.
 async function dalsiPoradi(db) {
-  const r = await db.query(`SELECT COALESCE(MAX(NULLIF(regexp_replace(cislo, '\\D', '', 'g'), '')::int), 0) AS max FROM poukazove_karty`);
+  const r = await db.query(`SELECT COALESCE(MAX(substring(cislo from '(\\d+)$')::int), 0) AS max FROM poukazove_karty`);
   return Number(r.rows[0].max) + 1;
 }
 
@@ -89,11 +90,11 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/poukazove-karty/najit/:kod – karta podle EAN nebo čísla (K0001) i s historií
+// GET /api/poukazove-karty/najit/:kod – karta podle EAN nebo čísla (DK-26-00481) i s historií
 router.get('/najit/:kod', async (req, res) => {
   const kod = String(req.params.kod || '').trim().toUpperCase();
   try {
-    const r = await pool.query(SELECT_KARTY + ' WHERE k.ean = $1 OR UPPER(k.cislo) = $1', [kod]);
+    const r = await pool.query(SELECT_KARTY + ' WHERE k.ean = $1 OR UPPER(k.cislo) = $2', [kod, normalizovatCisloKarty(kod)]);
     if (!r.rows.length) return res.status(404).json({ chyba: 'Taková karta v systému není.' });
     const karta = sestavitKartu(r.rows[0]);
     const poukazy = (await pool.query(
@@ -201,7 +202,7 @@ router.post('/:id/prevest', (req, res) => vTransakci(res, async client => {
   const stara = await kartaProZmenu(client, req.params.id);
   if (!stara) return { chyba: 'Karta nenalezena.', status: 404 };
   if (!stara.aktualni_poukaz_id) return { chyba: 'Na kartě není žádný poukaz k převodu.' };
-  const nova = (await client.query('SELECT * FROM poukazove_karty WHERE (ean = $1 OR UPPER(cislo) = $1) FOR UPDATE', [na])).rows[0];
+  const nova = (await client.query('SELECT * FROM poukazove_karty WHERE (ean = $1 OR UPPER(cislo) = $2) FOR UPDATE', [na, normalizovatCisloKarty(na)])).rows[0];
   if (!nova) return { chyba: 'Cílová karta v systému není.' };
   if (nova.id === stara.id) return { chyba: 'Vyberte jinou kartu.' };
   if (nova.zablokovana || nova.aktualni_poukaz_id) return { chyba: `Karta ${nova.cislo} není prázdná a volná.` };

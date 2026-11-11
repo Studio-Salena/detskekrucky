@@ -5,13 +5,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { jePlatnyEan13, vygenerovatEanKarty, cisloKarty, stavKarty } = require('../lib/poukazKarty');
+const { jePlatnyEan13, vygenerovatEanKarty, cisloKarty, normalizovatCisloKarty, stavKarty } = require('../lib/poukazKarty');
+const RR = require('../lib/poukazPlatnost').dnesVPraze().slice(2, 4);
 
 const URL_DB = process.env.TEST_PG_URL;
 const preskocit = URL_DB ? false : 'TEST_PG_URL není nastavená - test proti PostgreSQL se přeskakuje';
 process.env.ADMIN_HESLO = process.env.ADMIN_HESLO || 'test-heslo';
 
-test('EAN karty: prefix 23, platná kontrolní číslice; číslo karty K0001', () => {
+test('EAN karty: prefix 23, platná kontrolní číslice; číslo karty DK-26-00481', () => {
   for (let i = 0; i < 200; i++) {
     const ean = vygenerovatEanKarty();
     assert.match(ean, /^23\d{11}$/);
@@ -20,8 +21,12 @@ test('EAN karty: prefix 23, platná kontrolní číslice; číslo karty K0001', 
   assert.ok(jePlatnyEan13('4006381333931'));
   assert.ok(!jePlatnyEan13('4006381333932'));
   assert.ok(!jePlatnyEan13('12345'));
-  assert.equal(cisloKarty(7), 'K0007');
-  assert.equal(cisloKarty(12345), 'K12345');
+  assert.equal(cisloKarty(7), `DK-${RR}-00007`);
+  assert.equal(cisloKarty(7, new Date('2026-11-11T10:00:00Z')), 'DK-26-00007');
+  assert.equal(cisloKarty(481, new Date('2026-12-31T23:30:00Z')), 'DK-27-00481');
+  assert.equal(normalizovatCisloKarty('dk2600481'), 'DK-26-00481');
+  assert.equal(normalizovatCisloKarty(' DK-26-481 '), 'DK-26-00481');
+  assert.equal(normalizovatCisloKarty('2300000000017'), '2300000000017');
 });
 
 test('stav karty se odvozuje z jejího poukazu', () => {
@@ -86,12 +91,12 @@ test('API proti PostgreSQL: celý životní cyklus plastové karty', { skip: pre
       // dávka karet pro výrobce + zaevidování karty s vlastním kódem
       let r = await zavolat('POST', '/poukazove-karty/davka', { pocet: 3 });
       assert.equal(r.status, 200);
-      assert.deepEqual(r.data.karty.map(k => k.cislo), ['K0001', 'K0002', 'K0003']);
+      assert.deepEqual(r.data.karty.map(k => k.cislo), [`DK-${RR}-00001`, `DK-${RR}-00002`, `DK-${RR}-00003`]);
       const [k1, k2, k3] = r.data.karty;
       assert.equal((await zavolat('POST', '/poukazove-karty/davka', { pocet: 0 })).status, 400);
       r = await zavolat('POST', '/poukazove-karty', { ean: '4006381333931' });
       assert.equal(r.status, 200);
-      assert.equal(r.data.cislo, 'K0004');
+      assert.equal(r.data.cislo, `DK-${RR}-00004`);
       assert.equal(r.data.stav, 'prazdna');
       assert.equal((await zavolat('POST', '/poukazove-karty', { ean: '4006381333931' })).status, 400, 'duplicitní kód');
       assert.equal((await zavolat('POST', '/poukazove-karty', { ean: '4006381333932' })).status, 400, 'špatná kontrolní číslice');
@@ -107,9 +112,9 @@ test('API proti PostgreSQL: celý životní cyklus plastové karty', { skip: pre
       r = await zavolat('POST', '/poukazy', { karta_ean: k1.ean, hodnota: 1200, platba: 'hotovost', kupujici_jmeno: 'Jana' });
       assert.equal(r.status, 200, JSON.stringify(r.data));
       assert.equal(Number(r.data.zustatek), 1200);
-      assert.equal(r.data.karta.cislo, 'K0001');
+      assert.equal(r.data.karta.cislo, `DK-${RR}-00001`);
       assert.equal(Number(r.data.prodej.celkem), 1200);
-      assert.match(r.data.prodej.polozky[0].nazev, /Dárková karta K0001/);
+      assert.match(r.data.prodej.polozky[0].nazev, new RegExp(`Dárková karta DK-${RR}-00001`));
       const poukazKod = r.data.kod;
       // podruhé na plnou kartu nejde
       r = await zavolat('POST', '/poukazy', { karta_ean: k1.ean, hodnota: 500 });
@@ -120,7 +125,7 @@ test('API proti PostgreSQL: celý životní cyklus plastové karty', { skip: pre
       r = await zavolat('GET', '/poukazy/overit/' + k1.ean);
       assert.equal(r.status, 200);
       assert.equal(r.data.zustatek, 1200);
-      assert.equal(r.data.karta, 'K0001');
+      assert.equal(r.data.karta, `DK-${RR}-00001`);
       r = await zavolat('POST', '/poukazy/pouzit', { kod: k1.ean, castka: 900 });
       assert.equal(r.data.zustatek, 300);
 
@@ -145,7 +150,7 @@ test('API proti PostgreSQL: celý životní cyklus plastové karty', { skip: pre
       const poukazId = (await pool.query('SELECT id FROM darkove_poukazy WHERE kod = $1', [poukazKod])).rows[0].id;
       r = await zavolat('POST', `/poukazy/${poukazId}/pripsat`, { castka: 100 });
       assert.equal(r.status, 200);
-      assert.equal((await zavolat('GET', '/poukazove-karty/najit/K0001')).data.stav, 'nabita');
+      assert.equal((await zavolat('GET', `/poukazove-karty/najit/DK-${RR}-00001`)).data.stav, 'nabita');
       assert.equal((await zavolat('POST', `/poukazove-karty/${k1.id}/uvolnit`)).status, 400, 'se zůstatkem uvolnit nejde');
       await zavolat('POST', '/poukazy/pouzit', { kod: k1.ean, castka: 100 });
 
@@ -153,7 +158,7 @@ test('API proti PostgreSQL: celý životní cyklus plastové karty', { skip: pre
       r = await zavolat('POST', `/poukazove-karty/${k1.id}/uvolnit`);
       assert.equal(r.status, 200);
       assert.equal(r.data.stav, 'prazdna');
-      r = await zavolat('POST', '/poukazy', { karta_ean: 'k0001', hodnota: 700, druh: 'dar' });
+      r = await zavolat('POST', '/poukazy', { karta_ean: `dk${RR}1`, hodnota: 700, druh: 'dar' });
       assert.equal(r.status, 200, 'karta jde najít i podle čísla');
       assert.equal(r.data.prodej, null, 'dar nevytváří prodej');
       r = await zavolat('GET', '/poukazove-karty/najit/' + k1.ean);
@@ -163,8 +168,8 @@ test('API proti PostgreSQL: celý životní cyklus plastové karty', { skip: pre
       // starý kód poukazu už nic nemá
       assert.equal((await zavolat('GET', '/poukazy/overit/' + poukazKod)).status, 400);
 
-      // ztráta: ruční blokace zastaví kartu i kód jejího poukazu, pak převod na K0002
-      const kodNaKarte = (await zavolat('GET', '/poukazove-karty/najit/K0001')).data.poukaz.kod;
+      // ztráta: ruční blokace zastaví kartu i kód jejího poukazu, pak převod na druhou kartu
+      const kodNaKarte = (await zavolat('GET', `/poukazove-karty/najit/DK-${RR}-00001`)).data.poukaz.kod;
       r = await zavolat('POST', `/poukazove-karty/${k1.id}/zablokovat`, { duvod: 'ztráta' });
       assert.equal(r.data.stav, 'zablokovana');
       assert.match((await zavolat('GET', '/poukazy/overit/' + k1.ean)).data.chyba, /zablokovaná/);
@@ -173,10 +178,10 @@ test('API proti PostgreSQL: celý životní cyklus plastové karty', { skip: pre
       assert.equal((await zavolat('POST', `/poukazove-karty/${k1.id}/prevest`, { na: k1.ean })).status, 400);
       r = await zavolat('POST', `/poukazove-karty/${k1.id}/prevest`, { na: k2.ean });
       assert.equal(r.status, 200, JSON.stringify(r.data));
-      assert.equal(r.data.cislo, 'K0002');
+      assert.equal(r.data.cislo, `DK-${RR}-00002`);
       assert.equal(r.data.poukaz.zustatek, 700);
       assert.equal((await zavolat('GET', '/poukazy/overit/' + k2.ean)).data.zustatek, 700);
-      r = await zavolat('GET', '/poukazove-karty/najit/K0001');
+      r = await zavolat('GET', `/poukazove-karty/najit/DK-${RR}-00001`);
       assert.equal(r.data.stav, 'zablokovana');
       assert.equal(r.data.poukaz, null);
       // zrušení blokace staré karty → prázdná
@@ -190,15 +195,15 @@ test('API proti PostgreSQL: celý životní cyklus plastové karty', { skip: pre
 
       // mazat jde jen kartu bez historie
       assert.equal((await zavolat('DELETE', `/poukazove-karty/${k1.id}`)).status, 400);
-      const k4 = (await zavolat('GET', '/poukazove-karty/najit/K0004')).data;
+      const k4 = (await zavolat('GET', `/poukazove-karty/najit/DK-${RR}-00004`)).data;
       assert.equal((await zavolat('DELETE', `/poukazove-karty/${k4.id}`)).status, 200);
 
       // přehled karet
       r = await zavolat('GET', '/poukazove-karty');
-      assert.deepEqual(r.data.map(k => [k.cislo, k.stav]), [['K0001', 'prazdna'], ['K0002', 'nabita'], ['K0003', 'prazdna']]);
+      assert.deepEqual(r.data.map(k => [k.cislo, k.stav]), [[`DK-${RR}-00001`, 'prazdna'], [`DK-${RR}-00002`, 'nabita'], [`DK-${RR}-00003`, 'prazdna']]);
       // seznam poukazů ukáže číslo karty
       r = await zavolat('GET', '/poukazy');
-      assert.ok(r.data.some(p => p.karta_cislo === 'K0002'));
+      assert.ok(r.data.some(p => p.karta_cislo === `DK-${RR}-00002`));
     } finally {
       server.close();
     }

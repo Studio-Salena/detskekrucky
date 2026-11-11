@@ -5,8 +5,8 @@ const { pripravit } = require('../lib/startServeru');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const { jeZablokovana: jeZadostZablokovana, zaznamenatZadost } = require('../middleware/poukazyZadostLimiter');
 const { odeslat_upozorneni_zadost_poukaz, odeslat_poukaz_zakaznikovi } = require('./emaily');
-const { poukazPoPlatnosti, datumPlatnosti, chybaProdlouzeni } = require('../lib/poukazPlatnost');
-const { najitPoukaz } = require('../lib/poukazKarty');
+const { poukazPoPlatnosti, datumPlatnosti, chybaProdlouzeni, platnostNovehoPoukazu } = require('../lib/poukazPlatnost');
+const { najitPoukaz, normalizovatCisloKarty } = require('../lib/poukazKarty');
 
 const POVOLENE_HODNOTY = [500, 1000, 1500];
 // Na plastovou kartu jde nahrát libovolná částka v celých korunách
@@ -72,6 +72,9 @@ async function initTabulky() {
         vytvoreno TIMESTAMPTZ DEFAULT NOW()
       );
       ALTER TABLE darkove_poukazy ADD COLUMN IF NOT EXISTS karta_id INTEGER REFERENCES poukazove_karty(id) ON DELETE SET NULL;
+      -- Starší čísla karet K0001 → DK-RR-00001 (rok založení karty); proběhne jen jednou
+      UPDATE poukazove_karty SET cislo = 'DK-' || to_char(vytvoreno AT TIME ZONE 'Europe/Prague', 'YY') || '-' || lpad(substring(cislo from 2), 5, '0')
+        WHERE cislo ~ '^K[0-9]+$';
       -- Historie karty: nahrání, uvolnění, blokace, převod (kdo nic nemaže, jen přidává)
       CREATE TABLE IF NOT EXISTS poukazove_karty_udalosti (
         id SERIAL PRIMARY KEY,
@@ -212,8 +215,7 @@ router.post('/', vyzadovatAdmina, async (req, res) => {
       if (existuje.rows.length === 0) break;
       if (++pokus > 10) { client.release(); return res.status(500).json({ chyba: 'Nepodařilo se vygenerovat unikátní kód, zkuste to znovu.' }); }
     }
-    const platnostDo = new Date();
-    platnostDo.setFullYear(platnostDo.getFullYear() + 1);
+    const platnostDo = platnostNovehoPoukazu();
 
     await client.query('BEGIN');
 
@@ -221,7 +223,7 @@ router.post('/', vyzadovatAdmina, async (req, res) => {
     // karty brání tomu, aby se na ni souběžně nahrály dva poukazy.
     let karta = null;
     if (kartaEan) {
-      karta = (await client.query('SELECT * FROM poukazove_karty WHERE ean = $1 OR UPPER(cislo) = $2 FOR UPDATE', [kartaEan, kartaEan.toUpperCase()])).rows[0];
+      karta = (await client.query('SELECT * FROM poukazove_karty WHERE ean = $1 OR UPPER(cislo) = $2 FOR UPDATE', [kartaEan, normalizovatCisloKarty(kartaEan)])).rows[0];
       const chybaKarty = !karta ? 'Karta nebyla nalezena – nejdřív ji přidejte mezi karty.'
         : karta.zablokovana ? `Karta ${karta.cislo} je zablokovaná.`
         : karta.aktualni_poukaz_id ? `Na kartě ${karta.cislo} už poukaz je. Vyčerpanou kartu nejdřív uvolněte.`
@@ -232,7 +234,7 @@ router.post('/', vyzadovatAdmina, async (req, res) => {
     let poukaz = (await client.query(
       `INSERT INTO darkove_poukazy (kod, ean, hodnota, zustatek, platnost_do, stav, zakoupeno_kde, kupujici_jmeno, kupujici_email, poznamka, vzhled, druh)
        VALUES ($1,$2,$3,$3,$4,'aktivni',$5,$6,$7,$8,$9,$10) RETURNING *`,
-      [kod, ean, hodnotaCislo, platnostDo.toISOString().slice(0,10), zakoupeno_kde || 'prodejna', kupujici_jmeno || null, kupujici_email || null, poznamka || null, vzhled, druh]
+      [kod, ean, hodnotaCislo, platnostDo, zakoupeno_kde || 'prodejna', kupujici_jmeno || null, kupujici_email || null, poznamka || null, vzhled, druh]
     )).rows[0];
 
     if (karta) {
