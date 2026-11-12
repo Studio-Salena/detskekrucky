@@ -35,6 +35,7 @@ router.get('/admin', vyzadovatAdmina, async (req, res) => {
     nastaveni,
     metody: PORADI.map(kod => ({ kod, nazev: METODY[kod].nazev, vzdyZdarma: !!METODY[kod].vzdyZdarma })),
     glsApi: gls.stav(),
+    pplApi: require('../lib/ppl').stav(),
     zasilkovna: zasilkovna.stav(),
     zasilkovnaApi: zasilkovnaApi.stav()
   });

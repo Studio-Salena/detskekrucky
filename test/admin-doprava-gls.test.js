@@ -19,7 +19,7 @@ function vytahnout(nazev) {
 }
 const sandbox = {};
 vm.createContext(sandbox);
-vm.runInContext(['escH', 'escAttr', 'vydejniMistoAdresa', 'vydejniMistoDetailHtml', 'glsDetailHtml', 'zasilkovnaDetailHtml'].map(vytahnout).join('\n'), sandbox);
+vm.runInContext(['escH', 'escAttr', 'vydejniMistoAdresa', 'vydejniMistoDetailHtml', 'glsDetailHtml', 'zasilkovnaDetailHtml', 'pplDetailHtml'].map(vytahnout).join('\n'), sandbox);
 const detail = d => vm.runInContext(`vydejniMistoDetailHtml(${JSON.stringify(d)})`, sandbox);
 
 test('detail: výdejní místo GLS s adresou a ID, vše escapované (i v data-id)', () => {

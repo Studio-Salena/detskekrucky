@@ -1305,6 +1305,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
             <span id="zasilkovnaTestMsg" role="status" style="font-size:0.85rem;font-weight:600"></span>
           </div>
           <div id="glsApiStav" class="info-box" style="margin-top:12px;font-size:0.85rem"></div>
+          <div id="pplApiStav" class="info-box" style="margin-top:8px;font-size:0.85rem"></div>
           <div class="gls-test" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px">
             <button type="button" class="btn btn-outline btn-sm" id="glsTestBtn" onclick="vyzkousetGls()" hidden>🔌 Vyzkoušet spojení s GLS</button>
             <span id="glsTestMsg" role="status" style="font-size:0.85rem;font-weight:600"></span>
@@ -2838,7 +2839,9 @@ function vydejniMistoDetailHtml(d) {
       <button type="button" class="btn btn-outline btn-sm" data-id="${escAttr(d.vydejni_misto_id)}" onclick="kopirovatIdMista(this)">📋 Kopírovat ID</button></div>`;
   }
   if (d.dopravce === 'zasilkovna' && d.vydejni_misto_id) html += zasilkovnaDetailHtml(d);
-  if (d.dopravce === 'gls') html += glsDetailHtml(d);
+  const pplZasilka = (d.zasilky || []).some(x => x.dopravce === 'ppl' && (x.stav === 'podana' || x.stav === 'nedokoncena'));
+  if (d.dopravce === 'gls' && !pplZasilka) html += glsDetailHtml(d);
+  html += pplDetailHtml(d);
   return html;
 }
 // Zásilkovna: podání zásilky a štítek (jen na klik; bez API hesla na Renderu jen informace)
@@ -2945,6 +2948,63 @@ async function stahnoutStitekGls(id, btn) {
     a.href = url; a.download = 'stitek-gls-' + id + '.pdf';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
+  } catch (e) {
+    alert('❌ Chyba spojení se serverem.');
+  } finally {
+    btn.disabled = false;
+  }
+}
+// PPL: poslání na adresu zákazníka (jen u dopravy na adresu, jen na klik)
+function pplDetailHtml(d) {
+  const z = (d.zasilky || []).find(x => x.dopravce === 'ppl' && (x.stav === 'podana' || x.stav === 'nedokoncena'));
+  const test = x => x === 'test' ? ' <span class="badge" style="background:var(--tan-light);color:var(--text)">TEST</span>' : '';
+  if (z) {
+    const hotova = z.stav === 'podana';
+    return `<div class="info-box">📦 <strong>Zásilka PPL:</strong> ${z.cislo_zasilky ? `<code>${escH(z.cislo_zasilky)}</code>` : '<em>číslo zatím nepřidělené</em>'}${test(z.prostredi)} (podáno ${escH(new Date(z.vytvoreno).toLocaleString('cs-CZ'))})<br>
+      ${hotova ? '' : '<span style="font-size:0.8rem;color:var(--text-light)">PPL zásilku ještě zpracovává – štítek stáhněte za chvíli.</span><br>'}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button type="button" class="btn btn-primary btn-sm" onclick="stahnoutStitekPpl(${Number(d.id)}, this, ${hotova})">🏷️ Stáhnout štítek (PDF)</button>
+        ${z.prostredi !== 'test' && z.tracking_url && /^https:\/\/www\.ppl\.cz\//.test(z.tracking_url) ? `<a class="btn btn-outline btn-sm" href="${escAttr(z.tracking_url)}" target="_blank" rel="noopener">🔎 Sledování zásilky</a>` : ''}
+      </div></div>`;
+  }
+  if (!d.ppl_podani || d.stav === 'zrusena') return '';
+  if ((d.zasilky || []).some(x => x.stav === 'podana' && x.cislo_zasilky)) return '';
+  return `<div class="info-box">📦 <strong>Poslat přes PPL</strong> (na adresu zákazníka)${test(d.ppl_prostredi)}<br>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+      <label for="pplPocet" style="font-size:0.85rem">Počet balíků</label>
+      <input id="pplPocet" class="form-input" type="number" min="1" max="10" step="1" value="1" style="width:80px">
+      <button type="button" class="btn btn-primary btn-sm" onclick="podatDoPpl(${Number(d.id)}, this)">📦 Podat do PPL</button>
+    </div>
+    <div style="font-size:0.8rem;color:var(--text-light);margin-top:6px">Zásilka se založí v PPL (jméno, adresa, kontakt${d.platba === 'dobirka' ? ', dobírka ' + Number(d.celkem).toLocaleString('cs-CZ') + ' Kč' : ''} z objednávky) a hned vznikne štítek A4. Může to trvat až minutu.</div>
+    <div id="pplPodaniMsg" role="alert" style="margin-top:6px;font-weight:600"></div></div>`;
+}
+async function podatDoPpl(id, btn) {
+  const pocet = Number(document.getElementById('pplPocet').value);
+  const msg = document.getElementById('pplPodaniMsg');
+  if (!(Number.isInteger(pocet) && pocet >= 1 && pocet <= 10)) { msg.textContent = 'Zadejte počet balíků 1–10.'; msg.style.color = 'var(--red)'; return; }
+  if (!confirm(`Opravdu podat objednávku do PPL (${pocet} ${pocet === 1 ? 'balík' : 'balíky'})? Zásilka se založí ostře.`)) return;
+  btn.disabled = true; msg.textContent = 'Podávám do PPL… (může trvat až minutu)'; msg.style.color = '';
+  try {
+    const r = await adminFetch(API + '/objednavky/' + id + '/ppl', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pocet }) });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) { msg.textContent = '❌ ' + (data.chyba || 'Zásilku se nepodařilo podat.'); msg.style.color = 'var(--red)'; btn.disabled = false; return; }
+    if (r.status === 202) alert('ℹ️ ' + data.zprava);
+    detailObjednavky(id);
+  } catch (e) {
+    msg.textContent = '❌ Chyba spojení se serverem.'; msg.style.color = 'var(--red)'; btn.disabled = false;
+  }
+}
+async function stahnoutStitekPpl(id, btn, hotova) {
+  btn.disabled = true;
+  try {
+    const r = await adminFetch(API + '/objednavky/' + id + '/ppl/stitek');
+    if (!r.ok) { const d = await r.json().catch(() => ({})); alert('❌ ' + (d.chyba || 'Štítek se nepodařilo stáhnout.')); return; }
+    const url = URL.createObjectURL(await r.blob());
+    const a = document.createElement('a');
+    a.href = url; a.download = 'stitek-ppl-' + id + '.pdf';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    if (!hotova) detailObjednavky(id);
   } catch (e) {
     alert('❌ Chyba spojení se serverem.');
   } finally {
@@ -4317,6 +4377,10 @@ async function loadDopravu() {
       : g.podani
         ? 'GLS API: přístupové údaje jsou na serveru nastavené – ' + prostredi + '. Zásilku a štítek založíte v detailu objednávky tlačítkem „Podat do GLS“.'
         : 'GLS API: přístupové údaje jsou na serveru nastavené' + (prostredi ? ' – ' + prostredi : '') + '. ' + (g.problem || '') + ' Zásilky GLS se zatím zakládají ručně v MyGLS.';
+    const p = d.pplApi || {};
+    document.getElementById('pplApiStav').textContent = p.spojeni
+      ? 'PPL API: přístupové údaje jsou na serveru nastavené – ' + (p.prostredi === 'ostre' ? 'OSTRÉ prostředí' : 'TESTOVACÍ prostředí (nic se skutečně neodesílá)') + '. U objednávek s doručením na adresu (Česká pošta, GLS na adresu) jde v detailu objednávky zásilku poslat tlačítkem „Podat do PPL“. Zákazníkům se PPL jako doprava nenabízí.'
+      : 'PPL API: není nastavené. ' + (p.problem || '');
     document.getElementById('zasilkovnaTestBtn').hidden = !za.podani;
     document.getElementById('zasilkovnaTestMsg').textContent = '';
     document.getElementById('glsTestBtn').hidden = !g.spojeni;

@@ -20,6 +20,14 @@ const { overitVydejniMisto } = require('../lib/glsVydejniMista');
 const zasilkovna = require('../lib/zasilkovna');
 const zasilkovnaApi = require('../lib/zasilkovnaApi');
 const gls = require('../lib/gls');
+const ppl = require('../lib/ppl');
+
+// Jeden klient PPL na proces - drží token (30 min) v paměti
+let pplKlient = null;
+function klientPpl() {
+  if (!pplKlient) pplKlient = ppl.vytvoritKlienta();
+  return pplKlient;
+}
 
 // Idempotentní migrace - vazba objednávky na uplatněný dárkový poukaz, číslo
 // objednávky a číslo/datum vystavení faktury.
@@ -576,7 +584,8 @@ router.get('/:id', vyzadovatAdmina, async (req, res) => {
       storno = (await pool.query("SELECT cislo, datum_vystaveni FROM faktury WHERE objednavka_id = $1 AND druh = 'storno'", [req.params.id])).rows[0] || null;
     } catch (e) { /* bez tabulky faktur se detail ukáže i tak */ }
 
-    res.json({ ...o, zasilky, faktura_ulozena: fakturaUlozena, storno,zasilkovna_podani: zasilkovnaApi.stav().podani, gls_podani: gls.stav().podani, gls_prostredi: gls.stav().prostredi });
+    res.json({ ...o, zasilky, faktura_ulozena: fakturaUlozena, storno,zasilkovna_podani: zasilkovnaApi.stav().podani, gls_podani: gls.stav().podani, gls_prostredi: gls.stav().prostredi,
+      ppl_podani: ppl.stav().spojeni && ppl.DOPRAVY_PRO_PPL.includes(o.doprava), ppl_prostredi: ppl.stav().prostredi });
   } catch (err) {
     res.status(500).json({ chyba: err.message });
   }
@@ -682,6 +691,109 @@ router.get('/:id/gls/stitek', vyzadovatAdmina, async (req, res) => {
     res.send(pdf);
   } catch (e) {
     console.error('Štítek GLS selhal (objednávka ' + id + '):', e.message);
+    res.status(502).json({ chyba: 'Štítek se nepodařilo stáhnout: ' + e.message });
+  }
+});
+
+// Podání zásilky do PPL (jen admin, jen na výslovný klik) - doručení na adresu
+// zákazníka u objednávek s dopravou na adresu (ppl.DOPRAVY_PRO_PPL). PPL zpracuje
+// zásilku asynchronně: POST dávky → čekání na Complete → štítek. Když se dávka
+// založí, ale zpracování nedoběhne včas, uloží se jako 'nedokoncena' s batchId,
+// aby další klik nezaložil druhou zásilku; štítek ji pak dokončí.
+router.post('/:id/ppl', vyzadovatAdmina, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ chyba: 'Neplatná objednávka.' });
+  const stavPpl = ppl.stav();
+  if (!stavPpl.spojeni) return res.status(503).json({ chyba: 'Podání do PPL není zapnuté. ' + (stavPpl.problem || '') });
+  const pocet = req.body && req.body.pocet !== undefined ? Number(req.body.pocet) : 1;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const o = (await client.query(`SELECT o.*, ${SQL_UDAJE_OBJEDNAVKY} FROM objednavky o JOIN zakaznici z ON o.zakaznik_id = z.id WHERE o.id = $1 FOR UPDATE OF o`, [id])).rows[0];
+    if (!o) { await client.query('ROLLBACK'); return res.status(404).json({ chyba: 'Objednávka nenalezena.' }); }
+    if (o.stav === 'zrusena') { await client.query('ROLLBACK'); return res.status(400).json({ chyba: 'Zrušenou objednávku nejde podat.' }); }
+    const existujici = (await client.query("SELECT dopravce, cislo_zasilky FROM zasilky WHERE objednavka_id = $1 AND stav IN ('podana', 'nedokoncena')", [id])).rows[0];
+    if (existujici) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ chyba: `Objednávka už má zásilku (${existujici.dopravce.toUpperCase()}${existujici.cislo_zasilky ? ' ' + existujici.cislo_zasilky : ''}).` });
+    }
+    let parametry;
+    try { parametry = ppl.zasilkaZObjednavky(o, pocet); }
+    catch (e) { await client.query('ROLLBACK'); return res.status(400).json({ chyba: e.message }); }
+    const klient = klientPpl();
+    let batchId;
+    try {
+      batchId = await klient.vytvoritZasilku(ppl.teloZasilky(parametry));
+    } catch (e) {
+      await client.query('ROLLBACK');
+      console.error('Podání do PPL selhalo (objednávka ' + id + '):', e.message);
+      return res.status(502).json({ chyba: 'PPL zásilku nepřijalo: ' + e.message });
+    }
+    const data = { batchId, prostredi: stavPpl.prostredi, pocetBaliku: pocet, dobirka: parametry.dobirka ? parametry.dobirka.castka : null };
+    let davka, pdf;
+    try {
+      davka = await klient.cekatNaDavku(batchId);
+      pdf = await klient.stahnoutEtiketu(batchId);
+    } catch (e) {
+      if (/^PPL zásilku nepřijalo/.test(e.message)) {
+        await client.query('ROLLBACK');
+        console.error('PPL odmítlo zásilku (objednávka ' + id + '):', e.message);
+        return res.status(502).json({ chyba: e.message });
+      }
+      console.error('PPL zásilka nedokončena (objednávka ' + id + '):', e.message);
+      await client.query(
+        "INSERT INTO zasilky (objednavka_id, dopravce, stav, data, chyba) VALUES ($1, 'ppl', 'nedokoncena', $2, $3)",
+        [id, JSON.stringify(data), String(e.message).slice(0, 500)]);
+      await client.query('COMMIT');
+      return res.status(202).json({ zprava: 'Zásilka je v PPL založená, ale štítek ještě není hotový. Zkuste za chvíli „Stáhnout štítek“.' });
+    }
+    const cisla = (davka.items || []).flatMap(p => [p.shipmentNumber, ...(p.relatedItems || []).map(r => r.shipmentNumber)]).filter(Boolean);
+    data.cislaZasilek = cisla;
+    const zasilka = (await client.query(
+      `INSERT INTO zasilky (objednavka_id, dopravce, stav, cislo_zasilky, tracking_url, data, stitek_pdf)
+       VALUES ($1, 'ppl', 'podana', $2, $3, $4, $5) RETURNING id, dopravce, stav, cislo_zasilky, tracking_url, vytvoreno`,
+      [id, cisla[0] || null, cisla[0] ? ppl.sledovaniUrl(cisla[0]) : null, JSON.stringify(data), pdf]
+    )).rows[0];
+    await client.query('COMMIT');
+    res.json({ zprava: 'Zásilka podána do PPL', zasilka: { ...zasilka, prostredi: data.prostredi } });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Podání do PPL - chyba:', err.message);
+    res.status(500).json({ chyba: 'Zásilku se nepodařilo uložit.' });
+  } finally {
+    client.release();
+  }
+});
+
+// Štítek PDF k zásilce PPL: uložený při podání; u nedokončené zásilky se počká
+// na zpracování v PPL, štítek se stáhne a zásilka se označí jako podaná.
+router.get('/:id/ppl/stitek', vyzadovatAdmina, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ chyba: 'Neplatná objednávka.' });
+  try {
+    const z = (await pool.query("SELECT id, stav, data, cislo_zasilky, stitek_pdf FROM zasilky WHERE objednavka_id = $1 AND dopravce = 'ppl' AND stav IN ('podana', 'nedokoncena') ORDER BY id DESC LIMIT 1", [id])).rows[0];
+    if (!z || !z.data || !z.data.batchId) return res.status(404).json({ chyba: 'Objednávka nemá zásilku PPL.' });
+    let pdf = z.stitek_pdf;
+    let cislo = z.cislo_zasilky;
+    if (!pdf) {
+      const klient = klientPpl();
+      if (z.stav === 'nedokoncena') {
+        const davka = await klient.cekatNaDavku(z.data.batchId, { pokusu: 5 });
+        const cisla = (davka.items || []).flatMap(p => [p.shipmentNumber, ...(p.relatedItems || []).map(r => r.shipmentNumber)]).filter(Boolean);
+        pdf = await klient.stahnoutEtiketu(z.data.batchId);
+        cislo = cisla[0] || null;
+        await pool.query(
+          "UPDATE zasilky SET stav = 'podana', cislo_zasilky = $2, tracking_url = $3, data = data || $4::jsonb, stitek_pdf = $5, chyba = NULL, aktualizovano = NOW() WHERE id = $1",
+          [z.id, cislo, cislo ? ppl.sledovaniUrl(cislo) : null, JSON.stringify({ cislaZasilek: cisla }), pdf]);
+      } else {
+        pdf = await klient.stahnoutEtiketu(z.data.batchId);
+      }
+    }
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="stitek-ppl-${String(cislo || id).replace(/[^0-9]/g, '')}.pdf"`);
+    res.send(pdf);
+  } catch (e) {
+    console.error('Štítek PPL selhal (objednávka ' + id + '):', e.message);
     res.status(502).json({ chyba: 'Štítek se nepodařilo stáhnout: ' + e.message });
   }
 });
