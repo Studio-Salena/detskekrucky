@@ -284,16 +284,16 @@ test('VOP čl. 2: jeden okamžik uzavření smlouvy (doručení potvrzení), pla
   assert.match(fs.readFileSync(path.join(KOREN, 'eshop.html'), 'utf8'), /Objednávka zavazující k platbě/);
 });
 
-test('VOP 10/2026: převod nebo dobírka (40 Kč), GLS, odeslání do 2 pracovních dnů, bez Stripe, Fio banka u terminálu', () => {
+test('VOP 11/2026: převod nebo dobírka (40 Kč), GLS, PPL, odeslání do 2 pracovních dnů, bez Stripe, Fio banka u terminálu', () => {
   const t = textStranky(fs.readFileSync(path.join(KOREN, 'obchodni-podminky.html'), 'utf8'));
   assert.doesNotMatch(t, /Stripe|na základě výzvy prodávajícího/);
   assert.match(t, /bankovním převodem, nebo na dobírku při převzetí zásilky/);
   assert.match(t, /příplatek 40 Kč; dobírku nelze zvolit u osobního odběru/);
   assert.match(t, /Zboží skladem odešleme do 2 pracovních dnů od připsání platby \(u dobírky od přijetí objednávky\), zboží „u dodavatele“ do 7–14 dnů\./);
-  assert.match(t, /výdejní místo Zásilkovny \(79 Kč\), přepravní službou GLS na vybrané výdejní místo \(69 Kč\) nebo na adresu \(119 Kč\), případně prostřednictvím České pošty \(89 Kč\)/);
-  assert.match(t, /přepravce \(Zásilkovna, GLS, Česká pošta\)/);
+  assert.match(t, /výdejní místo Zásilkovny \(79 Kč\), přepravní službou GLS na vybrané výdejní místo \(69 Kč\) nebo na adresu \(119 Kč\), přepravní službou PPL na adresu \(109 Kč\), případně prostřednictvím České pošty \(89 Kč\)/);
+  assert.match(t, /přepravce \(Zásilkovna, GLS, PPL, Česká pošta\)/);
   assert.match(t, /poskytovatele platebního terminálu na prodejně \(Fio banka, a\.s\.\)/);
-  assert.match(t, /platné od 1\. 11\. 2026/);
+  assert.match(t, /platné od 12\. 11\. 2026/);
 });
 
 // ═══ Tlačítko „Odstoupit od smlouvy“ (§ 1830a obč. zák., od 1. 1. 2027) ═══

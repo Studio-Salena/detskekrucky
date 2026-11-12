@@ -2824,7 +2824,7 @@ function tiskObjednavky() {
   if (aktivniDetailObjId) tiskObjednavkyId(aktivniDetailObjId);
 }
 
-const DOPRAVA_LABELY = { zasilkovna: 'Zásilkovna', ceska_posta: 'Česká pošta', osobni_odber: 'Osobní odběr', gls_adresa: 'GLS – na adresu', gls_vydejni_misto: 'GLS – výdejní místo' };
+const DOPRAVA_LABELY = { zasilkovna: 'Zásilkovna', ceska_posta: 'Česká pošta', osobni_odber: 'Osobní odběr', gls_adresa: 'GLS – na adresu', gls_vydejni_misto: 'GLS – výdejní místo', ppl_adresa: 'PPL – na adresu' };
 
 // Výdejní místo (údaje ověřené serverem proti seznamu dopravce) + ID ke zkopírování do MyGLS
 function vydejniMistoAdresa(d) {
@@ -4379,7 +4379,7 @@ async function loadDopravu() {
         : 'GLS API: přístupové údaje jsou na serveru nastavené' + (prostredi ? ' – ' + prostredi : '') + '. ' + (g.problem || '') + ' Zásilky GLS se zatím zakládají ručně v MyGLS.';
     const p = d.pplApi || {};
     document.getElementById('pplApiStav').textContent = p.spojeni
-      ? 'PPL API: přístupové údaje jsou na serveru nastavené – ' + (p.prostredi === 'ostre' ? 'OSTRÉ prostředí' : 'TESTOVACÍ prostředí (nic se skutečně neodesílá)') + '. U objednávek s doručením na adresu (Česká pošta, GLS na adresu) jde v detailu objednávky zásilku poslat tlačítkem „Podat do PPL“. Zákazníkům se PPL jako doprava nenabízí.'
+      ? 'PPL API: přístupové údaje jsou na serveru nastavené – ' + (p.prostredi === 'ostre' ? 'OSTRÉ prostředí' : 'TESTOVACÍ prostředí (nic se skutečně neodesílá)') + '. U objednávek s doručením na adresu (PPL, Česká pošta, GLS na adresu) jde v detailu objednávky zásilku poslat tlačítkem „Podat do PPL“. Zákazníkům se PPL nabídne, až výše u „PPL – doručení na adresu“ zadáte cenu a zapnete ho.'
       : 'PPL API: není nastavené. ' + (p.problem || '');
     document.getElementById('zasilkovnaTestBtn').hidden = !za.podani;
     document.getElementById('zasilkovnaTestMsg').textContent = '';

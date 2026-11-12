@@ -3374,7 +3374,7 @@ function ukazatMapuProdejny() {
     mapa.src = 'https://www.google.com/maps?q=' + encodeURIComponent('Holešovská 752, 768 24 Hulín') + '&z=16&output=embed';
   }
 }
-const DOPRAVA_NAZVY = { zasilkovna: 'Zásilkovna', ceska_posta: 'Česká pošta', osobni_odber: 'Osobní odběr – prodejna Hulín', gls_adresa: 'GLS – doručení na adresu', gls_vydejni_misto: 'GLS – doručení do výdejního místa' };
+const DOPRAVA_NAZVY = { zasilkovna: 'Zásilkovna', ceska_posta: 'Česká pošta', osobni_odber: 'Osobní odběr – prodejna Hulín', gls_adresa: 'GLS – doručení na adresu', gls_vydejni_misto: 'GLS – doručení do výdejního místa', ppl_adresa: 'PPL – doručení na adresu' };
 const PLATBA_NAZVY = { dobirka: 'Dobírka (platba při převzetí)', prevod: 'Bankovní převod', na_prodejne: 'Na prodejně při vyzvednutí (hotově, kartou nebo QR)' };
 function zvolenaDoprava() {
   const el = document.querySelector('#chDoprava input:checked');

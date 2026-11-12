@@ -42,6 +42,48 @@ test('sledování zásilky na ppl.cz jen s číslicemi', () => {
   assert.strictEqual(sledovaniUrl('4125"><x'), 'https://www.ppl.cz/vyhledat-zasilku?shipmentId=4125');
 });
 
+// ---------- PPL jako způsob dopravy v e-shopu ----------
+const doprava = require('../lib/doprava');
+
+test('doprava PPL na adresu: výchozí vypnutá bez ceny, zákazníkům se neukáže', () => {
+  const n = doprava.sloucitNastaveni(null);
+  assert.deepStrictEqual(n.metody.ppl_adresa, { aktivni: false, cena: null });
+  assert.ok(!doprava.verejneNastaveni(n, {}).metody.some(m => m.kod === 'ppl_adresa'));
+  // starší uložené nastavení bez PPL: doplní se vypnuté, ostatní ceny zůstanou
+  const stare = doprava.sloucitNastaveni({ zdarmaOd: 2000, metody: { zasilkovna: { aktivni: true, cena: 85 } } });
+  assert.deepStrictEqual(stare.metody.ppl_adresa, { aktivni: false, cena: null });
+  assert.strictEqual(stare.metody.zasilkovna.cena, 85);
+});
+
+test('doprava PPL na adresu: bez ceny nejde zapnout; s cenou se nabízí, zdarma od limitu, dobírka jde', () => {
+  const zaklad = doprava.sloucitNastaveni(null);
+  const telo = m => ({ zdarmaOd: 2000, priplatky: { dobirka: 40 }, metody: { ...zaklad.metody, ppl_adresa: m } });
+  assert.match(doprava.overitNastaveniDopravy(telo({ aktivni: true, cena: null })).chyba, /PPL.*bez ceny/);
+  const { hodnoty } = doprava.overitNastaveniDopravy(telo({ aktivni: true, cena: 99 }));
+  const v = doprava.verejneNastaveni(hodnoty, {}).metody.find(m => m.kod === 'ppl_adresa');
+  assert.deepStrictEqual(v, { kod: 'ppl_adresa', nazev: 'PPL – doručení na adresu', cena: 99, vydejniMisto: null, vzdyZdarma: false });
+  assert.strictEqual(doprava.vypocitatCenuDopravy(hodnoty, 'ppl_adresa', 1500), 99);
+  assert.strictEqual(doprava.vypocitatCenuDopravy(hodnoty, 'ppl_adresa', 2000), 0);
+  assert.strictEqual(doprava.priplatekPlatby(hodnoty, 'ppl_adresa', 'dobirka'), 40);
+  assert.strictEqual(doprava.METODY.ppl_adresa.dopravce, 'ppl');
+});
+
+test('aspoň jeden způsob dopravy: stačí zapnuté PPL', () => {
+  const vse = Object.fromEntries(doprava.PORADI.map(k => [k, { aktivni: false, cena: 50 }]));
+  assert.match(doprava.overitNastaveniDopravy({ zdarmaOd: null, metody: vse }).chyba, /Aspoň jeden/);
+  assert.ok(doprava.overitNastaveniDopravy({ zdarmaOd: null, metody: { ...vse, ppl_adresa: { aktivni: true, cena: 99 } } }).hodnoty);
+});
+
+test('objednávku s dopravou PPL jde podat do PPL', () => {
+  assert.strictEqual(zasilkaZObjednavky({ ...OBJ, doprava: 'ppl_adresa' }).produkt, 'PRIV');
+});
+
+test('název dopravy PPL v e-shopu, adminu, faktuře i e-mailech', () => {
+  for (const f of ['eshop.html', 'admin.html', 'lib/faktura.js', 'routes/emaily.js']) {
+    assert.match(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), /ppl_adresa: 'PPL – /, f);
+  }
+});
+
 // ---------- panel PPL v detailu objednávky (admin.html) ----------
 const fs = require('node:fs');
 const path = require('node:path');
