@@ -53,7 +53,7 @@ function qrPlatbaUrl(castka, variabilniSymbol, zprava) {
   return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(spd)}`;
 }
 
-const DOPRAVA_LABELY = { zasilkovna: 'Zásilkovna', ceska_posta: 'Česká pošta', osobni_odber: 'Osobní odběr', gls_adresa: 'GLS – doručení na adresu', gls_vydejni_misto: 'GLS – výdejní místo', ppl_adresa: 'PPL – doručení na adresu' };
+const DOPRAVA_LABELY = { zasilkovna: 'Zásilkovna', ceska_posta: 'Česká pošta', osobni_odber: 'Osobní odběr', gls_adresa: 'GLS – doručení na adresu', gls_vydejni_misto: 'GLS – výdejní místo', ppl_adresa: 'PPL – doručení na adresu', ppl_vydejni_misto: 'PPL – výdejní místo / box' };
 
 // Výdejní místo (ověřené na serveru, ne z prohlížeče) jako HTML řádky
 function vydejniMistoHtml(misto, styl) {

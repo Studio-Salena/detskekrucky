@@ -290,7 +290,9 @@ test('VOP 11/2026: převod nebo dobírka (40 Kč), GLS, PPL, odeslání do 2 pra
   assert.match(t, /bankovním převodem, nebo na dobírku při převzetí zásilky/);
   assert.match(t, /příplatek 40 Kč; dobírku nelze zvolit u osobního odběru/);
   assert.match(t, /Zboží skladem odešleme do 2 pracovních dnů od připsání platby \(u dobírky od přijetí objednávky\), zboží „u dodavatele“ do 7–14 dnů\./);
-  assert.match(t, /výdejní místo Zásilkovny \(79 Kč\), přepravní službou GLS na vybrané výdejní místo \(69 Kč\) nebo na adresu \(119 Kč\), přepravní službou PPL na adresu \(109 Kč\), případně prostřednictvím České pošty \(89 Kč\)/);
+  // ceny dopravy nastavuje majitelka v adminu - VOP je neopakuje, odkazují na nabídku v objednávce
+  assert.match(t, /výdejní místo Zásilkovny, přepravní službou GLS na vybrané výdejní místo nebo na adresu, přepravní službou PPL na adresu nebo na vybrané výdejní místo či do boxu PPL, případně prostřednictvím České pošty\. Nabízené způsoby dopravy a jejich ceny jsou uvedeny při výběru dopravy v objednávce a v jejím souhrnu před odesláním\./);
+  assert.doesNotMatch(t, /Zboží zasíláme[^.]*\d+ Kč/);
   assert.match(t, /přepravce \(Zásilkovna, GLS, PPL, Česká pošta\)/);
   assert.match(t, /poskytovatele platebního terminálu na prodejně \(Fio banka, a\.s\.\)/);
   assert.match(t, /platné od 12\. 11\. 2026/);

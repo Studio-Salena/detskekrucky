@@ -288,6 +288,20 @@ router.post('/', async (req, res) => {
     if (!vydejniMisto) {
       return res.status(400).json({ chyba: 'Vybrané výdejní místo GLS se nepodařilo najít. Vyberte prosím výdejní místo znovu.' });
     }
+  } else if (druhMista === 'ppl') {
+    // PPL: z prohlížeče jen kód místa, údaje se ověří přímo u PPL
+    if (!vydejni_misto_id || typeof vydejni_misto_id !== 'string') {
+      return res.status(400).json({ chyba: 'Pro doručení do výdejního místa PPL nejprve vyberte výdejní místo.' });
+    }
+    try {
+      vydejniMisto = await ppl.overitVydejniMisto(vydejni_misto_id, klientPpl());
+    } catch (e) {
+      console.error('Ověření výdejního místa PPL selhalo:', e.message);
+      return res.status(503).json({ chyba: 'Výdejní místo PPL se teď nepodařilo ověřit. Zkuste to prosím za chvíli, nebo zvolte jiný způsob dopravy.' });
+    }
+    if (!vydejniMisto) {
+      return res.status(400).json({ chyba: 'Vybrané výdejní místo PPL se nepodařilo najít. Vyberte prosím výdejní místo znovu.' });
+    }
   }
 
   const client = await pool.connect();

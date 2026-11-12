@@ -2824,7 +2824,7 @@ function tiskObjednavky() {
   if (aktivniDetailObjId) tiskObjednavkyId(aktivniDetailObjId);
 }
 
-const DOPRAVA_LABELY = { zasilkovna: 'Zásilkovna', ceska_posta: 'Česká pošta', osobni_odber: 'Osobní odběr', gls_adresa: 'GLS – na adresu', gls_vydejni_misto: 'GLS – výdejní místo', ppl_adresa: 'PPL – na adresu' };
+const DOPRAVA_LABELY = { zasilkovna: 'Zásilkovna', ceska_posta: 'Česká pošta', osobni_odber: 'Osobní odběr', gls_adresa: 'GLS – na adresu', gls_vydejni_misto: 'GLS – výdejní místo', ppl_adresa: 'PPL – na adresu', ppl_vydejni_misto: 'PPL – výdejní místo / box' };
 
 // Výdejní místo (údaje ověřené serverem proti seznamu dopravce) + ID ke zkopírování do MyGLS
 function vydejniMistoAdresa(d) {
@@ -2833,7 +2833,7 @@ function vydejniMistoAdresa(d) {
 function vydejniMistoDetailHtml(d) {
   let html = '';
   if (d.vydejni_misto_id) {
-    html += `<div class="info-box">📍 <strong>Výdejní místo${d.dopravce==='gls'?' GLS':d.dopravce==='zasilkovna'?' Zásilkovny':''}:</strong> ${escH(d.vydejni_misto_nazev)||'—'}<br>
+    html += `<div class="info-box">📍 <strong>Výdejní místo${d.dopravce==='gls'?' GLS':d.dopravce==='zasilkovna'?' Zásilkovny':d.dopravce==='ppl'?' PPL':''}:</strong> ${escH(d.vydejni_misto_nazev)||'—'}<br>
       ${escH(vydejniMistoAdresa(d))||''}<br>
       ID místa: <code>${escH(d.vydejni_misto_id)}</code>
       <button type="button" class="btn btn-outline btn-sm" data-id="${escAttr(d.vydejni_misto_id)}" onclick="kopirovatIdMista(this)">📋 Kopírovat ID</button></div>`;
@@ -2969,13 +2969,13 @@ function pplDetailHtml(d) {
   }
   if (!d.ppl_podani || d.stav === 'zrusena') return '';
   if ((d.zasilky || []).some(x => x.stav === 'podana' && x.cislo_zasilky)) return '';
-  return `<div class="info-box">📦 <strong>Poslat přes PPL</strong> (na adresu zákazníka)${test(d.ppl_prostredi)}<br>
+  return `<div class="info-box">📦 <strong>Poslat přes PPL</strong> (${d.doprava === 'ppl_vydejni_misto' ? 'do výdejního místa výše' : 'na adresu zákazníka'})${test(d.ppl_prostredi)}<br>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
       <label for="pplPocet" style="font-size:0.85rem">Počet balíků</label>
       <input id="pplPocet" class="form-input" type="number" min="1" max="10" step="1" value="1" style="width:80px">
       <button type="button" class="btn btn-primary btn-sm" onclick="podatDoPpl(${Number(d.id)}, this)">📦 Podat do PPL</button>
     </div>
-    <div style="font-size:0.8rem;color:var(--text-light);margin-top:6px">Zásilka se založí v PPL (jméno, adresa, kontakt${d.platba === 'dobirka' ? ', dobírka ' + Number(d.celkem).toLocaleString('cs-CZ') + ' Kč' : ''} z objednávky) a hned vznikne štítek A4. Může to trvat až minutu.</div>
+    <div style="font-size:0.8rem;color:var(--text-light);margin-top:6px">Zásilka se založí v PPL (jméno, adresa, kontakt${d.doprava === 'ppl_vydejni_misto' ? ', výdejní místo' : ''}${d.platba === 'dobirka' ? ', dobírka ' + Number(d.celkem).toLocaleString('cs-CZ') + ' Kč' : ''} z objednávky) a hned vznikne štítek A4. Může to trvat až minutu.</div>
     <div id="pplPodaniMsg" role="alert" style="margin-top:6px;font-weight:600"></div></div>`;
 }
 async function podatDoPpl(id, btn) {

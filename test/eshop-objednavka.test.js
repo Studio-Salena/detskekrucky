@@ -25,11 +25,11 @@ const konstanta = nazev => ESHOP_HTML.match(new RegExp(`const ${nazev} = [^;]+;`
 const sandbox = {};
 vm.createContext(sandbox);
 vm.runInContext([
-  ...['DOPRAVA_VYCHOZI', 'DOPRAVA_NAZVY', 'PLATBA_NAZVY', 'UCET_IBAN', 'CHYBA_BEZ_VYDEJNIHO_MISTA', 'CHYBA_BEZ_MISTA_ZASILKOVNY'].map(konstanta),
-  'var nastaveniDopravy = DOPRAVA_VYCHOZI; var glsVydejniMisto = null; var zasVydejniMisto = null; var vsechnyProdukty = [];',
+  ...['DOPRAVA_VYCHOZI', 'DOPRAVA_NAZVY', 'PLATBA_NAZVY', 'UCET_IBAN', 'CHYBA_BEZ_VYDEJNIHO_MISTA', 'CHYBA_BEZ_MISTA_ZASILKOVNY', 'CHYBA_BEZ_MISTA_PPL'].map(konstanta),
+  'var nastaveniDopravy = DOPRAVA_VYCHOZI; var glsVydejniMisto = null; var zasVydejniMisto = null; var pplVydejniMisto = null; var vsechnyProdukty = [];',
   ...['KATALOG_MESICE'].map(konstanta),
   ...['jeVMesicich', 'textVelikosti', 'popisVelikosti', 'produktPolozky', 'vypocitatDopravu', 'escHtml', 'escAttr', 'spocitatObjednavku', 'souhrnObjednavkyHtml', 'qrPlatbaUrl', 'potvrzeniObjednavkyHtml', 'shrnutiUdajuHtml',
-    'dobirkaMozna', 'jeVydejniMistoGls', 'jeVydejniMistoZasilkovny', 'chybaVydejnihoMista', 'vybraneVydejniMisto', 'adresaVydejnihoMista', 'platneNastaveniDopravy'].map(vytahnout)
+    'dobirkaMozna', 'jeVydejniMistoGls', 'jeVydejniMistoZasilkovny', 'jeVydejniMistoPpl', 'chybaVydejnihoMista', 'vybraneVydejniMisto', 'adresaVydejnihoMista', 'platneNastaveniDopravy'].map(vytahnout)
 ].join('\n'), sandbox);
 const zavolat = (fn, ...args) => {
   const v = vm.runInContext(`${fn}(...${JSON.stringify(args)})`, sandbox);
@@ -242,6 +242,27 @@ test('mapa GLS: zprávy jen z našeho iframe a domény GLS, údaje místa jen ja
 
 test('objednávka posílá ID výdejního místa jen u dopravy do výdejního místa', () => {
   const odeslani = vytahnout('odeslatObjednavku');
-  assert.match(odeslani, /vydejni_misto_id: jeVydejniMistoGls\(doprava\) && glsVydejniMisto \? glsVydejniMisto\.id : undefined/);
+  assert.match(odeslani, /vydejni_misto_id: jeVydejniMistoGls\(doprava\) && glsVydejniMisto \? glsVydejniMisto\.id\s*: jeVydejniMistoPpl\(doprava\) && pplVydejniMisto \? pplVydejniMisto\.id : undefined/);
   assert.match(odeslani, /chybaVydejnihoMista\(doprava\)/);
+});
+
+test('výdejní místo PPL: bez vybraného místa přesná hláška; vybrané se pošle; vše jako text', () => {
+  nastavitDopravu({ zdarmaOd: 2000, metody: [
+    { kod: 'ppl_vydejni_misto', nazev: 'PPL – výdejní místo nebo box', cena: 69, vydejniMisto: 'ppl', vzdyZdarma: false },
+    { kod: 'ppl_adresa', nazev: 'PPL – doručení na adresu', cena: 109, vydejniMisto: null, vzdyZdarma: false }
+  ] });
+  vm.runInContext('pplVydejniMisto = null;', sandbox);
+  assert.equal(zavolat('jeVydejniMistoPpl', 'ppl_vydejni_misto'), true);
+  assert.equal(zavolat('jeVydejniMistoPpl', 'ppl_adresa'), false);
+  assert.equal(zavolat('chybaVydejnihoMista', 'ppl_vydejni_misto'), 'Pro doručení do výdejního místa PPL nejprve vyberte výdejní místo.');
+  assert.equal(zavolat('chybaVydejnihoMista', 'ppl_adresa'), null);
+  vm.runInContext(`pplVydejniMisto = { id: 'KM10676824', nazev: 'PBOX HUN Sadová', ulice: 'Sadová 1008', mesto: 'Hulín', psc: '76824', typ: 'ParcelBox' };`, sandbox);
+  assert.equal(zavolat('chybaVydejnihoMista', 'ppl_vydejni_misto'), null);
+  assert.equal(zavolat('vybraneVydejniMisto', 'ppl_vydejni_misto').id, 'KM10676824');
+  for (const fn of ['hledatMistaPpl', 'vykreslitVydejniMistoPpl', 'vybratMistoPpl']) {
+    assert.doesNotMatch(vytahnout(fn).replace(/innerHTML = ''/g, ''), /innerHTML/, fn);
+  }
+  assert.match(vytahnout('hledatMistaPpl'), /API \+ '\/doprava\/ppl-mista\?q=' \+ encodeURIComponent\(q\)/);
+  assert.equal(/PPL_CLIENT_SECRET|PPL_CLIENT_ID/.test(ESHOP_HTML), false);
+  vm.runInContext('pplVydejniMisto = null;', sandbox);
 });

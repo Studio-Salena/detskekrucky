@@ -7,6 +7,22 @@ const { overitVydejniMisto } = require('../lib/glsVydejniMista');
 const gls = require('../lib/gls');
 const zasilkovna = require('../lib/zasilkovna');
 const zasilkovnaApi = require('../lib/zasilkovnaApi');
+const ppl = require('../lib/ppl');
+
+// Výdejní místa PPL pro e-shop: hledání podle PSČ nebo obce (údaje z API PPL,
+// přístupové údaje zůstávají na serveru). Do prohlížeče jen veřejné údaje místa.
+router.get('/ppl-mista', async (req, res) => {
+  if (!ppl.stav().spojeni) return res.status(503).json({ chyba: 'Výdejní místa PPL teď nejde vyhledat.' });
+  const q = typeof req.query.q === 'string' ? req.query.q.slice(0, 60) : '';
+  try {
+    const mista = await ppl.hledatVydejniMista(q, ppl.sdilenyKlient());
+    res.json({ mista });
+  } catch (e) {
+    if (e.kod === 'DOTAZ') return res.status(400).json({ chyba: e.message });
+    console.error('Hledání výdejních míst PPL selhalo:', e.message);
+    res.status(503).json({ chyba: 'Výdejní místa PPL se teď nepodařilo načíst. Zkuste to prosím za chvíli.' });
+  }
+});
 
 // Nabízené způsoby dopravy a ceny pro e-shop (jen zapnuté a s cenou)
 router.get('/', async (req, res) => {

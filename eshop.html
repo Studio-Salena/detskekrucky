@@ -1011,6 +1011,17 @@ body:has(.katalog-filtry.open) #back-to-top{display:none}
 .vydejni-misto-btn{align-self:flex-start;min-height:44px;padding:10px 18px;border:1px solid var(--brown);border-radius:24px;background:#fff;color:var(--brown);font-weight:700;font-family:'Nunito',sans-serif;font-size:0.92rem;cursor:pointer}
 .vydejni-misto-btn:focus-visible{outline:2px solid var(--brown);outline-offset:2px}
 .vydejni-misto-chyba{color:#b3261e;font-size:0.85rem;font-weight:700}
+/* VÝDEJNÍ MÍSTO PPL 2026-11 - hledání podle PSČ / obce a seznam míst */
+.ppl-hledani label{display:block;font-size:0.85rem;font-weight:700;margin-bottom:6px}
+.ppl-hledani-radek{display:flex;gap:8px;flex-wrap:wrap}
+.ppl-hledani-radek input{flex:1 1 180px;min-width:0;min-height:44px;padding:8px 12px;border:1px solid var(--tan-light);border-radius:10px;font:inherit;background:#fff}
+.ppl-hledani-radek input:focus-visible{outline:2px solid var(--brown);outline-offset:1px}
+.ppl-mista{display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto}
+.ppl-mista[hidden]{display:none}
+.ppl-misto{display:block;width:100%;text-align:left;min-height:44px;padding:9px 12px;border:1px solid var(--tan-light);border-radius:10px;background:#fff;font:inherit;font-size:0.88rem;line-height:1.4;cursor:pointer;color:var(--text)}
+.ppl-misto:hover,.ppl-misto:focus-visible{border-color:var(--brown);outline:none}
+.ppl-misto strong{display:block}
+.ppl-misto-typ{display:inline-block;font-size:0.72rem;font-weight:700;padding:1px 7px;border-radius:10px;background:var(--tan-light);margin-left:6px;vertical-align:1px}
 .gls-mapa{position:fixed;inset:0;z-index:2100;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:12px}
 .gls-mapa[hidden]{display:none}
 .gls-mapa-okno{background:#fff;border-radius:14px;width:100%;max-width:1100px;height:100%;max-height:820px;display:flex;flex-direction:column;overflow:hidden}
@@ -1324,6 +1335,18 @@ body:has(.katalog-filtry.open) #back-to-top{display:none}
         <div class="vydejni-misto-vybrane" id="zasVybraneMisto" aria-live="polite" hidden></div>
         <button type="button" class="vydejni-misto-btn" id="zasVybratBtn" onclick="otevritMapuZasilkovny()">Vybrat výdejní místo Zásilkovny</button>
         <div class="vydejni-misto-chyba" id="zasMistoChyba" role="alert" hidden></div>
+      </div>
+      <div class="vydejni-misto" id="pplVydejniMistoBox" hidden>
+        <div class="vydejni-misto-vybrane" id="pplVybraneMisto" aria-live="polite" hidden></div>
+        <form class="ppl-hledani" role="search" onsubmit="event.preventDefault();hledatMistaPpl()">
+          <label for="pplHledat">Výdejní místo PPL – zadejte PSČ nebo obec</label>
+          <div class="ppl-hledani-radek">
+            <input id="pplHledat" type="text" maxlength="50" placeholder="např. 768 24 nebo Hulín" autocomplete="off">
+            <button type="submit" class="vydejni-misto-btn" id="pplHledatBtn">Hledat</button>
+          </div>
+        </form>
+        <div class="ppl-mista" id="pplMista" role="list" aria-label="Nalezená výdejní místa PPL" hidden></div>
+        <div class="vydejni-misto-chyba" id="pplMistoChyba" role="alert" hidden></div>
       </div>
       <p class="dodaci-lhuta" id="dodaciLhuta">Zboží skladem odešleme do 2&nbsp;pracovních dnů od připsání platby (u dobírky od objednání), doručení pak obvykle trvá 2–5 pracovních dnů. Zboží označené „U&nbsp;dodavatele“ odešleme do 7–14 dnů.</p>
       <div class="vyzkouseni-info" id="vyzkouseniInfo" style="display:none">
@@ -3374,7 +3397,7 @@ function ukazatMapuProdejny() {
     mapa.src = 'https://www.google.com/maps?q=' + encodeURIComponent('Holešovská 752, 768 24 Hulín') + '&z=16&output=embed';
   }
 }
-const DOPRAVA_NAZVY = { zasilkovna: 'Zásilkovna', ceska_posta: 'Česká pošta', osobni_odber: 'Osobní odběr – prodejna Hulín', gls_adresa: 'GLS – doručení na adresu', gls_vydejni_misto: 'GLS – doručení do výdejního místa', ppl_adresa: 'PPL – doručení na adresu' };
+const DOPRAVA_NAZVY = { zasilkovna: 'Zásilkovna', ceska_posta: 'Česká pošta', osobni_odber: 'Osobní odběr – prodejna Hulín', gls_adresa: 'GLS – doručení na adresu', gls_vydejni_misto: 'GLS – doručení do výdejního místa', ppl_adresa: 'PPL – doručení na adresu', ppl_vydejni_misto: 'PPL – výdejní místo nebo box' };
 const PLATBA_NAZVY = { dobirka: 'Dobírka (platba při převzetí)', prevod: 'Bankovní převod', na_prodejne: 'Na prodejně při vyzvednutí (hotově, kartou nebo QR)' };
 function zvolenaDoprava() {
   const el = document.querySelector('#chDoprava input:checked');
@@ -3428,17 +3451,106 @@ function jeVydejniMistoGls(doprava) {
 function chybaVydejnihoMista(doprava) {
   if (jeVydejniMistoGls(doprava) && !glsVydejniMisto) return CHYBA_BEZ_VYDEJNIHO_MISTA;
   if (jeVydejniMistoZasilkovny(doprava) && !zasVydejniMisto) return CHYBA_BEZ_MISTA_ZASILKOVNY;
+  if (jeVydejniMistoPpl(doprava) && !pplVydejniMisto) return CHYBA_BEZ_MISTA_PPL;
   return null;
 }
-// Vybrané výdejní místo podle zvolené dopravy (GLS / Zásilkovna), jinak null
+// Vybrané výdejní místo podle zvolené dopravy (GLS / Zásilkovna / PPL), jinak null
 function vybraneVydejniMisto(doprava) {
   if (jeVydejniMistoGls(doprava)) return glsVydejniMisto;
   if (jeVydejniMistoZasilkovny(doprava)) return zasVydejniMisto;
+  if (jeVydejniMistoPpl(doprava)) return pplVydejniMisto;
   return null;
 }
 function zobrazitChybuMista(doprava, text) {
   if (jeVydejniMistoZasilkovny(doprava)) zobrazitChybuMistaZasilkovny(text);
+  else if (jeVydejniMistoPpl(doprava)) zobrazitChybuMistaPpl(text);
   else zobrazitChybuMistaGls(text);
+}
+
+// --- Výdejní místo PPL ---
+// Zákazník zadá PSČ nebo obec, náš server vrátí místa z API PPL (přístupové
+// údaje zůstávají na serveru). Kód vybraného místa server při objednávce znovu
+// ověří u PPL. Vše se vypisuje jako text (textContent).
+const CHYBA_BEZ_MISTA_PPL = 'Pro doručení do výdejního místa PPL nejprve vyberte výdejní místo.';
+let pplVydejniMisto = null;
+let pplNalezenaMista = [];
+function jeVydejniMistoPpl(doprava) {
+  const m = nastaveniDopravy.metody.find(m => m.kod === doprava);
+  return !!(m && m.vydejniMisto === 'ppl');
+}
+function zobrazitChybuMistaPpl(text) {
+  const el = document.getElementById('pplMistoChyba');
+  el.textContent = text || '';
+  el.hidden = !text;
+}
+const PPL_TYPY = { ParcelShop: 'Výdejní místo', ParcelBox: 'Box', AlzaBox: 'AlzaBox' };
+function vykreslitVydejniMistoPpl() {
+  const box = document.getElementById('pplVybraneMisto');
+  box.textContent = '';
+  if (pplVydejniMisto) {
+    const nazev = document.createElement('strong');
+    nazev.textContent = pplVydejniMisto.nazev + ' (' + (PPL_TYPY[pplVydejniMisto.typ] || 'Výdejní místo') + ')';
+    const adresa = document.createElement('span');
+    adresa.textContent = adresaVydejnihoMista(pplVydejniMisto);
+    box.append(nazev, adresa);
+  }
+  box.hidden = !pplVydejniMisto;
+}
+async function hledatMistaPpl() {
+  const vstup = document.getElementById('pplHledat');
+  const btn = document.getElementById('pplHledatBtn');
+  const seznam = document.getElementById('pplMista');
+  const q = vstup.value.trim();
+  if (!q) { zobrazitChybuMistaPpl('Zadejte PSČ nebo název obce.'); vstup.focus(); return; }
+  btn.disabled = true;
+  zobrazitChybuMistaPpl('');
+  try {
+    const r = await fetch(API + '/doprava/ppl-mista?q=' + encodeURIComponent(q));
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !Array.isArray(d.mista)) {
+      zobrazitChybuMistaPpl(typeof d.chyba === 'string' ? d.chyba : 'Výdejní místa se nepodařilo načíst. Zkuste to prosím znovu.');
+      seznam.hidden = true;
+      return;
+    }
+    pplNalezenaMista = d.mista.filter(m => m && typeof m.id === 'string' && typeof m.nazev === 'string');
+    seznam.textContent = '';
+    if (!pplNalezenaMista.length) {
+      zobrazitChybuMistaPpl('V této obci ani PSČ jsme žádné výdejní místo PPL nenašli. Zkuste sousední obec nebo jiné PSČ.');
+      seznam.hidden = true;
+      return;
+    }
+    pplNalezenaMista.forEach((m, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ppl-misto';
+      b.setAttribute('role', 'listitem');
+      b.addEventListener('click', () => vybratMistoPpl(i));
+      const nazev = document.createElement('strong');
+      nazev.textContent = m.nazev;
+      const typ = document.createElement('span');
+      typ.className = 'ppl-misto-typ';
+      typ.textContent = PPL_TYPY[m.typ] || 'Výdejní místo';
+      nazev.appendChild(typ);
+      const adresa = document.createElement('span');
+      adresa.textContent = adresaVydejnihoMista(m) + (m.poznamka ? ' – ' + m.poznamka : '');
+      b.append(nazev, adresa);
+      seznam.appendChild(b);
+    });
+    seznam.hidden = false;
+  } catch (e) {
+    zobrazitChybuMistaPpl('Výdejní místa se nepodařilo načíst. Zkontrolujte připojení a zkuste to znovu.');
+  } finally {
+    btn.disabled = false;
+  }
+}
+function vybratMistoPpl(i) {
+  const m = pplNalezenaMista[i];
+  if (!m) return;
+  pplVydejniMisto = { id: m.id, nazev: m.nazev, ulice: String(m.ulice || ''), mesto: String(m.mesto || ''), psc: String(m.psc || ''), typ: m.typ };
+  document.getElementById('pplMista').hidden = true;
+  zobrazitChybuMistaPpl('');
+  document.getElementById('checkoutMsg').innerHTML = '';
+  vykreslitVydejniMistoPpl();
 }
 function adresaVydejnihoMista(m) {
   return [m.ulice, [m.psc, m.mesto].filter(Boolean).join(' ')].filter(Boolean).join(', ');
@@ -3669,6 +3781,7 @@ function vykreslitSouhrnObjednavky() {
   document.getElementById('dodaciLhuta').hidden = doprava === 'osobni_odber';
   document.getElementById('glsVydejniMistoBox').hidden = !jeVydejniMistoGls(doprava);
   document.getElementById('zasVydejniMistoBox').hidden = !jeVydejniMistoZasilkovny(doprava);
+  document.getElementById('pplVydejniMistoBox').hidden = !jeVydejniMistoPpl(doprava);
   // Platit na prodejně jde jen při osobním odběru - jinak zpět na převod
   const naProdejne = document.getElementById('volbaNaProdejne');
   naProdejne.hidden = doprava !== 'osobni_odber';
@@ -3880,7 +3993,8 @@ async function odeslatObjednavku() {
         polozky: kosik.map(i => ({produkt_id: i.id, velikost: i.velikost, pocet: i.pocet, cena: i.cena})),
         poukaz_kod: uplatnenyPoukaz ? uplatnenyPoukaz.kod : null,
         promo_kod: uplatnenaPromo ? uplatnenaPromo.kod : null,
-        vydejni_misto_id: jeVydejniMistoGls(doprava) && glsVydejniMisto ? glsVydejniMisto.id : undefined,
+        vydejni_misto_id: jeVydejniMistoGls(doprava) && glsVydejniMisto ? glsVydejniMisto.id
+          : jeVydejniMistoPpl(doprava) && pplVydejniMisto ? pplVydejniMisto.id : undefined,
         vydejni_misto_zasilkovna: jeVydejniMistoZasilkovny(doprava) && zasVydejniMisto ? zasVydejniMisto : undefined
       })
     });

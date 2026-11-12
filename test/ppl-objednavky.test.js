@@ -84,6 +84,77 @@ test('název dopravy PPL v e-shopu, adminu, faktuře i e-mailech', () => {
   }
 });
 
+// ---------- výdejní místo / box PPL ----------
+const ppl = require('../lib/ppl');
+const AP = { accessPointCode: 'KM10676824', accessPointType: 'ParcelBox', name: 'PBOX HUN Sadová (COOP HB)', street: 'Sadová 1008', city: 'Hulín', country: 'CZ', zipCode: '76824', pickupEnabled: true, accessPointNote: 'Vedle prodejny COOP', gps: { latitude: 49.3 } };
+
+test('výdejní místo PPL: dotaz = PSČ (5 číslic) nebo obec, jinak chyba', () => {
+  assert.deepStrictEqual(ppl.rozpoznatDotaz('768 24'), { psc: '76824' });
+  assert.deepStrictEqual(ppl.rozpoznatDotaz(' Hulín '), { mesto: 'Hulín' });
+  assert.deepStrictEqual(ppl.rozpoznatDotaz('Frenštát pod Radhoštěm'), { mesto: 'Frenštát pod Radhoštěm' });
+  for (const spatne of ['', '768', '<script>', 'Praha 1', 'a'.repeat(80)]) assert.strictEqual(ppl.rozpoznatDotaz(spatne), null, spatne);
+});
+
+test('výdejní místo PPL: převod jen na veřejné údaje, nevalidní kód se zahodí', () => {
+  assert.deepStrictEqual(ppl.prevestMisto(AP), { id: 'KM10676824', nazev: 'PBOX HUN Sadová (COOP HB)', ulice: 'Sadová 1008', mesto: 'Hulín', psc: '76824', stat: 'CZ', typ: 'ParcelBox', poznamka: 'Vedle prodejny COOP' });
+  assert.strictEqual(ppl.prevestMisto({ ...AP, accessPointCode: 'X"><' }), null);
+  assert.strictEqual(ppl.prevestMisto({ ...AP, accessPointType: 'Neco' }).typ, 'ParcelShop');
+});
+
+test('hledání míst: parametry pro PPL, vyřazení nedostupných, mezipaměť', async () => {
+  const volani = [];
+  const klient = { vydejniMista: async p => { volani.push(p); return [AP, { ...AP, accessPointCode: 'KM2', pickupEnabled: false }]; } };
+  const m = await ppl.hledatVydejniMista('76825', klient, 1000);
+  assert.deepStrictEqual(m.map(x => x.id), ['KM10676824']);
+  await ppl.hledatVydejniMista('768 25', klient, 2000);
+  assert.deepStrictEqual(volani, [{ psc: '76825' }], 'druhé hledání z mezipaměti');
+  await assert.rejects(ppl.hledatVydejniMista('12', klient), e => e.kod === 'DOTAZ');
+});
+
+test('ověření místa při objednávce: jen přesná shoda kódu u PPL', async () => {
+  const klient = { vydejniMista: async p => (p.kod === 'KM10676824' ? [AP] : []) };
+  assert.strictEqual((await ppl.overitVydejniMisto('KM10676824', klient)).nazev, 'PBOX HUN Sadová (COOP HB)');
+  assert.strictEqual(await ppl.overitVydejniMisto('KM99999999', klient), null);
+  assert.strictEqual(await ppl.overitVydejniMisto('../x', { vydejniMista: async () => { throw new Error('nevolat'); } }), null);
+});
+
+test('klient: GET /accessPoint s CountryCode=CZ a kódem / PSČ / obcí', async () => {
+  const urls = [];
+  const fetchFn = async url => {
+    urls.push(url);
+    if (url.endsWith('getAccessToken')) return { ok: true, status: 200, json: async () => ({ access_token: 'T', expires_in: 1800 }) };
+    return { ok: true, status: 200, json: async () => [AP] };
+  };
+  const k = ppl.vytvoritKlienta({ env: { PPL_API_URL: 'https://api-dev.dhl.com/ecs/ppl/myapi2', PPL_CLIENT_ID: 'a', PPL_CLIENT_SECRET: 'b' }, fetchFn });
+  await k.vydejniMista({ mesto: 'Hulín' });
+  await k.vydejniMista({ kod: 'KM10676824', limit: 5 });
+  assert.match(urls[1], /\/accessPoint\?CountryCode=CZ&Limit=50&Offset=0&City=Hul%C3%ADn$/);
+  assert.match(urls[2], /AccessPointCode=KM10676824/);
+});
+
+test('zásilka do výdejního místa PPL: SMAR / SMAD s kódem místa, telefon a e-mail povinné', () => {
+  const o = { ...OBJ, doprava: 'ppl_vydejni_misto', vydejni_misto_id: 'KM10676824' };
+  const p = zasilkaZObjednavky(o);
+  assert.strictEqual(p.produkt, 'SMAR');
+  assert.deepStrictEqual(teloZasilky(p).shipments[0].specificDelivery, { parcelShopCode: 'KM10676824' });
+  assert.strictEqual(zasilkaZObjednavky({ ...o, platba: 'dobirka' }).produkt, 'SMAD');
+  assert.throws(() => zasilkaZObjednavky({ ...o, vydejni_misto_id: null }), /výdejní místo PPL/);
+  assert.throws(() => zasilkaZObjednavky({ ...o, obj_email: '' }), /telefon a e-mail/);
+  assert.strictEqual(teloZasilky(zasilkaZObjednavky(OBJ)).shipments[0].specificDelivery, undefined, 'na adresu bez místa');
+});
+
+test('doprava PPL výdejní místo: vypnutá bez ceny; nabídne se jen s přístupovými údaji PPL na serveru', () => {
+  const zaklad = doprava.sloucitNastaveni(null);
+  assert.deepStrictEqual(zaklad.metody.ppl_vydejni_misto, { aktivni: false, cena: null });
+  const zapnuto = { ...zaklad, metody: { ...zaklad.metody, ppl_vydejni_misto: { aktivni: true, cena: 69 } } };
+  const ENV_PPL = { PPL_API_URL: 'https://api.dhl.com/ecs/ppl/myapi2', PPL_CLIENT_ID: 'a', PPL_CLIENT_SECRET: 'b' };
+  const v = doprava.verejneNastaveni(zapnuto, ENV_PPL).metody.find(m => m.kod === 'ppl_vydejni_misto');
+  assert.deepStrictEqual(v, { kod: 'ppl_vydejni_misto', nazev: 'PPL – výdejní místo nebo box', cena: 69, vydejniMisto: 'ppl', vzdyZdarma: false });
+  assert.ok(!doprava.verejneNastaveni(zapnuto, {}).metody.some(m => m.kod === 'ppl_vydejni_misto'), 'bez PPL_* se nenabízí');
+  assert.strictEqual(doprava.jeDostupna(zapnuto, 'ppl_vydejni_misto', {}), false);
+  assert.ok(!JSON.stringify(doprava.verejneNastaveni(zapnuto, ENV_PPL)).includes('PPL_'));
+});
+
 // ---------- panel PPL v detailu objednávky (admin.html) ----------
 const fs = require('node:fs');
 const path = require('node:path');
