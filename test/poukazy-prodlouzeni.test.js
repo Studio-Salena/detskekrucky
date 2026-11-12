@@ -26,7 +26,7 @@ test('prodloužení: pravidla', () => {
 });
 
 test('admin: účtenka ukáže platnost, kartička s hodnotou, tlačítka prodloužení', () => {
-  const html = fs.readFileSync(path.join(__dirname, '..', 'admin.html'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'admin.html'), 'utf8').replace(/\r\n/g, '\n'); // CRLF na Windows (core.autocrlf)
   assert.match(html, /p\.typ==='poukaz'&&p\.platnost_do\?`<div style="font-size:11px">Platí do \$\{escH\(datumCesky\(p\.platnost_do\)\)\} včetně/);
   assert.match(html, /function tisknoutKartickuPoukazu\(/);
   assert.match(html, /onclick="tisknoutKartickuKarty\(\)">🖨️ Kartička s hodnotou/);

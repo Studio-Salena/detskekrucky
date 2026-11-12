@@ -67,7 +67,7 @@ test('vrácení výchozího smaže jen danou stranu', async () => {
 });
 
 test('admin: vzhled karty, tisk karet (zadní strany zrcadlově), registrace v index.js', () => {
-  const admin = fs.readFileSync(path.join(__dirname, '..', 'admin.html'), 'utf8');
+  const admin = fs.readFileSync(path.join(__dirname, '..', 'admin.html'), 'utf8').replace(/\r\n/g, '\n'); // CRLF na Windows (core.autocrlf)
   const index = fs.readFileSync(path.join(__dirname, '..', 'index.js'), 'utf8');
   assert.match(index, /app\.use\('\/api\/vzhled-karty', vzhledKartyRoutes\)/);
   assert.match(admin, /onclick="prepnoutVzhledKarty\(\)"/);

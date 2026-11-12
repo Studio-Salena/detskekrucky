@@ -46,7 +46,7 @@ test('dodatečný převod: částky a pojistky', () => {
 });
 
 test('admin: výměna, způsob vrácení u vratky, převod, uzávěrka odečte hotově vrácené', () => {
-  const html = fs.readFileSync(path.join(__dirname, '..', 'admin.html'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'admin.html'), 'utf8').replace(/\r\n/g, '\n'); // CRLF na Windows (core.autocrlf)
   assert.match(html, /onclick="otevritVymenu\(\)"/);
   assert.match(html, /id="modalVymena"/);
   assert.match(html, /id="vratkaZpusob"/);
