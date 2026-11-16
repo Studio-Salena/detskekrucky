@@ -1785,8 +1785,7 @@ async function nacistProdukty() {
       const ceny = p.velikosti.map(v => v.cena);
       p.cenaOd = new Set(ceny).size > 1;
       p.cena = Math.min(...ceny);
-      const cenyPuvodni = new Set(p.velikosti.map(v => v.cena_puvodni || null));
-      p.cena_puvodni = (cenyPuvodni.size === 1 && [...cenyPuvodni][0]) ? [...cenyPuvodni][0] : null;
+      Object.assign(p, slevaProduktu(p.velikosti));
       // Aspoň jedna velikost "u dodavatele" - na kartě to zákaznici naznačí
       // ještě před otevřením detailu, přesný stav podle velikosti je pak v modalu.
       p.maDodavatele = p.velikosti.some(v => v.dostupnost === 'dodavatel');
@@ -1990,7 +1989,7 @@ function produktOdpovida(p, stav, ctx, vynechat) {
   if (krome('velikost') && stav.velikost && (jeVMesicich(p) || !p.velikosti.some(v => v.velikost === stav.velikost && (!stav.skladem || jeSkladem(v))))) return false;
   if (krome('noha') && stav.noha && !p.velikosti.some(v => velikostSediNaNohu(v, stav.noha, nadmerekBoty(p, ctx.rezerva ?? 12)) && (!stav.skladem || jeSkladem(v)))) return false;
   if (krome('skladem') && stav.skladem && !p.velikosti.some(jeSkladem)) return false;
-  if (krome('sleva') && stav.sleva && !p.cena_puvodni) return false;
+  if (krome('sleva') && stav.sleva && !jeVeSleve(p)) return false;
   if (krome('pro') && stav.pro && !KATALOG_PRO[stav.pro].pohlavi.includes(p.pohlavi)) return false;
   if (krome('znacka') && stav.znacka.length && !stav.znacka.includes((p.znacka || '').trim())) return false;
   if (krome('vek') && stav.vek.length) {
@@ -2040,7 +2039,7 @@ function spocitatMoznosti(produkty, stav, ctx) {
     if (p.barefoot === true && produktOdpovida(p, stav, ctx, 'barefoot')) pocty.barefoot++;
     if (p.membrana === true && produktOdpovida(p, stav, ctx, 'membrana')) pocty.membrana++;
     if (p.velikosti.some(jeSkladem) && produktOdpovida(p, stav, ctx, 'skladem')) pocty.skladem++;
-    if (p.cena_puvodni && produktOdpovida(p, stav, ctx, 'sleva')) pocty.sleva++;
+    if (jeVeSleve(p) && produktOdpovida(p, stav, ctx, 'sleva')) pocty.sleva++;
     if (produktOdpovida(p, stav, ctx, 'pro')) Object.keys(KATALOG_PRO).forEach(k => { if (KATALOG_PRO[k].pohlavi.includes(p.pohlavi)) pridat(pocty.pro, k); });
   }
   return pocty;
@@ -2345,9 +2344,27 @@ function filtryHtml(stav, pocty) {
 }
 
 // Štítky pod fotkou (fotka zůstává čistá), jednotný vzhled, nejvýš dva
+// Sleva modelu z jeho velikostí. Menší velikosti bývají levnější, takže se
+// přeškrtnuté ceny mezi velikostmi liší - štítek Sleva stačí u jedné velikosti,
+// přeškrtnutá cena na kartě patří k nejlevnější velikosti (k ceně „od X Kč“).
+function slevaProduktu(velikosti) {
+  const zlevnene = velikosti.filter(v => v.cena_puvodni && Number(v.cena_puvodni) > Number(v.cena));
+  const nejnizsi = Math.min(...velikosti.map(v => Number(v.cena)));
+  const puvodni = zlevnene.filter(v => Number(v.cena) === nejnizsi).map(v => Number(v.cena_puvodni));
+  return { sleva: zlevnene.length > 0, cena_puvodni: puvodni.length ? Math.min(...puvodni) : null };
+}
+
+function jeVeSleve(p) {
+  return !!(p.sleva || p.cena_puvodni);
+}
+
+function cenaSeSlevouHtml(cena, puvodni, trida) {
+  return `${escHtml(cena)} Kč` + (puvodni && Number(puvodni) > Number(cena) ? ` <span class="${trida}">${escHtml(puvodni)} Kč</span>` : '');
+}
+
 function stitkyKartyHtml(p) {
   const stitky = [];
-  if (p.cena_puvodni) stitky.push('<span class="stitek stitek-sleva">Sleva</span>');
+  if (jeVeSleve(p)) stitky.push('<span class="stitek stitek-sleva">Sleva</span>');
   if (p.barefoot === true) stitky.push('<span class="stitek stitek-barefoot">Barefoot</span>');
   return stitky.length ? `<div class="karta-stitky">${stitky.slice(0, 2).join('')}</div>` : '';
 }
@@ -2826,7 +2843,7 @@ function openDetail(klic, { zHistorie = false } = {}) {
   document.getElementById('detailName').textContent = p.nazev;
   document.getElementById('detailPopis').textContent = p.popis || 'Kvalitní barefoot obuv pro zdravý vývoj dětských nožiček.';
   vykreslitVyrobceDetailu(p);
-  document.getElementById('detailPrice').textContent = (p.cenaOd ? 'od ' : '') + p.cena + ' Kč';
+  document.getElementById('detailPrice').innerHTML = (p.cenaOd ? 'od ' : '') + cenaSeSlevouHtml(p.cena, p.cena_puvodni, 'product-price-old');
   const skladem = p.velikosti.some(jeSkladem);
   const skladEl = document.getElementById('detailSklad');
   skladEl.className = 'karta-sklad' + (skladem ? '' : ' dodavatel');
@@ -2858,7 +2875,7 @@ function openDetail(klic, { zHistorie = false } = {}) {
 
   document.getElementById('detailListaNazev').textContent = `${p.znacka || ''} ${p.nazev}`.trim();
   document.getElementById('detailListaVelikost').textContent = 'Vyberte velikost';
-  document.getElementById('detailListaCena').textContent = document.getElementById('detailPrice').textContent;
+  document.getElementById('detailListaCena').textContent = (p.cenaOd ? 'od ' : '') + p.cena + ' Kč';
   document.getElementById('detailLista').hidden = true;
   // Batůžek či doplněk v jediném provedení: není co vybírat, rovnou vybrané
   const jedina = !bota && p.velikosti.length === 1 && !(p.vyprodane || []).length;
@@ -3066,8 +3083,9 @@ function vybrVelikost(vel, btn) {
 
   // Ceny se mezi velikostmi stejného modelu občas liší - po výběru konkrétní
   // velikosti se místo "od X Kč" ukáže přesná cena pro tu velikost.
-  document.getElementById('detailPrice').textContent = (velData ? velData.cena : aktivniProdukt.cena) + ' Kč';
-  document.getElementById('detailListaCena').textContent = document.getElementById('detailPrice').textContent;
+  const cenaVel = velData ? velData.cena : aktivniProdukt.cena;
+  document.getElementById('detailPrice').innerHTML = cenaSeSlevouHtml(cenaVel, velData ? velData.cena_puvodni : aktivniProdukt.cena_puvodni, 'product-price-old');
+  document.getElementById('detailListaCena').textContent = cenaVel + ' Kč';
   document.getElementById('detailListaVelikost').textContent = jeVMesicich(aktivniProdukt) ? textVelikosti(aktivniProdukt, vel) : 'Velikost ' + vel;
 
   const rozmeryEl = document.getElementById('detailRozmery');

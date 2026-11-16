@@ -29,7 +29,7 @@ vm.runInContext([
   'var nastaveniKatalogu = { rezervaMm: 12 };',
   ...['KATALOG_MESICE'].map(konstanta),
   ...['jeVMesicich', 'escHtml', 'rezervaPruvodce', 'nadmerekBoty', 'platnaNoha', 'velikostSediNaNohu', 'doporucitVelikost', 'vysledekPruvodceHtml',
-    'prazdnyStavKatalogu', 'bezDiakritiky', 'slugText', 'stavZUrl', 'urlZeStavu', 'hledaniOdpovida', 'jeSkladem', 'produktOdpovida'].map(vytahnout)
+    'prazdnyStavKatalogu', 'bezDiakritiky', 'slugText', 'stavZUrl', 'urlZeStavu', 'hledaniOdpovida', 'jeSkladem', 'jeVeSleve', 'produktOdpovida'].map(vytahnout)
 ].join('\n'), sandbox);
 const run = kod => { const v = vm.runInContext(kod, sandbox); return v !== null && typeof v === 'object' ? JSON.parse(JSON.stringify(v)) : v; };
 const zavolat = (fn, ...args) => run(`${fn}(...${JSON.stringify(args)})`);

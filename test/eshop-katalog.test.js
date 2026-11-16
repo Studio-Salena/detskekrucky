@@ -31,7 +31,7 @@ vm.runInContext([
   ...['KATALOG_RAZENI', 'KATALOG_SIRKA', 'KATALOG_ZAPINANI', 'KATALOG_BEZ_BOT', 'KATALOG_MESICE'].map(vytahnoutKonstantu),
   ...['jeBota', 'jeVMesicich', 'textVelikosti', 'popisVelikosti', 'escHtml', 'escAttr', 'jeBezpecnaHttpUrl', 'obrazekProduktuHtml', 'prazdnyStavKatalogu', 'bezDiakritiky', 'slugText',
     'stavZUrl', 'urlZeStavu', 'hledaniOdpovida', 'jeSkladem', 'produktOdpovida', 'filtrovatProdukty', 'seraditProdukty',
-    'spocitatMoznosti', 'pocetProduktuText', 'stitkyKartyHtml', 'kartaProduktuHtml', 'drobeckyHtml'].map(vytahnout),
+    'spocitatMoznosti', 'pocetProduktuText', 'slevaProduktu', 'jeVeSleve', 'cenaSeSlevouHtml', 'stitkyKartyHtml', 'kartaProduktuHtml', 'drobeckyHtml'].map(vytahnout),
   // ziskatPozadiKategorie potřebuje globální kategorie - v testu stačí neutrální pozadí
   'function ziskatPozadiKategorie() { return { trida: "product-img-default", styl: "" }; }'
 ].join('\n'), sandbox);
@@ -396,4 +396,27 @@ test('facelift: Cormorant se nepoužívá, nadpis katalogu Nunito a podnadpis Da
   assert.match(ESHOP_HTML, /\.katalog-uvod h3\{font-family:var\(--font-brand\)/);
   const duvera = ESHOP_HTML.indexOf('<p class="duvera">Platba převodem nebo na prodejně · Vrácení do 14 dnů · Poradíme na 773 517 733</p>');
   assert.ok(duvera > 0 && duvera < ESHOP_HTML.indexOf('id="submitBtn"') && duvera > ESHOP_HTML.indexOf('id="chSouhlas"'));
+});
+
+test('sleva: velikosti s různou cenou (menší levnější) - štítek, přeškrtnutá cena nejlevnější velikosti, filtr Ve slevě', () => {
+  // skutečný případ Jonap Bella canyon: 23-26 za 1169 (1299), 29-30 za 1205 (1339)
+  const vel = [{ velikost: 23, cena: 1169, cena_puvodni: 1299 }, { velikost: 29, cena: 1205, cena_puvodni: 1339 }];
+  assert.deepEqual(zavolat('slevaProduktu', vel), { sleva: true, cena_puvodni: 1299 });
+  // ve slevě jen dražší velikost: štítek ano, k ceně „od“ nic nepřeškrtnout
+  assert.deepEqual(zavolat('slevaProduktu', [{ cena: 1000 }, { cena: 1200, cena_puvodni: 1300 }]), { sleva: true, cena_puvodni: null });
+  assert.deepEqual(zavolat('slevaProduktu', [{ cena: 1000 }, { cena: 1200 }]), { sleva: false, cena_puvodni: null });
+  // přeškrtnutá cena, která není vyšší, se nepočítá
+  assert.deepEqual(zavolat('slevaProduktu', [{ cena: 1000, cena_puvodni: 1000 }]), { sleva: false, cena_puvodni: null });
+
+  const bota = { ...PRODUKTY[0], cena: 1169, cenaOd: true, ...zavolat('slevaProduktu', vel) };
+  const karta = run(`kartaProduktuHtml(${JSON.stringify(bota)}, ${JSON.stringify(stav())})`);
+  assert.match(karta, /stitek-sleva/);
+  assert.match(karta, /product-price-old">1299 Kč/);
+  const jenStitek = { ...PRODUKTY[0], sleva: true, cena_puvodni: null };
+  assert.match(run(`kartaProduktuHtml(${JSON.stringify(jenStitek)}, ${JSON.stringify(stav())})`), /stitek-sleva/);
+  const ve = run(`filtrovatProdukty(${JSON.stringify([jenStitek, PRODUKTY[1]])}, ${JSON.stringify(stav({ sleva: true }))}, ${JSON.stringify(CTX)})`).map(p => p.slug);
+  assert.deepEqual(ve, ['froddo-autumn']);
+
+  assert.equal(zavolat('cenaSeSlevouHtml', 1205, 1339, 'product-price-old'), '1205 Kč <span class="product-price-old">1339 Kč</span>');
+  assert.equal(zavolat('cenaSeSlevouHtml', 1205, null, 'product-price-old'), '1205 Kč');
 });
