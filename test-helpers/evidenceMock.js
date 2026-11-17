@@ -5,20 +5,82 @@
 // když dotaz nepatří evidenci.
 
 function evidenceStav(stav) {
-  if (!stav.evidence) stav.evidence = { platby: [], kredit_pohyby: [], platby_prirazeni: [], dobirky: [], operace: [], zahozene: [] };
+  if (!stav.evidence) stav.evidence = { platby: [], kredit_pohyby: [], platby_prirazeni: [], dobirky: [], operace: [], zahozene: [], prodejna_klice: [], kredit_vklady: [], kredit_casti: [] };
+  for (const k of ['prodejna_klice', 'kredit_vklady', 'kredit_casti']) if (!stav.evidence[k]) stav.evidence[k] = [];
   return stav.evidence;
+}
+
+// Zůstatek vkladu = částka − odběry + vrácení
+function zbyvaVkladu(e, v) {
+  return e.kredit_casti.filter(c => c.vklad_id === v.id).reduce((a, c) => a + (c.smer === 'odber' ? -1 : 1) * Number(c.castka), Number(v.castka));
+}
+
+function obsluhaNovych(e, s, params, stav) {
+  // tabulka klíčů pokladny (prodejna_klice)
+  if (s.startsWith('INSERT INTO prodejna_klice (klic, stav) VALUES')) {
+    if (e.prodejna_klice.some(k => k.klic === params[0])) return { rows: [] };
+    const stavKlice = s.includes("'zahozeny'") ? 'zahozeny' : 'ulozeny';
+    e.prodejna_klice.push({ klic: params[0], stav: stavKlice, prodej_id: null });
+    if (stavKlice === 'zahozeny') e.zahozene.push(params[0]);
+    return { rows: [{ klic: params[0] }] };
+  }
+  if (s.startsWith('SELECT * FROM prodejna_klice WHERE klic')) return { rows: e.prodejna_klice.filter(k => k.klic === params[0]) };
+  if (s.startsWith('UPDATE prodejna_klice SET prodej_id')) { const k = e.prodejna_klice.find(x => x.klic === params[0]); if (k) k.prodej_id = params[1]; return {}; }
+  // vklady kreditu a části čerpání
+  if (s.startsWith('SELECT 1 FROM kredit_vklady WHERE poukaz_id')) return { rows: e.kredit_vklady.filter(v => Number(v.poukaz_id) === Number(params[0])).slice(0, 1).map(() => ({})) };
+  if (s.startsWith('SELECT * FROM kredit_vklady WHERE klic')) return { rows: e.kredit_vklady.filter(v => v.klic === params[0]) };
+  if (s.startsWith('SELECT puvod, eet_zaklad FROM kredit_vklady WHERE poukaz_id')) return { rows: e.kredit_vklady.filter(v => Number(v.poukaz_id) === Number(params[0])) };
+  if (s.startsWith('SELECT v.*, v.castka - COALESCE')) {
+    const poradi = params[1];
+    const rows = e.kredit_vklady.filter(v => Number(v.poukaz_id) === Number(params[0])).map(v => ({ ...v, zbyva: zbyvaVkladu(e, v) }))
+      .sort((a, b) => poradi.indexOf(a.puvod) - poradi.indexOf(b.puvod) || a.id - b.id);
+    return { rows };
+  }
+  if (s.startsWith('INSERT INTO kredit_casti')) {
+    const [kredit_pohyb_id, vklad_id, smer, castka, eet_pravidlo] = params;
+    if (e.kredit_casti.some(c => c.kredit_pohyb_id === kredit_pohyb_id && c.vklad_id === vklad_id)) return { rows: [] };
+    e.kredit_casti.push({ id: e.kredit_casti.length + 1, kredit_pohyb_id, vklad_id, smer, castka, eet_pravidlo });
+    return { rows: [] };
+  }
+  if (s.startsWith("SELECT * FROM kredit_casti WHERE kredit_pohyb_id = $1 AND smer = 'odber'")) return { rows: e.kredit_casti.filter(c => c.kredit_pohyb_id === params[0] && c.smer === 'odber') };
+  if (s.startsWith('SELECT DISTINCT CASE WHEN v.puvod')) return { rows: [] };
+  // strop vrácených peněz (routes/prodejna.js lzeVratitPenez)
+  if (s.startsWith("SELECT (SELECT COUNT(*) FROM platby WHERE zdroj_typ = 'prodej'")) {
+    const id = Number(params[0]);
+    const pr = e.platby.filter(r => r.zdroj_typ === 'prodej' && Number(r.zdroj_id) === id);
+    const vratkyProdeje = (stav.vratky || []).filter(v => Number(v.prodej_id) === id).map(v => v.id);
+    const vraceno = e.platby.filter(r => r.zdroj_typ === 'vratka' && vratkyProdeje.includes(Number(r.zdroj_id)))
+      .reduce((a, r) => a + (r.typ === 'vraceni' ? 1 : r.typ === 'storno_vraceni' ? -1 : 0) * Number(r.castka), 0);
+    return { rows: [{ s_evidenci: pr.filter(r => r.typ === 'prijem').length,
+      prijato: pr.reduce((a, r) => a + (r.typ === 'prijem' ? 1 : r.typ === 'storno_prijmu' ? -1 : 0) * Number(r.castka), 0), vraceno }] };
+  }
+  if (s.startsWith("SELECT (SELECT COUNT(*) FROM platby WHERE zdroj_typ = 'objednavka'")) {
+    const id = Number(params[0]);
+    return { rows: [{ n: e.platby.filter(r => r.zdroj_typ === 'objednavka' && Number(r.zdroj_id) === id && r.typ === 'prijem').length
+      + e.platby_prirazeni.filter(r => Number(r.objednavka_id) === id).length }] };
+  }
+  if (s.startsWith("SELECT 1 FROM kredit_pohyby WHERE zdroj_typ = 'prodej' AND zdroj_id = $1 AND typ = 'cerpani'")) {
+    return { rows: e.kredit_pohyby.filter(r => r.zdroj_typ === 'prodej' && Number(r.zdroj_id) === Number(params[0]) && r.typ === 'cerpani').slice(0, 1).map(() => ({})) };
+  }
+  if (s.startsWith("SELECT COALESCE(SUM(CASE p.typ WHEN 'vraceni'")) return { rows: [{ s: 0 }] };
+  if (s.startsWith("SELECT 1 FROM platby WHERE zdroj_typ = 'poukaz'")) return { rows: [] };
+  if (s.startsWith('SELECT * FROM kredit_pohyby WHERE klic')) return { rows: e.kredit_pohyby.filter(r => r.klic === params[0]) };
+  return undefined;
 }
 
 const SLOUPCE = {
   platby: ['klic', 'typ', 'castka', 'zpusob', 'okolnosti', 'kontaktni', 'prijato_at', 'zdroj_typ', 'zdroj_id', 'urceno_k_cerpani', 'vraci_id', 'opravuje_id', 'poznamka'],
   kredit_pohyby: ['klic', 'poukaz_id', 'typ', 'castka', 'puvod', 'kontaktni', 'platba_id', 'zdroj_typ', 'zdroj_id', 'opravuje_id', 'eet_pravidlo', 'poznamka'],
   platby_prirazeni: ['klic', 'platba_id', 'objednavka_id', 'castka'],
-  dobirky: ['klic', 'objednavka_id', 'platba_id', 'castka', 'dopravce']
+  dobirky: ['klic', 'objednavka_id', 'platba_id', 'castka', 'dopravce'],
+  kredit_vklady: ['klic', 'poukaz_id', 'puvod', 'castka', 'eet_zaklad', 'overeni', 'kredit_pohyb_id', 'prevedeno_z_id']
 };
 
 function obsluhaEvidence(stav, s, params = []) {
   if (s.startsWith('SELECT pg_advisory_xact_lock')) return {};
   const e = evidenceStav(stav);
+  const nove = obsluhaNovych(e, s, params, stav);
+  if (nove) return nove;
 
   // zahozené klíče a duplicita v pokladně
   if (s.startsWith('SELECT 1 FROM prodejna_klice_zahozene')) return { rows: e.zahozene.includes(params[0]) ? [{}] : [] };
@@ -38,7 +100,7 @@ function obsluhaEvidence(stav, s, params = []) {
   // zápisy
   for (const tab of Object.keys(SLOUPCE)) {
     if (s.startsWith(`INSERT INTO ${tab} (`)) {
-      const pole = e[tab === 'kredit_pohyby' ? 'kredit_pohyby' : tab];
+      const pole = e[tab];
       const klic = params[0];
       if (pole.some(r => r.klic === klic)) return { rows: [] };
       const row = { id: pole.length + 1, vytvoreno: new Date() };

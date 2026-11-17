@@ -217,7 +217,7 @@ function mockPoolProdejna(stav) {
       if (s.startsWith('SELECT * FROM prodejna_prodeje WHERE klic')) return { rows: [] };
       if (s.startsWith('SELECT pocet_kusu FROM sklad')) return { rows: [{ pocet_kusu: 10 }] };
       if (s.startsWith('UPDATE sklad SET pocet_kusu') || s.startsWith('INSERT INTO pohyby_skladu')) return {};
-      if (s.startsWith('SELECT id, platba, poukaz_kod FROM prodejna_prodeje')) return { rows: [{ id: params[0], platba: 'karta', poukaz_kod: null }] };
+      if (s.startsWith('SELECT id, platba, poukaz_kod, datum FROM prodejna_prodeje')) return { rows: [{ id: params[0], platba: 'karta', poukaz_kod: null, datum: new Date() }] };
       if (s.startsWith('SELECT id FROM vratky WHERE prodej_id') || s.startsWith('SELECT 1 FROM poukazy_pouziti')) return { rows: [] };
       if (s.startsWith('SELECT id FROM produkty WHERE id = ANY($1::int[]) AND cena_pred_slevou IS NOT NULL')) {
         return { rows: params[0].filter(id => (stav.veSleve || []).includes(id)).map(id => ({ id })) };

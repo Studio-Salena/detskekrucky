@@ -5,6 +5,7 @@ const { poukazPoPlatnosti } = require('../lib/poukazPlatnost');
 const { najitPoukaz } = require('../lib/poukazKarty');
 const promo = require('../lib/promo');
 const evidence = require('../lib/evidencePlateb');
+const kredit = require('../lib/kreditVklady');
 
 // Stavy, u kterých se zákazníkovi posílá informační e-mail o změně stavu
 // (viz STAV_OBJEDNAVKY_EMAIL v routes/emaily.js).
@@ -391,7 +392,7 @@ router.post('/', async (req, res) => {
     // Uplatnit dárkový poukaz (pokud je zadaný) - stejná transakce jako sklad,
     // ať se poukaz odečte, jen když se objednávka opravdu založí (a naopak).
     // FOR UPDATE zamkne řádek poukazu, aby ho nešlo dvakrát souběžně přečerpat.
-    let poukaz_id = null, sleva = 0, poukazZustatek = 0, poukazZbyva = null, poukazDruh = null;
+    let poukaz_id = null, sleva = 0, poukazZustatek = 0, poukazZbyva = null, poukazRadek = null;
     if (poukaz_kod) {
       // Kód poukazu, jeho EAN nebo EAN plastové karty (lib/poukazKarty.js)
       const nalez = await najitPoukaz(client, poukaz_kod, { zamknout: true });
@@ -409,7 +410,7 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ chyba: 'Platnost poukazu vypršela.' });
       }
       poukaz_id = poukaz.id;
-      poukazDruh = poukaz.druh || null;
+      poukazRadek = { ...poukaz }; // stav před odečtem (počáteční stav kreditu)
       poukazZustatek = Number(poukaz.zustatek);
       poukazZbyva = { platnost_do: poukaz.platnost_do };
     }
@@ -460,8 +461,9 @@ router.post('/', async (req, res) => {
         [poukaz_id, sleva, objednavka_id]
       );
       if (sleva > 0) {
-        await evidence.zapsatKredit(client, { klic: `objednavka:${objednavka_id}:cerpani`, poukaz_id, typ: 'cerpani', castka: sleva,
-          puvod: evidence.puvodPoukazu({ druh: poukazDruh }), kontaktni: false, zdroj_typ: 'objednavka', zdroj_id: objednavka_id });
+        // čerpání po vkladech (zůstatek poukazu před odečtem = poukazRadek)
+        await kredit.cerpat(client, { poukaz: poukazRadek, castka: sleva, klic: `objednavka:${objednavka_id}:cerpani`,
+          zdroj_typ: 'objednavka', zdroj_id: objednavka_id, kontaktni: false });
       }
     }
 
@@ -993,7 +995,7 @@ async function prehledPlatebObjednavky(db, id) {
 async function vlastniPrijato(db, id) {
   const r = (await db.query(`SELECT COALESCE(SUM(CASE typ WHEN 'prijem' THEN castka WHEN 'storno_vraceni' THEN castka ELSE -castka END), 0) AS s
     FROM platby WHERE zdroj_typ = 'objednavka' AND zdroj_id = $1`, [id])).rows[0];
-  return evidence.kc(r.s);
+  return Math.max(0, evidence.kc(Number(r.s) - await evidence.vracenoVratkamiObjednavky(db, id)));
 }
 
 // GET /api/objednavky/:id/platby
@@ -1201,7 +1203,7 @@ router.patch('/:id/stav', vyzadovatAdmina, async (req, res) => {
         // Původní čerpání zůstává, vrácení se zapíše navázaným záporným řádkem
         // (součet čerpání v reportech vyjde stejně jako dřív po smazání)
         await client.query('INSERT INTO poukazy_pouziti (poukaz_id, castka, objednavka_id) VALUES ($1,$2,$3)', [poukaz_id, -Number(sleva), Number(req.params.id)]);
-        await evidence.stornovatKredit(client, { zdroj_typ: 'objednavka', zdroj_id: Number(req.params.id), typy: ['cerpani'],
+        await kredit.stornovatDoklad(client, { zdroj_typ: 'objednavka', zdroj_id: Number(req.params.id), typy: ['cerpani'],
           klicPrefix: `zruseni-objednavky:${req.params.id}`, poznamka: 'Zrušení objednávky' });
       }
 

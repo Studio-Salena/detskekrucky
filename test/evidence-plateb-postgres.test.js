@@ -221,7 +221,7 @@ test('PostgreSQL evidence plateb: pokladna, poukazy, osobní odběr, dobírka, o
     let kontrola = await zavolat(evidenceRouter, 'get', '/kontrola');
     assert.equal(kontrola.statusCode, 200);
     assert.deepEqual(kontrola.body.rozdily, [], JSON.stringify(kontrola.body.rozdily));
-    assert.ok(kontrola.body.zkontrolovano.prodeje >= 5 && kontrola.body.zkontrolovano.poukazy >= 3);
+    assert.ok(kontrola.body.v_rozsahu.prodeje >= 5 && kontrola.body.v_rozsahu.poukazy >= 3);
     await pool.query('UPDATE prodejna_prodeje SET celkem = celkem + 1 WHERE id = $1', [prodej1.id]);
     kontrola = await zavolat(evidenceRouter, 'get', '/kontrola');
     assert.deepEqual(kontrola.body.rozdily.map(r => r.doklad), [`účtenka #${prodej1.id}`]);

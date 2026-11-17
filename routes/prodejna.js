@@ -7,6 +7,7 @@ const promo = require('../lib/promo');
 const vymena = require('../lib/vymena');
 const prodejPokladna = require('../lib/prodejPokladna');
 const evidence = require('../lib/evidencePlateb');
+const eetZamek = require('../lib/eetZamek');
 
 // Jak byly peníze z vratky vráceny (hotově se odečítá z hotovosti v uzávěrce)
 const ZPUSOBY_VRACENI = vymena.PLATBY;
@@ -65,9 +66,17 @@ async function initTabulky() {
       ALTER TABLE prodejna_prodeje ADD COLUMN IF NOT EXISTS klic TEXT;
       ALTER TABLE prodejna_prodeje ADD COLUMN IF NOT EXISTS klic_otisk TEXT;
       CREATE UNIQUE INDEX IF NOT EXISTS prodejna_prodeje_klic_uq ON prodejna_prodeje (klic) WHERE klic IS NOT NULL;
-      -- „Zahodit“ nepotvrzený prodej (2026-11-17): klíč, pod kterým server nic
-      -- neuložil, se zneplatní - pozdě doručený původní požadavek už nic neuloží.
-      CREATE TABLE IF NOT EXISTS prodejna_klice_zahozene (klic TEXT PRIMARY KEY, zahozeno TIMESTAMPTZ NOT NULL DEFAULT NOW());
+      -- Klíče prodejů z pokladny (2026-11-17): JEDINÁ databázová pojistka pro
+      -- uložení i „Zahodit“. Primární klíč = jeden výsledek pro klíč (uložený /
+      -- zahozený) bez ohledu na čas, restart serveru nebo obnovení prohlížeče.
+      CREATE TABLE IF NOT EXISTS prodejna_klice (
+        klic TEXT PRIMARY KEY,
+        stav TEXT NOT NULL CHECK (stav IN ('ulozeny', 'zahozeny')),
+        prodej_id INTEGER,
+        vytvoreno TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      INSERT INTO prodejna_klice (klic, stav, prodej_id)
+        SELECT klic, 'ulozeny', id FROM prodejna_prodeje WHERE klic IS NOT NULL ON CONFLICT (klic) DO NOTHING;
       -- Otisk obsahu nákupu (bez klíče a hotovosti) - stejný nákup zadaný znovu
       -- do 30 minut se bez potvrzení neuloží (lib/prodejPokladna.js)
       ALTER TABLE prodejna_prodeje ADD COLUMN IF NOT EXISTS obsah_otisk TEXT;
@@ -195,6 +204,10 @@ router.put('/:id', async (req, res) => {
     const puvodni = (await client.query('SELECT * FROM prodejna_prodeje WHERE id = $1 FOR UPDATE', [req.params.id])).rows[0];
     if (!puvodni) { await client.query('ROLLBACK'); return res.status(404).json({ chyba: 'Prodej nenalezen.' }); }
     const novaPlatba = platba || null;
+    if (novaPlatba !== puvodni.platba && eetZamek.jeZamceny(puvodni.datum)) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ chyba: eetZamek.CHYBA_ZAMKU });
+    }
     if (novaPlatba !== puvodni.platba) {
       const prijmy = (await client.query(
         `SELECT p.* FROM platby p WHERE p.zdroj_typ = 'prodej' AND p.zdroj_id = $1 AND p.typ = 'prijem'
@@ -239,8 +252,9 @@ router.delete('/:id', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const prodej = (await client.query('SELECT id, platba, poukaz_kod FROM prodejna_prodeje WHERE id = $1 FOR UPDATE', [id])).rows[0];
+    const prodej = (await client.query('SELECT id, platba, poukaz_kod, datum FROM prodejna_prodeje WHERE id = $1 FOR UPDATE', [id])).rows[0];
     if (!prodej) { await client.query('ROLLBACK'); return res.status(404).json({ chyba: 'Prodej nenalezen.' }); }
+    if (eetZamek.jeZamceny(prodej.datum)) { await client.query('ROLLBACK'); return res.status(409).json({ chyba: eetZamek.CHYBA_ZAMKU }); }
     const vymenaVratka = (await client.query('SELECT id FROM vratky WHERE vymena_prodej_id = $1', [id])).rows[0];
     if (vymenaVratka) { await client.query('ROLLBACK'); return res.status(409).json({ chyba: `Účtenka patří k výměně (vratka #${vymenaVratka.id}) a nejde smazat.` }); }
     const vratka = (await client.query('SELECT id FROM vratky WHERE prodej_id = $1 LIMIT 1', [id])).rows[0];
@@ -389,6 +403,15 @@ router.post('/vratky', async (req, res) => {
     // tam zůstává jen základní validace tvaru výše.
     const chybaPolozek = await overitVracenePolozky(client, { prodej_id, objednavka_id, polozky });
     if (chybaPolozek) throw new evidence.ChybaEvidence(chybaPolozek.status, chybaPolozek.chyba);
+    // Stejné peníze nejde vrátit dvakrát: penězi jde vrátit nejvýš to, co na dokladu
+    // opravdu přišlo (minus dřívější vrácení). Hlídá se u dokladů s evidencí plateb;
+    // zdrojový řádek je zamčený (overitVracenePolozky), souběžné vratky se řadí.
+    if (Number(castka) > 0 && ['hotovost', 'karta', 'qr', 'prevod'].includes(zpusobVraceni)) {
+      const lze = await lzeVratitPenez(client, { prodejId: prodej_id, objednavkaId: objednavka_id });
+      if (lze != null && Number(castka) > lze) {
+        throw new evidence.ChybaEvidence(400, `Penězi jde vrátit nejvýš ${lze} Kč (tolik na dokladu přišlo a ještě se nevrátilo). Část placenou poukazem připište zpět na poukaz.`);
+      }
+    }
 
     const vratka = await client.query(
       'INSERT INTO vratky (prodej_id, objednavka_id, polozky, castka, duvod, vraceno_na_sklad, zpusob_vraceni) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
@@ -424,6 +447,32 @@ router.post('/vratky', async (req, res) => {
     client.release();
   }
 });
+
+// Kolik peněz jde ještě vrátit k účtence / objednávce. null = doklad bez evidence
+// plateb (vzniklý před ní) - tam se strop nehlídá, nic se nedopočítává.
+async function lzeVratitPenez(client, { prodejId, objednavkaId }) {
+  if (prodejId) {
+    const r = (await client.query(`SELECT
+        (SELECT COUNT(*) FROM platby WHERE zdroj_typ = 'prodej' AND zdroj_id = $1 AND typ = 'prijem') AS s_evidenci,
+        (SELECT COALESCE(SUM(CASE typ WHEN 'prijem' THEN castka ELSE -castka END), 0) FROM platby
+          WHERE zdroj_typ = 'prodej' AND zdroj_id = $1 AND typ IN ('prijem', 'storno_prijmu')) AS prijato,
+        (SELECT COALESCE(SUM(CASE p.typ WHEN 'vraceni' THEN p.castka ELSE -p.castka END), 0) FROM platby p JOIN vratky v ON v.id = p.zdroj_id
+          WHERE p.zdroj_typ = 'vratka' AND p.typ IN ('vraceni', 'storno_vraceni') AND v.prodej_id = $1) AS vraceno`, [prodejId])).rows[0];
+    if (Number(r.s_evidenci) === 0) {
+      // účtenka placená jen poukazem (s evidencí kreditu) = penězi se nevrací nic
+      const kreditem = (await client.query("SELECT 1 FROM kredit_pohyby WHERE zdroj_typ = 'prodej' AND zdroj_id = $1 AND typ = 'cerpani' LIMIT 1", [prodejId])).rows.length;
+      return kreditem ? 0 : null;
+    }
+    return Math.max(0, evidence.kc(Number(r.prijato) - Number(r.vraceno)));
+  }
+  if (objednavkaId) {
+    const s = (await client.query(`SELECT (SELECT COUNT(*) FROM platby WHERE zdroj_typ = 'objednavka' AND zdroj_id = $1 AND typ = 'prijem')
+      + (SELECT COUNT(*) FROM platby_prirazeni WHERE objednavka_id = $1) AS n`, [objednavkaId])).rows[0];
+    if (Number(s.n) === 0) return null;
+    return evidence.prijatoNaObjednavku(client, objednavkaId);
+  }
+  return null;
+}
 
 // Vrácené peníze z vratky do evidence plateb (hotově/kartou/QR u pultu, převodem
 // na dálku). U výměny bez vrácení peněz ('vymena') a nulové částky nic.
@@ -558,6 +607,7 @@ router.post('/vymeny/prevest', async (req, res) => {
     const vratka = (await client.query('SELECT * FROM vratky WHERE id = $1 FOR UPDATE', [vratkaId])).rows[0];
     const prodej = (await client.query('SELECT * FROM prodejna_prodeje WHERE id = $1 FOR UPDATE', [prodejId])).rows[0];
     if (!vratka || !prodej) { await client.query('ROLLBACK'); return res.status(404).json({ chyba: !vratka ? `Vratka #${vratkaId} neexistuje.` : `Účtenka #${prodejId} neexistuje.` }); }
+    if (eetZamek.jeZamceny(prodej.datum) || eetZamek.jeZamceny(vratka.vytvoreno)) { await client.query('ROLLBACK'); return res.status(409).json({ chyba: eetZamek.CHYBA_ZAMKU }); }
     const jinaVymena = (await client.query('SELECT id FROM vratky WHERE vymena_prodej_id = $1', [prodejId])).rows[0];
     if (jinaVymena) { await client.query('ROLLBACK'); return res.status(400).json({ chyba: `Účtenka #${prodejId} už patří k výměně (vratka #${jinaVymena.id}).` }); }
     const p = vymena.prevodNaVymenu(vratka, prodej);

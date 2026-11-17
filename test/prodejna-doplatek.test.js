@@ -267,8 +267,11 @@ test('evidence z pokladny: příjem jen skutečných peněz, čerpání poukazu 
   const stav = vytvoritStav({ druh: 'dar' });
   await prodat(stav, { ...PRODEJ(), platba: 'poukaz', poukaz_kod: 'DK-AAAA-BBBB', doplatek_platba: 'hotovost', hotovost_prijato: 1000 });
   assert.deepEqual(stav.evidence.platby.map(p => [p.typ, p.castka, p.zpusob, p.okolnosti, p.kontaktni, p.zdroj_typ]), [['prijem', 600, 'hotovost', 'prodejna', true, 'prodej']]);
-  assert.deepEqual(stav.evidence.kredit_pohyby.map(k => [k.typ, k.castka, k.puvod, k.eet_pravidlo]), [['cerpani', 1000, 'darovany', 'nevyreseno']],
+  // poukaz z doby před evidencí: zůstatek se zapíše jako počáteční stav (bez platby), pak čerpání
+  assert.deepEqual(stav.evidence.kredit_pohyby.map(k => [k.typ, k.castka, k.puvod, k.eet_pravidlo]), [['pocatecni_stav', 1000, 'darovany', 'neeviduje'], ['cerpani', 1000, 'darovany', 'nevyreseno']],
     'darovaný kredit: pravidlo EET výslovně nevyřešené');
+  assert.deepEqual(stav.evidence.kredit_vklady.map(v => [v.puvod, v.overeni]), [['darovany', 'pocatecni_stav']]);
+  assert.deepEqual(stav.evidence.kredit_casti.map(c => [c.smer, c.castka, c.eet_pravidlo]), [['odber', 1000, 'nevyreseno']]);
 });
 
 test('admin: Zahodit se ptá serveru a bez spojení nezahodí; možná duplicita jen s potvrzením', () => {

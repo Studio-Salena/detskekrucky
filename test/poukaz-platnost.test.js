@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { mock } = require('node:test');
 const { poukazPoPlatnosti, datumPlatnosti, dnesVPraze } = require('../lib/poukazPlatnost');
+const { obsluhaEvidence } = require('../test-helpers/evidenceMock');
 const { nacistRouterSMocky, najitHandler, vytvoritRes, vytvoritMockPool, pocatecniStav } = require('../test-helpers/_pomocnik');
 
 // Poukaz vydaný 31. 12. 2026 s platností do 31. 12. 2027. Sloupec DATE vrací pg
@@ -49,8 +50,11 @@ const poukaz = (prepis = {}) => ({ id: 1, kod: 'DK-AAAA-BBBB', ean: '22000000000
 // Klient se zámkem: vrací poukaz na SELECT ... FOR UPDATE a zapisuje změny
 function klientSPoukazem(p) {
   const zapisy = [];
+  const evidenceDb = {};
   const client = {
     query: async (sql, params) => {
+      const ev = obsluhaEvidence(evidenceDb, sql.replace(/\s+/g, ' ').trim(), params);
+      if (ev) return ev;
       if (/FROM darkove_poukazy WHERE/.test(sql)) return { rows: p ? [p] : [] };
       if (/^UPDATE darkove_poukazy/.test(sql)) { zapisy.push(sql); if (/zustatek=\$1/.test(sql)) { p.zustatek = params[0]; p.stav = params[1]; } else { p.zustatek = 0; p.stav = 'pouzity'; } return { rows: [] }; }
       if (/^INSERT INTO prodejna_prodeje/.test(sql)) return { rows: [{ id: 9 }] };

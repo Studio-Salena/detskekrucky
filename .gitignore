@@ -5,3 +5,8 @@ node_modules/
 etiketa*.pdf
 index-1.html
 Claude outputs/
+
+# Ověření migrace na kopii produkce – zprávy a zálohy obsahují produkční data
+scripts/zprava-overeni-migrace.json
+zprava-*.json
+*.dump

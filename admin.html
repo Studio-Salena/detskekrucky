@@ -1096,6 +1096,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
       <div class="pohledy no-print" role="tablist" aria-label="Účetnictví">
         <button type="button" role="tab" data-cil="prehled" onclick="prepnoutPohled('ucetnictvi','prehled')">Přehled</button>
         <button type="button" role="tab" data-cil="faktury" onclick="prepnoutPohled('ucetnictvi','faktury')">Nákupní faktury</button>
+        <button type="button" role="tab" data-cil="platby" onclick="prepnoutPohled('ucetnictvi','platby');nacistPlatbyADobirky()">Platby a dobírky</button>
       </div>
       <div data-pohled="prehled">
       <div class="stats-grid" style="grid-template-columns:repeat(6,1fr)">
@@ -1134,6 +1135,34 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           (mění se čas od času), ideálně s daňovým poradcem.
         </div>
       </div>
+      </div>
+
+      <!-- PLATBY A DOBÍRKY: volné platby (bez dokladu) a jejich přiřazení, vyúčtování dobírek -->
+      <div data-pohled="platby">
+        <div class="info-box">💡 <strong>Volná platba</strong> = peníze, které přišly bez dokladu (typicky převod na účet). Přiřaďte ji k objednávce nebo k poukazu z e-shopu – příjem se tím nezapočítá dvakrát.
+          K objednávce jde přiřadit i část platby (zbytek zůstane volný), <strong>poukaz se hradí jen celou hodnotou</strong> (částečná úhrada poukazu není podporovaná).<br>
+          💡 <strong>Dobírky</strong>: úhradu od zákazníka zapíšete v detailu objednávky (Dobírka vybrána). Tady zapíšete výplatu od dopravce: součet dobírek − poplatek = vyplaceno.</div>
+        <div class="section-divider">Volné platby</div>
+        <div class="pos-dvojice" style="align-items:end;flex-wrap:wrap">
+          <div class="form-group" style="margin:0"><label for="vpZpusob">Způsob</label><select id="vpZpusob"><option value="prevod">🏦 Převod</option><option value="hotovost">💵 Hotovost</option><option value="karta">💳 Karta</option><option value="qr">📱 QR</option></select></div>
+          <div class="form-group" style="margin:0"><label for="vpCastka">Částka Kč</label><input type="number" id="vpCastka" min="1" step="0.01"></div>
+          <div class="form-group" style="margin:0"><label for="vpDatum">Přijato dne</label><input type="date" id="vpDatum"></div>
+          <div class="form-group" style="margin:0"><label for="vpPoznamka">Poznámka (VS, plátce)</label><input type="text" id="vpPoznamka" maxlength="300"></div>
+          <button class="btn btn-primary btn-sm" id="vpBtn" onclick="zapsatVolnouPlatbu()">+ Zapsat platbu</button>
+        </div>
+        <div id="volnePlatbyTab" style="margin-top:10px"></div>
+        <div class="section-divider">Dobírky k vyúčtování</div>
+        <div id="dobirkyTab"></div>
+        <div class="pos-dvojice" style="align-items:end;flex-wrap:wrap;margin-top:8px">
+          <div class="form-group" style="margin:0"><label for="dvDopravce">Dopravce</label><input type="text" id="dvDopravce" placeholder="zasilkovna"></div>
+          <div class="form-group" style="margin:0"><label for="dvDatum">Vyplaceno dne</label><input type="date" id="dvDatum"></div>
+          <div class="form-group" style="margin:0"><label for="dvPoplatek">Poplatek Kč</label><input type="number" id="dvPoplatek" min="0" step="0.01" value="0" oninput="prepocitatVyuctovani()"></div>
+          <div id="dvSouhrn" style="padding:6px 0">Vybráno 0 Kč</div>
+          <button class="btn btn-primary btn-sm" id="dvBtn" onclick="vyuctovatDobirky()">Zapsat vyúčtování</button>
+        </div>
+        <div class="section-divider">Provedená vyúčtování</div>
+        <div id="vyuctovaniTab"></div>
+        <div id="platbyMsg"></div>
       </div>
 
       <!-- NÁKUPNÍ FAKTURY: evidence faktur za nakoupené zboží a jejich úhrad -->
@@ -1869,7 +1898,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <option value="karta">💳 Karta</option>
         <option value="qr">📱 QR platba</option>
         <option value="prevod">🏦 Bankovní převod</option>
-        <option value="">Nezaplaceno / neevidovat platbu</option>
+        <option value="">Zaplatí později – poukaz začne platit po zapsání platby</option>
       </select>
       <div style="font-size:0.78rem;color:var(--text-light);margin-top:4px">Podle tohohle vznikne i záznam prodeje a účtenka – peníze se rovnou započítají do tržeb.</div>
     </div>
@@ -1928,6 +1957,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
   <div class="modal" style="max-width:560px;text-align:center">
     <h3>🎁 Poukaz vydán!</h3>
     <div id="poukazDetail" style="margin:16px 0"></div>
+    <div id="poukazPlatbaBox"></div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modalZobrazitPoukaz')">Zavřít</button>
       <button class="btn btn-outline" id="btnUctenkaPoukaz" style="display:none" onclick="tisknoutUctenkuPoukazu()">🧾 Účtenka za poukaz</button>
@@ -2824,6 +2854,131 @@ async function detailObjednavky(id) {
   } catch(e) { alert('Chyba'); }
 }
 
+// ═══ Platby a dobírky (Účetnictví) ═══
+let dataKUhrade = { objednavky: [], poukazy: [] };
+async function nacistPlatbyADobirky() {
+  const msg = document.getElementById('platbyMsg');
+  try {
+    const [volne, kUhrade, dobirky, vyuct] = await Promise.all([
+      adminFetch(API + '/evidence-plateb/volne').then(r => r.json()),
+      adminFetch(API + '/evidence-plateb/k-uhrade').then(r => r.json()),
+      adminFetch(API + '/evidence-plateb/dobirky?nevyuctovane=1').then(r => r.json()),
+      adminFetch(API + '/evidence-plateb/dobirky/vyuctovani').then(r => r.json())
+    ]);
+    dataKUhrade = kUhrade && kUhrade.objednavky ? kUhrade : { objednavky: [], poukazy: [] };
+    vykreslitVolnePlatby(Array.isArray(volne) ? volne : []);
+    vykreslitDobirky(Array.isArray(dobirky) ? dobirky : []);
+    vykreslitVyuctovani(Array.isArray(vyuct) ? vyuct : []);
+  } catch (e) { msg.innerHTML = '<div class="error-msg">Platby nejde načíst (chyba spojení).</div>'; }
+}
+const kcFmt = n => Number(n).toLocaleString('cs-CZ') + ' Kč';
+function moznostiPrirazeni(volno) {
+  const o = dataKUhrade.objednavky.map(x => `<option value="o:${x.id}" data-max="${Math.min(volno, x.zbyva)}">Objednávka ${escH(x.cislo || '#' + x.id)} – ${escH(x.obj_jmeno || '')} – zbývá ${kcFmt(x.zbyva)}</option>`);
+  const p = dataKUhrade.poukazy.filter(x => Number(x.hodnota) <= volno).map(x => `<option value="p:${x.id}" data-max="${Number(x.hodnota)}">Poukaz ${escH(x.kod)} – ${kcFmt(x.hodnota)}${x.kupujici_jmeno ? ' – ' + escH(x.kupujici_jmeno) : ''}</option>`);
+  return '<option value="">— vyberte, k čemu platba patří —</option>' + o.concat(p).join('');
+}
+function vykreslitVolnePlatby(seznam) {
+  const el = document.getElementById('volnePlatbyTab');
+  const sVolnem = seznam.filter(p => p.volno > 0);
+  if (!seznam.length) { el.innerHTML = '<div class="empty">Žádné volné platby</div>'; return; }
+  el.innerHTML = `<table><thead><tr><th>Přijato</th><th>Způsob</th><th>Částka</th><th>Volné</th><th>Poznámka</th><th>Přiřadit</th></tr></thead><tbody>${seznam.map(p => `<tr>
+    <td>${new Date(p.prijato_at).toLocaleDateString('cs-CZ')}</td><td>${escH(ZPUSOBY_PLATBY_POPIS[p.zpusob] || p.zpusob)}</td><td>${kcFmt(p.castka)}</td><td><strong>${kcFmt(p.volno)}</strong></td><td>${escH(p.poznamka || '')}</td>
+    <td>${p.volno > 0 ? `<select id="vpCil${p.id}" onchange="vyplnitCastkuPrirazeni(${p.id})" style="max-width:280px">${moznostiPrirazeni(p.volno)}</select>
+      <input type="number" id="vpCastka${p.id}" min="1" step="0.01" style="width:90px" aria-label="Částka k přiřazení">
+      <button class="btn btn-outline btn-sm" id="vpPriradit${p.id}" onclick="priraditPlatbu(${p.id})">Přiřadit</button>` : 'přiřazeno celé'}</td></tr>`).join('')}</tbody></table>
+    ${sVolnem.length ? '' : '<div class="polozka">Všechny platby jsou přiřazené.</div>'}`;
+}
+function vyplnitCastkuPrirazeni(platbaId) {
+  const sel = document.getElementById('vpCil' + platbaId);
+  const opt = sel.options[sel.selectedIndex];
+  const pole = document.getElementById('vpCastka' + platbaId);
+  pole.value = opt && opt.dataset.max ? opt.dataset.max : '';
+  pole.readOnly = sel.value.startsWith('p:'); // poukaz jen celou hodnotou
+}
+async function priraditPlatbu(platbaId) {
+  const cil = document.getElementById('vpCil' + platbaId).value;
+  const castka = Number(document.getElementById('vpCastka' + platbaId).value);
+  const msg = document.getElementById('platbyMsg');
+  if (!cil) { msg.innerHTML = '<div class="error-msg">Vyberte objednávku nebo poukaz.</div>'; return; }
+  const btn = document.getElementById('vpPriradit' + platbaId);
+  btn.disabled = true;
+  try {
+    const [typ, id] = cil.split(':');
+    const { res, data } = typ === 'o'
+      ? await odeslatOperaci('prirazeni-' + platbaId + '-' + cil, API + '/objednavky/' + id + '/platby', { platba_id: platbaId, castka })
+      : await odeslatOperaci('prirazeni-' + platbaId + '-' + cil, API + '/poukazy/' + id + '/platba', { platba_id: platbaId, castka });
+    if (!res.ok) { msg.innerHTML = `<div class="error-msg">${escH(data.chyba || 'Přiřazení se nepodařilo.')}</div>`; return; }
+    msg.innerHTML = '<div class="success-msg">✅ Platba přiřazena.</div>';
+    nacistPlatbyADobirky();
+  } catch (e) { msg.innerHTML = '<div class="error-msg">Spojení selhalo – klikněte znovu, platba se nepřiřadí dvakrát.</div>'; }
+  finally { btn.disabled = false; }
+}
+async function zapsatVolnouPlatbu() {
+  const msg = document.getElementById('platbyMsg'), btn = document.getElementById('vpBtn');
+  const castka = Number(document.getElementById('vpCastka').value);
+  if (!(castka > 0)) { msg.innerHTML = '<div class="error-msg">Zadejte částku.</div>'; return; }
+  const datum = document.getElementById('vpDatum').value;
+  btn.disabled = true;
+  try {
+    const { res, data } = await odeslatOperaci('volna-platba', API + '/evidence-plateb/volna', {
+      zpusob: document.getElementById('vpZpusob').value, castka,
+      prijato_at: datum ? datum + 'T12:00:00+01:00' : null, poznamka: document.getElementById('vpPoznamka').value.trim() || null });
+    if (!res.ok) { msg.innerHTML = `<div class="error-msg">${escH(data.chyba || 'Platbu se nepodařilo zapsat.')}</div>`; return; }
+    document.getElementById('vpCastka').value = ''; document.getElementById('vpPoznamka').value = '';
+    msg.innerHTML = '<div class="success-msg">✅ Platba zapsaná – teď ji přiřaďte.</div>';
+    nacistPlatbyADobirky();
+  } catch (e) { msg.innerHTML = '<div class="error-msg">Spojení selhalo – klikněte znovu, nezapíše se dvakrát.</div>'; }
+  finally { btn.disabled = false; }
+}
+function vykreslitDobirky(seznam) {
+  const el = document.getElementById('dobirkyTab');
+  if (!seznam.length) { el.innerHTML = '<div class="empty">Žádné dobírky čekající na vyúčtování</div>'; prepocitatVyuctovani(); return; }
+  el.innerHTML = `<table><thead><tr><th></th><th>Objednávka</th><th>Dopravce</th><th>Vybráno od zákazníka</th><th>Částka</th></tr></thead><tbody>${seznam.map(d => `<tr>
+    <td><input type="checkbox" class="dv-vyber" value="${d.id}" data-castka="${Number(d.castka)}" data-dopravce="${escAttr(d.dopravce || '')}" onchange="prepocitatVyuctovani()" aria-label="Vybrat dobírku"></td>
+    <td>${escH(d.objednavka_cislo || '#' + d.objednavka_id)}</td><td>${escH(d.dopravce || '—')}</td><td>${new Date(d.prijato_at).toLocaleDateString('cs-CZ')}</td><td>${kcFmt(d.castka)}</td></tr>`).join('')}</tbody></table>`;
+  prepocitatVyuctovani();
+}
+function prepocitatVyuctovani() {
+  const vybrane = [...document.querySelectorAll('.dv-vyber:checked')];
+  const brutto = vybrane.reduce((s, c) => s + Number(c.dataset.castka), 0);
+  const poplatek = Number(document.getElementById('dvPoplatek').value) || 0;
+  const dopravci = [...new Set(vybrane.map(c => c.dataset.dopravce).filter(Boolean))];
+  if (dopravci.length === 1 && !document.getElementById('dvDopravce').value) document.getElementById('dvDopravce').value = dopravci[0];
+  document.getElementById('dvSouhrn').innerHTML = `Vybráno ${vybrane.length}× = <strong>${kcFmt(brutto)}</strong> − poplatek ${kcFmt(poplatek)} = vyplaceno <strong>${kcFmt(brutto - poplatek)}</strong>`
+    + (dopravci.length > 1 ? ' <span style="color:#b45309">– vyberte dobírky jednoho dopravce</span>' : '');
+}
+async function vyuctovatDobirky() {
+  const msg = document.getElementById('platbyMsg'), btn = document.getElementById('dvBtn');
+  const ids = [...document.querySelectorAll('.dv-vyber:checked')].map(c => Number(c.value));
+  if (!ids.length) { msg.innerHTML = '<div class="error-msg">Vyberte dobírky, které dopravce vyplatil.</div>'; return; }
+  const datum = document.getElementById('dvDatum').value;
+  btn.disabled = true;
+  try {
+    const { res, data } = await odeslatOperaci('vyuctovani-dobirek', API + '/evidence-plateb/dobirky/vyuctovani', {
+      dopravce: document.getElementById('dvDopravce').value.trim(), poplatek: Number(document.getElementById('dvPoplatek').value) || 0,
+      vyplaceno_at: datum ? datum + 'T12:00:00+01:00' : null, dobirky: ids });
+    if (!res.ok) { msg.innerHTML = `<div class="error-msg">${escH(data.chyba || 'Vyúčtování se nepodařilo zapsat.')}</div>`; return; }
+    msg.innerHTML = `<div class="success-msg">✅ Vyúčtováno ${kcFmt(data.brutto)} − ${kcFmt(data.poplatek)} = ${kcFmt(data.netto)}.</div>`;
+    nacistPlatbyADobirky();
+  } catch (e) { msg.innerHTML = '<div class="error-msg">Spojení selhalo – klikněte znovu, nezapíše se dvakrát.</div>'; }
+  finally { btn.disabled = false; }
+}
+function vykreslitVyuctovani(seznam) {
+  document.getElementById('vyuctovaniTab').innerHTML = seznam.length ? `<table><thead><tr><th>Vyplaceno</th><th>Dopravce</th><th>Dobírek</th><th>Brutto</th><th>Poplatek</th><th>Netto</th></tr></thead><tbody>${seznam.map(v => `<tr>
+    <td>${new Date(v.vyplaceno_at).toLocaleDateString('cs-CZ')}</td><td>${escH(v.dopravce)}</td><td>${v.pocet}</td><td>${kcFmt(v.brutto)}</td><td>${kcFmt(v.poplatek)}</td><td><strong>${kcFmt(v.netto)}</strong></td></tr>`).join('')}</tbody></table>` : '<div class="empty">Zatím žádné vyúčtování</div>';
+}
+async function zapsatPlatbuPoukazu(id) {
+  const btn = document.getElementById('ppBtn'), msg = document.getElementById('ppMsg');
+  btn.disabled = true;
+  try {
+    const { res, data } = await odeslatOperaci('poukaz-platba-' + id, API + '/poukazy/' + id + '/platba', { zpusob: document.getElementById('ppZpusob').value });
+    if (!res.ok) { msg.innerHTML = `<div class="error-msg">${escH(data.chyba || 'Platbu se nepodařilo zapsat.')}</div>`; return; }
+    loadPoukazy();
+    zobrazitPoukazDetail(id, data);
+  } catch (e) { msg.innerHTML = '<div class="error-msg">Spojení selhalo – klikněte znovu, platba se nezapíše dvakrát.</div>'; }
+  finally { btn.disabled = false; }
+}
+
 // Kontrola plateb: doklady proti evidenci plateb a kreditu (jen čtení).
 // Kontrolují se doklady od začátku evidence; starší nic nedopočítávají.
 async function kontrolaPlateb() {
@@ -2831,9 +2986,11 @@ async function kontrolaPlateb() {
     const res = await adminFetch(API + '/evidence-plateb/kontrola');
     const d = await res.json();
     if (!res.ok) { alert(d.chyba || 'Kontrolu nejde načíst.'); return; }
-    if (!d.od) { alert('Evidence plateb zatím nemá žádný záznam.'); return; }
-    const z = d.zkontrolovano;
-    const souhrn = `Od ${new Date(d.od).toLocaleString('cs-CZ')} zkontrolováno: ${z.prodeje} účtenek, ${z.vratky} vratek, ${z.poukazy} poukazů.`;
+    const m = d.mimo_rozsah, z = d.v_rozsahu;
+    const mimo = `Mimo rozsah kontroly (starší doklady bez evidence – NEJSOU tím spárované, jen se nekontrolují): ${m.prodeje} účtenek, ${m.vratky} vratek, ${m.poukazy} poukazů.`
+      + (d.ceka_na_platbu ? `\nPoukazy čekající na platbu: ${d.ceka_na_platbu}.` : '');
+    if (!d.od) { alert('Evidence plateb zatím nemá žádný záznam.\n' + mimo); return; }
+    const souhrn = `Od ${new Date(d.od).toLocaleString('cs-CZ')} zkontrolováno: ${z.prodeje} účtenek, ${z.vratky} vratek, ${z.poukazy} poukazů, ${z.objednavky} osobních odběrů.\n${mimo}`;
     if (!d.rozdily.length) { alert('✅ ' + souhrn + '\nDoklady a evidence plateb sedí.'); return; }
     alert('⚠️ ' + souhrn + '\n\nRozdíly:\n' + d.rozdily.slice(0, 30).map(r => `• ${r.doklad} – ${r.co}: doklad ${r.doklad_castka} Kč, evidence ${r.evidence} Kč`).join('\n')
       + (d.rozdily.length > 30 ? `\n… a dalších ${d.rozdily.length - 30}` : ''));
@@ -6019,6 +6176,8 @@ async function zahoditNedokoncenyProdej() {
       tiskUctenkyData(data.prodej, data.prodej.id);
       loadProdejna();
       nacistSkladProProdejna();
+    } else if (data.stav === 'smazany') {
+      msg.innerHTML = `<div class="error-msg">Prodej se uložil (účtenka #${escH(data.prodej_id)}), ale později byl smazán – nezadávejte ho znovu bez kontroly.</div>`;
     } else {
       msg.innerHTML = '<div class="success-msg">Nedokončený prodej se neuložil a byl zahozen.</div>';
     }
@@ -6509,7 +6668,7 @@ async function loadPoukazy() {
     if (!zobrazit.length) {
       document.getElementById('poukazyTable').innerHTML = seznam.length ? '<div class="empty">Žádné poukazy v tomto filtru</div>' : '<div class="empty">Zatím žádné vydané poukazy</div>';
     } else {
-      const stavPopisek = {aktivni:'<span class="badge badge-ok">✅ Aktivní</span>', pouzity:'<span class="badge badge-zruseno">✔️ Vyčerpaný</span>', zruseny:'<span class="badge badge-zruseno">❌ Zrušený</span>'};
+      const stavPopisek = {ceka_na_platbu:'<span class="badge badge-nova">⏳ Čeká na platbu</span>', aktivni:'<span class="badge badge-ok">✅ Aktivní</span>', pouzity:'<span class="badge badge-zruseno">✔️ Vyčerpaný</span>', zruseny:'<span class="badge badge-zruseno">❌ Zrušený</span>'};
       document.getElementById('poukazyTable').innerHTML = `
         <table><thead><tr><th>Kód</th><th>Druh</th><th>Hodnota</th><th>Zůstatek</th><th>Platnost do</th><th>Kde</th><th>Kupující</th><th>Stav</th><th>Akce</th></tr></thead>
         <tbody>${zobrazit.map(p=>`<tr>
@@ -7264,6 +7423,13 @@ async function zobrazitPoukazDetail(id, poukazData=null) {
   btnUctenka.style.display = poukaz.vydano_prodej_id ? 'inline-block' : 'none';
 
   document.getElementById('poukazDetail').innerHTML = htmlKartyPoukazu(poukaz, 'poukazBarcode');
+  document.getElementById('poukazPlatbaBox').innerHTML = poukaz.stav === 'ceka_na_platbu' ? `<div class="info-box">⏳ <strong>Poukaz čeká na platbu ${Number(poukaz.hodnota).toLocaleString('cs-CZ')} Kč</strong> – do zapsání platby ho nejde použít a zákazník kód e-mailem nedostane.
+      <div class="pos-dvojice" style="align-items:end;margin-top:8px">
+        <div class="form-group" style="margin:0"><label for="ppZpusob">Zákazník zaplatil</label><select id="ppZpusob"><option value="prevod">🏦 Převodem</option><option value="hotovost">💵 Hotově</option><option value="karta">💳 Kartou</option><option value="qr">📱 QR</option></select></div>
+        <button class="btn btn-primary btn-sm" id="ppBtn" onclick="zapsatPlatbuPoukazu(${poukaz.id})">💰 Zapsat platbu a aktivovat</button>
+      </div>
+      <div style="font-size:0.8rem;margin-top:6px">Převod, který už je zapsaný jako volná platba, přiřaďte v Účetnictví → Platby a dobírky (nezapočítá se dvakrát).</div>
+      <div id="ppMsg"></div></div>` : '';
   setTimeout(() => {
     try {
       JsBarcode('#poukazBarcode', poukaz.ean, {format:'EAN13', width:1.6, height:42, fontSize:12, margin:0, background:'transparent'});

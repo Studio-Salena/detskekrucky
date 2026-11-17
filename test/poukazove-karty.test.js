@@ -118,7 +118,7 @@ test('API proti PostgreSQL: celý životní cyklus plastové karty', { skip: pre
       assert.match(r.data.prodej.polozky[0].nazev, new RegExp(`Dárková karta DK-${RR}-00001`));
       const poukazKod = r.data.kod;
       // podruhé na plnou kartu nejde
-      r = await zavolat('POST', '/poukazy', { karta_ean: k1.ean, hodnota: 500 });
+      r = await zavolat('POST', '/poukazy', { karta_ean: k1.ean, hodnota: 500, platba: 'hotovost' });
       assert.equal(r.status, 400);
       assert.match(r.data.chyba, /už poukaz je/);
 
@@ -144,7 +144,7 @@ test('API proti PostgreSQL: celý životní cyklus plastové karty', { skip: pre
       assert.equal(r.data.stav, 'vycerpana');
       assert.equal(r.data.pouziti.length, 2);
       assert.equal((await zavolat('GET', '/poukazy/overit/' + k1.ean)).status, 400);
-      r = await zavolat('POST', '/poukazy', { karta_ean: k1.ean, hodnota: 500 });
+      r = await zavolat('POST', '/poukazy', { karta_ean: k1.ean, hodnota: 500, platba: 'hotovost' });
       assert.equal(r.status, 400, 'na vyčerpanou neuvolněnou kartu nic nenahraje');
 
       // vrácení zboží: připsání oživí poukaz i kartu
