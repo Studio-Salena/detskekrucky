@@ -87,6 +87,7 @@ test('PostgreSQL: výměna s doplatkem, sklad, tržby; převod vratky #6 + účt
     `);
     const router = nacistRouterSMocky('../routes/prodejna.js', { '../db/pool': pool });
     await vsePripraveno();
+    await require('../lib/evidencePlateb').migrovat(pool); // evidence plateb (routes/evidencePlateb.js)
     const zavolat = async (metoda, cesta, body) => { const res = vytvoritRes(); await najitHandler(router, metoda, cesta)({ body, params: {} }, res); return res; };
     const trzby = async () => {
       const p = (await pool.query('SELECT COALESCE(SUM(celkem),0)::float AS s, COALESCE(SUM(celkem) FILTER (WHERE platba = $1),0)::float AS h FROM prodejna_prodeje', ['hotovost'])).rows[0];

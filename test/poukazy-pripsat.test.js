@@ -31,6 +31,7 @@ test('API proti PostgreSQL: připsání vrátí zůstatek, oživí vyčerpaný p
     require.cache[poolPath] = { id: poolPath, filename: poolPath, loaded: true, exports: pool };
     const router = require(routePath);
     await require('../lib/startServeru').vsePripraveno();
+    await require('../lib/evidencePlateb').migrovat(pool); // evidence plateb (routes/evidencePlateb.js)
     await pool.query(`INSERT INTO darkove_poukazy (kod, ean, hodnota, zustatek, platnost_do, stav, zakoupeno_kde)
       VALUES ('DK-AAAA-BBBB', '2100000000001', 1000, 0, '2099-12-31', 'pouzity', 'prodejna'),
              ('DK-CCCC-DDDD', '2100000000002', 500, 200, '2099-12-31', 'zruseny', 'prodejna')`);

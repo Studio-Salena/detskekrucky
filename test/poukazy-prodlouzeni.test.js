@@ -58,6 +58,7 @@ test('PostgreSQL: nabití karty zapíše platnost do účtenky, prodloužení s 
       polozky JSONB NOT NULL, celkem NUMERIC NOT NULL, mezisoucet NUMERIC, sleva NUMERIC DEFAULT 0, vytvoreno TIMESTAMPTZ DEFAULT NOW())`);
     const router = nacistRouterSMocky('../routes/poukazy.js', { '../db/pool': pool });
     await vsePripraveno();
+    await require('../lib/evidencePlateb').migrovat(pool); // evidence plateb (routes/evidencePlateb.js)
     await pool.query("INSERT INTO poukazove_karty (cislo, ean) VALUES ('DK-26-00001', '2300000000017')");
 
     // nabití karty 1 000 Kč kartou

@@ -63,6 +63,7 @@ test('API proti PostgreSQL: celý životní cyklus plastové karty', { skip: pre
     require.cache[poolPath] = { id: poolPath, filename: poolPath, loaded: true, exports: pool };
     const prodejna = require('../routes/prodejna.js');
     await require('../lib/startServeru').vsePripraveno();
+    await require('../lib/evidencePlateb').migrovat(pool); // evidence plateb (routes/evidencePlateb.js)
     const poukazy = require('../routes/poukazy.js');
     await require('../lib/startServeru').vsePripraveno();
     // migrace musí jít spustit znovu (restart serveru)

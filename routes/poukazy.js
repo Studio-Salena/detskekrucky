@@ -7,6 +7,7 @@ const { jeZablokovana: jeZadostZablokovana, zaznamenatZadost } = require('../mid
 const { odeslat_upozorneni_zadost_poukaz, odeslat_poukaz_zakaznikovi } = require('./emaily');
 const { poukazPoPlatnosti, datumPlatnosti, chybaProdlouzeni, platnostNovehoPoukazu } = require('../lib/poukazPlatnost');
 const { najitPoukaz, normalizovatCisloKarty } = require('../lib/poukazKarty');
+const evidence = require('../lib/evidencePlateb');
 
 const POVOLENE_HODNOTY = [500, 1000, 1500];
 // Na plastovou kartu jde nahrát libovolná částka v celých korunách
@@ -218,6 +219,9 @@ router.post('/', vyzadovatAdmina, async (req, res) => {
     const platnostDo = platnostNovehoPoukazu();
 
     await client.query('BEGIN');
+    // Stejný klíč (dvojklik, opakování po výpadku) = jeden poukaz
+    const { vysledek, opakovane } = await evidence.jednou(client, 'poukaz-vydani', req.body.klic,
+      { hodnota: hodnotaCislo, druh, platba: platba || null, karta: kartaEan, zakoupeno_kde: zakoupeno_kde || null, kupujici_email: kupujici_email || null }, async () => {
 
     // Plastová karta: musí existovat, být prázdná a nezablokovaná. Zámek řádku
     // karty brání tomu, aby se na ni souběžně nahrály dva poukazy.
@@ -228,7 +232,7 @@ router.post('/', vyzadovatAdmina, async (req, res) => {
         : karta.zablokovana ? `Karta ${karta.cislo} je zablokovaná.`
         : karta.aktualni_poukaz_id ? `Na kartě ${karta.cislo} už poukaz je. Vyčerpanou kartu nejdřív uvolněte.`
         : null;
-      if (chybaKarty) { await client.query('ROLLBACK'); return res.status(400).json({ chyba: chybaKarty }); }
+      if (chybaKarty) throw new evidence.ChybaEvidence(400, chybaKarty);
     }
 
     let poukaz = (await client.query(
@@ -261,17 +265,35 @@ router.post('/', vyzadovatAdmina, async (req, res) => {
       )).rows[0];
     }
 
+    // Evidence: peníze za poukaz (s částí určenou k čerpání) a kredit s původem
+    let platbaZaPoukaz = null;
+    if (prodej) {
+      const naDalku = platba === 'prevod';
+      platbaZaPoukaz = await evidence.zapsatPlatbu(client, { klic: `poukaz:${poukaz.id}:prijem`, typ: 'prijem', castka: hodnotaCislo, zpusob: platba,
+        okolnosti: naDalku ? 'eshop' : 'prodejna', kontaktni: !naDalku, prijato_at: prodej.datum, zdroj_typ: 'prodej', zdroj_id: prodej.id,
+        urceno_k_cerpani: hodnotaCislo });
+    }
+    await evidence.zapsatKredit(client, { klic: `poukaz:${poukaz.id}:nabiti`, poukaz_id: poukaz.id, typ: 'nabiti', castka: hodnotaCislo,
+      puvod: evidence.puvodPoukazu(poukaz), kontaktni: platbaZaPoukaz ? platbaZaPoukaz.kontaktni : null,
+      platba_id: platbaZaPoukaz ? platbaZaPoukaz.id : null, zdroj_typ: 'poukaz', zdroj_id: poukaz.id,
+      poznamka: druh !== 'dar' && !platbaZaPoukaz ? 'Prodaný poukaz bez zapsané platby' : null });
+
+    return { ...poukaz, prodej, karta: karta ? { id: karta.id, cislo: karta.cislo, ean: karta.ean } : null };
+    });
+
     await client.query('COMMIT');
-    res.json({ ...poukaz, prodej, karta: karta ? { id: karta.id, cislo: karta.cislo, ean: karta.ean } : null });
+    res.json(opakovane ? { ...vysledek, opakovane: true } : vysledek);
+    const poukaz = vysledek;
 
     // Kód pošleme zákazníkovi jen když máme e-mail (přímý prodej na prodejně
     // bez e-mailu ho prostě nedostane e-mailem - to je v pořádku, dostane ho
     // fyzicky/ústně). Až po odpovědi, ať prodleva/chyba neblokuje vydání.
-    if (poukaz.kupujici_email) {
+    if (!opakovane && poukaz.kupujici_email) {
       odeslat_poukaz_zakaznikovi(poukaz).catch(e => console.error('Email s kodem poukazu se nepodarilo odeslat:', e.message));
     }
   } catch (err) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
+    if (err instanceof evidence.ChybaEvidence) return res.status(err.status).json({ chyba: err.chyba });
     res.status(500).json({ chyba: err.message });
   } finally {
     client.release();
@@ -308,7 +330,9 @@ router.post('/pouzit', vyzadovatAdmina, async (req, res) => {
     const novyZustatek = Number(poukaz.zustatek) - Number(castka);
     const novyStav = novyZustatek <= 0 ? 'pouzity' : 'aktivni';
     await client.query('UPDATE darkove_poukazy SET zustatek=$1, stav=$2 WHERE id=$3', [novyZustatek, novyStav, poukaz.id]);
-    await client.query('INSERT INTO poukazy_pouziti (poukaz_id, castka, prodej_id) VALUES ($1,$2,$3)', [poukaz.id, castka, prodej_id || null]);
+    const pouziti = (await client.query('INSERT INTO poukazy_pouziti (poukaz_id, castka, prodej_id) VALUES ($1,$2,$3) RETURNING id', [poukaz.id, castka, prodej_id || null])).rows[0];
+    await evidence.zapsatKredit(client, { klic: `pouziti:${pouziti.id}:cerpani`, poukaz_id: poukaz.id, typ: 'cerpani', castka,
+      puvod: evidence.puvodPoukazu(poukaz), kontaktni: true, zdroj_typ: 'prodej', zdroj_id: prodej_id || null });
 
     await client.query('COMMIT');
     res.json({ ok: true, zustatek: novyZustatek, karta: nalez.karta ? nalez.karta.cislo : null });
@@ -326,31 +350,43 @@ router.post('/pouzit', vyzadovatAdmina, async (req, res) => {
 router.post('/:id/pripsat', vyzadovatAdmina, async (req, res) => {
   const castka = Number(req.body && req.body.castka);
   if (!Number.isInteger(castka) || castka <= 0) return res.status(400).json({ chyba: 'Zadejte kladnou částku v celých korunách.' });
+  const vratkaId = req.body && req.body.vratka_id && Number.isInteger(Number(req.body.vratka_id)) ? Number(req.body.vratka_id) : null;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const nalezeny = await client.query('SELECT * FROM darkove_poukazy WHERE id=$1 FOR UPDATE', [req.params.id]);
-    if (!nalezeny.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ chyba: 'Poukaz nenalezen.' }); }
-    const poukaz = nalezeny.rows[0];
-    if (poukaz.stav === 'zruseny') { await client.query('ROLLBACK'); return res.status(400).json({ chyba: 'Poukaz je zrušený.' }); }
-    const novyZustatek = Number(poukaz.zustatek) + castka;
-    if (novyZustatek > Number(poukaz.hodnota)) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ chyba: `Připsat jde nejvýš ${Number(poukaz.hodnota) - Number(poukaz.zustatek)} Kč (zůstatek nesmí přesáhnout hodnotu poukazu).` });
-    }
-    const upraveny = (await client.query(
-      "UPDATE darkove_poukazy SET zustatek=$1, stav='aktivni' WHERE id=$2 RETURNING *", [novyZustatek, poukaz.id]
-    )).rows[0];
-    await client.query('INSERT INTO poukazy_pouziti (poukaz_id, castka) VALUES ($1,$2)', [poukaz.id, -castka]);
+    // opakované připsání se stejným klíčem nic nezdvojí
+    const { vysledek, opakovane } = await evidence.jednou(client, 'poukaz-pripsani', req.body && req.body.klic, { id: req.params.id, castka, vratkaId },
+      async () => pripsat(client, req.params.id, castka, vratkaId));
     await client.query('COMMIT');
-    res.json(upraveny);
+    res.json(opakovane ? { ...vysledek, opakovane: true } : vysledek);
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
+    if (err instanceof evidence.ChybaEvidence) return res.status(err.status).json({ chyba: err.chyba });
     res.status(500).json({ chyba: err.message });
   } finally {
     client.release();
   }
 });
+
+async function pripsat(client, id, castka, vratkaId) {
+    const nalezeny = await client.query('SELECT * FROM darkove_poukazy WHERE id=$1 FOR UPDATE', [id]);
+    if (!nalezeny.rows.length) throw new evidence.ChybaEvidence(404, 'Poukaz nenalezen.');
+    const poukaz = nalezeny.rows[0];
+    if (poukaz.stav === 'zruseny') throw new evidence.ChybaEvidence(400, 'Poukaz je zrušený.');
+    const novyZustatek = Number(poukaz.zustatek) + castka;
+    if (novyZustatek > Number(poukaz.hodnota)) {
+      throw new evidence.ChybaEvidence(400, `Připsat jde nejvýš ${Number(poukaz.hodnota) - Number(poukaz.zustatek)} Kč (zůstatek nesmí přesáhnout hodnotu poukazu).`);
+    }
+    const upraveny = (await client.query(
+      "UPDATE darkove_poukazy SET zustatek=$1, stav='aktivni' WHERE id=$2 RETURNING *", [novyZustatek, poukaz.id]
+    )).rows[0];
+    const pouziti = (await client.query('INSERT INTO poukazy_pouziti (poukaz_id, castka) VALUES ($1,$2) RETURNING id', [poukaz.id, -castka])).rows[0];
+    // Kredit vrácený na poukaz: původ 'vraceny', pravidlo EET podle původu poukazu
+    await evidence.zapsatKredit(client, { klic: `pouziti:${pouziti.id}:pripsani`, poukaz_id: poukaz.id, typ: 'pripsani', castka,
+      puvod: 'vraceny', puvod_zakladni: evidence.puvodPoukazu(poukaz), kontaktni: true,
+      zdroj_typ: vratkaId ? 'vratka' : 'poukaz', zdroj_id: vratkaId || poukaz.id });
+    return upraveny;
+}
 
 // PATCH /api/poukazy/:id/dar – dodatečně označit už vydaný poukaz jako dar. EAN zůstává
 // (poukaz už může být vytištěný). Pokud k němu vznikl záznam prodeje, smaže se, ať
@@ -392,9 +428,11 @@ router.patch('/:id/dar', vyzadovatAdmina, async (req, res) => {
     const nalezeny = await client.query('SELECT * FROM darkove_poukazy WHERE id=$1 FOR UPDATE', [req.params.id]);
     if (!nalezeny.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ chyba: 'Poukaz nenalezen.' }); }
     const prodejId = nalezeny.rows[0].vydano_prodej_id;
+    const byl = nalezeny.rows[0];
     const poukaz = (await client.query(
       "UPDATE darkove_poukazy SET druh='dar', vydano_prodej_id=NULL WHERE id=$1 RETURNING *", [req.params.id]
     )).rows[0];
+    if (byl.druh !== 'dar') await opravitEvidenciNaDar(client, byl, prodejId);
     if (prodejId) await client.query('DELETE FROM prodejna_prodeje WHERE id=$1', [prodejId]);
     await client.query('COMMIT');
     res.json({ ...poukaz, smazany_prodej_id: prodejId || null });
@@ -405,6 +443,19 @@ router.patch('/:id/dar', vyzadovatAdmina, async (req, res) => {
     client.release();
   }
 });
+
+// Poukaz dodatečně označený jako dar: původní příjem i zaplacený kredit dostanou
+// storno (zůstanou v evidenci), kredit se znovu zapíše jako darovaný.
+async function opravitEvidenciNaDar(client, poukaz, prodejId) {
+  const klic = `dar:${poukaz.id}`;
+  const poznamka = 'Poukaz dodatečně označený jako dar';
+  if (prodejId) await evidence.stornovatPrijmy(client, { zdroj_typ: 'prodej', zdroj_id: prodejId, klicPrefix: klic, poznamka });
+  const storna = await evidence.stornovatKredit(client, { zdroj_typ: 'poukaz', zdroj_id: poukaz.id, typy: ['nabiti'], klicPrefix: klic, poznamka });
+  for (const s of storna) {
+    await evidence.zapsatKredit(client, { klic: `${klic}:nabiti:${s.opravuje_id}`, poukaz_id: poukaz.id, typ: 'nabiti', castka: s.castka,
+      puvod: 'darovany', kontaktni: null, zdroj_typ: 'poukaz', zdroj_id: poukaz.id, poznamka });
+  }
+}
 
 // DELETE /api/poukazy/:id – zrušit poukaz (zůstává v evidenci pro účetnictví, jen se znepřístupní)
 router.delete('/:id', vyzadovatAdmina, async (req, res) => {
@@ -419,6 +470,11 @@ router.delete('/:id', vyzadovatAdmina, async (req, res) => {
       // peníze (vydano_prodej_id), smažeme i ten záznam prodeje – jinak by v Prodejně/
       // tržbách zůstala "duchová" platba bez poukazu, na který se váže.
       await client.query('BEGIN');
+      // Doklady se mažou jako dřív (součty beze změny), evidence si nechá původní
+      // příjem a nabití a dostane k nim storno
+      const zrus = { klicPrefix: `zruseni-poukazu:${req.params.id}`, poznamka: 'Zrušení nepoužitého poukazu' };
+      if (poukaz.rows[0].vydano_prodej_id) await evidence.stornovatPrijmy(client, { zdroj_typ: 'prodej', zdroj_id: poukaz.rows[0].vydano_prodej_id, ...zrus });
+      await evidence.stornovatKredit(client, { zdroj_typ: 'poukaz', zdroj_id: Number(req.params.id), typy: ['nabiti'], ...zrus });
       await client.query('DELETE FROM darkove_poukazy WHERE id=$1', [req.params.id]);
       if (poukaz.rows[0].vydano_prodej_id) {
         await client.query('DELETE FROM prodejna_prodeje WHERE id=$1', [poukaz.rows[0].vydano_prodej_id]);

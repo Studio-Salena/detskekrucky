@@ -240,6 +240,7 @@ test('storno (PostgreSQL): zrušení vystaví opravný doklad ve stejné transak
   const db = await pripravitSchema();
   try {
     await migrovatFaktury(db.pool);
+    await require('../lib/evidencePlateb').migrovat(db.pool); // evidence plateb (routes/evidencePlateb.js)
     await db.pool.query(`
       ALTER TABLE darkove_poukazy ADD COLUMN zustatek NUMERIC, ADD COLUMN stav TEXT;
       CREATE TABLE sklad (produkt_id INTEGER, velikost INTEGER, pocet_kusu INTEGER);

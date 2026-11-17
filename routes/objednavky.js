@@ -4,6 +4,7 @@ const { migrovatFaktury, vystavitFakturu, vystavitStorno, overitUlozenou, HISTOR
 const { poukazPoPlatnosti } = require('../lib/poukazPlatnost');
 const { najitPoukaz } = require('../lib/poukazKarty');
 const promo = require('../lib/promo');
+const evidence = require('../lib/evidencePlateb');
 
 // Stavy, u kterých se zákazníkovi posílá informační e-mail o změně stavu
 // (viz STAV_OBJEDNAVKY_EMAIL v routes/emaily.js).
@@ -390,7 +391,7 @@ router.post('/', async (req, res) => {
     // Uplatnit dárkový poukaz (pokud je zadaný) - stejná transakce jako sklad,
     // ať se poukaz odečte, jen když se objednávka opravdu založí (a naopak).
     // FOR UPDATE zamkne řádek poukazu, aby ho nešlo dvakrát souběžně přečerpat.
-    let poukaz_id = null, sleva = 0, poukazZustatek = 0, poukazZbyva = null;
+    let poukaz_id = null, sleva = 0, poukazZustatek = 0, poukazZbyva = null, poukazDruh = null;
     if (poukaz_kod) {
       // Kód poukazu, jeho EAN nebo EAN plastové karty (lib/poukazKarty.js)
       const nalez = await najitPoukaz(client, poukaz_kod, { zamknout: true });
@@ -408,6 +409,7 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ chyba: 'Platnost poukazu vypršela.' });
       }
       poukaz_id = poukaz.id;
+      poukazDruh = poukaz.druh || null;
       poukazZustatek = Number(poukaz.zustatek);
       poukazZbyva = { platnost_do: poukaz.platnost_do };
     }
@@ -457,6 +459,10 @@ router.post('/', async (req, res) => {
         'INSERT INTO poukazy_pouziti (poukaz_id, castka, objednavka_id) VALUES ($1,$2,$3)',
         [poukaz_id, sleva, objednavka_id]
       );
+      if (sleva > 0) {
+        await evidence.zapsatKredit(client, { klic: `objednavka:${objednavka_id}:cerpani`, poukaz_id, typ: 'cerpani', castka: sleva,
+          puvod: evidence.puvodPoukazu({ druh: poukazDruh }), kontaktni: false, zdroj_typ: 'objednavka', zdroj_id: objednavka_id });
+      }
     }
 
     // Vlozit polozky (agregované - jeden řádek na SKU) a odecist ze skladu
@@ -953,6 +959,150 @@ router.post('/:id/storno-email', vyzadovatAdmina, async (req, res) => {
 });
 
 // Stav objednávky -> sloupec s okamžikem, kdy nastal (pevný seznam, žádný vstup od uživatele)
+// ═══════════════════════════════
+// PLATBY OBJEDNÁVKY (lib/evidencePlateb.js)
+// ═══════════════════════════════
+
+async function vTransakciEvidence(res, fn) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const vysledek = await fn(client);
+    await client.query('COMMIT');
+    res.json(vysledek);
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (err instanceof evidence.ChybaEvidence) return res.status(err.status).json({ chyba: err.chyba, ...err.data });
+    res.status(500).json({ chyba: err.message });
+  } finally {
+    client.release();
+  }
+}
+
+async function prehledPlatebObjednavky(db, id) {
+  const o = (await db.query('SELECT id, cislo, stav, doprava, platba, celkem, dopravce FROM objednavky WHERE id = $1', [id])).rows[0];
+  if (!o) return null;
+  const platby = (await db.query("SELECT * FROM platby WHERE zdroj_typ = 'objednavka' AND zdroj_id = $1 ORDER BY id", [id])).rows;
+  const prirazeni = (await db.query('SELECT pr.*, p.zpusob, p.prijato_at FROM platby_prirazeni pr JOIN platby p ON p.id = pr.platba_id WHERE pr.objednavka_id = $1 ORDER BY pr.id', [id])).rows;
+  const dobirka = (await db.query('SELECT * FROM dobirky WHERE objednavka_id = $1', [id])).rows[0] || null;
+  const prijato = await evidence.prijatoNaObjednavku(db, id);
+  return { objednavka: o, platby, prirazeni, dobirka, prijato, zbyva: Math.max(0, evidence.kc(Number(o.celkem) - prijato)) };
+}
+
+// Peníze přijaté přímo na objednávku (bez přiřazených volných plateb)
+async function vlastniPrijato(db, id) {
+  const r = (await db.query(`SELECT COALESCE(SUM(CASE typ WHEN 'prijem' THEN castka WHEN 'storno_vraceni' THEN castka ELSE -castka END), 0) AS s
+    FROM platby WHERE zdroj_typ = 'objednavka' AND zdroj_id = $1`, [id])).rows[0];
+  return evidence.kc(r.s);
+}
+
+// GET /api/objednavky/:id/platby
+router.get('/:id/platby', vyzadovatAdmina, async (req, res) => {
+  try {
+    const p = await prehledPlatebObjednavky(pool, Number(req.params.id));
+    if (!p) return res.status(404).json({ chyba: 'Objednávka nenalezena.' });
+    res.json(p);
+  } catch (err) {
+    res.status(500).json({ chyba: err.message });
+  }
+});
+
+// POST /api/objednavky/:id/platby { klic, zpusob, castka?, hotovost_prijato? } – přijetí platby
+// (osobní odběr na prodejně: hotově / kartou / QR; objednávka převodem: převod),
+// nebo { klic, platba_id, castka? } – přiřazení už zapsané volné platby (bez dokladu).
+// Nevzniká prodej v pokladně a sklad se neodečítá (stalo se při objednání).
+// Po úplném zaplacení se objednávka označí jako zaplacená.
+router.post('/:id/platby', vyzadovatAdmina, (req, res) => vTransakciEvidence(res, async client => {
+  const id = Number(req.params.id);
+  const b = req.body || {};
+  if (!b.klic) throw new evidence.ChybaEvidence(400, 'Chybí identifikátor operace – obnovte stránku administrace.');
+  const data = { id, zpusob: b.zpusob || null, castka: b.castka != null && b.castka !== '' ? evidence.kc(b.castka) : null,
+    platba_id: b.platba_id ? Number(b.platba_id) : null, hotovost_prijato: b.hotovost_prijato != null ? Number(b.hotovost_prijato) : null };
+  const { vysledek, opakovane } = await evidence.jednou(client, 'objednavka-platba', b.klic, data, async () => {
+    const o = (await client.query('SELECT * FROM objednavky WHERE id = $1 FOR UPDATE', [id])).rows[0];
+    if (!o) throw new evidence.ChybaEvidence(404, 'Objednávka nenalezena.');
+    if (o.stav === 'zrusena') throw new evidence.ChybaEvidence(409, 'Objednávka je zrušená.');
+    if (o.platba === 'dobirka') throw new evidence.ChybaEvidence(400, 'U dobírky se zapisuje úhrada dopravci (Dobírka vybrána).');
+    const zbyva = evidence.kc(Number(o.celkem) - await evidence.prijatoNaObjednavku(client, id));
+    if (zbyva <= 0) throw new evidence.ChybaEvidence(409, 'Objednávka už je zaplacená.');
+    const castka = data.castka != null ? data.castka : zbyva;
+    if (!(castka > 0)) throw new evidence.ChybaEvidence(400, 'Neplatná částka.');
+    if (castka > zbyva) throw new evidence.ChybaEvidence(400, `Částka je vyšší, než zbývá uhradit (${zbyva} Kč).`);
+    let zapis;
+    if (data.platba_id) {
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['volna-platba:' + data.platba_id]);
+      const { platba, volno } = await evidence.volnaCastPlatby(client, data.platba_id);
+      if (!platba || platba.zdroj_typ !== 'volna' || platba.typ !== 'prijem') throw new evidence.ChybaEvidence(400, 'Přiřadit jde jen volnou platbu (bez dokladu).');
+      if (castka > volno) throw new evidence.ChybaEvidence(400, `Z platby zbývá k přiřazení jen ${volno} Kč.`);
+      zapis = (await client.query('INSERT INTO platby_prirazeni (klic, platba_id, objednavka_id, castka) VALUES ($1,$2,$3,$4) RETURNING *',
+        ['prirazeni:' + b.klic, platba.id, id, castka])).rows[0];
+    } else {
+      const osobne = o.doprava === 'osobni_odber' && o.platba === 'na_prodejne';
+      const povolene = osobne ? ['hotovost', 'karta', 'qr'] : ['prevod'];
+      if (!povolene.includes(data.zpusob)) throw new evidence.ChybaEvidence(400, `U této objednávky jde zapsat platbu: ${povolene.join(', ')}.`);
+      if (data.zpusob === 'hotovost' && data.hotovost_prijato != null && data.hotovost_prijato > 0 && data.hotovost_prijato < castka) {
+        throw new evidence.ChybaEvidence(400, 'Přijatá hotovost je menší než částka.');
+      }
+      zapis = await evidence.zapsatPlatbu(client, { klic: 'objednavka-platba:' + b.klic, typ: 'prijem', castka, zpusob: data.zpusob,
+        okolnosti: osobne ? 'osobni_odber' : 'eshop', kontaktni: osobne, zdroj_typ: 'objednavka', zdroj_id: id,
+        poznamka: data.zpusob === 'hotovost' && data.hotovost_prijato > 0 ? `Přijato ${data.hotovost_prijato} Kč, vráceno ${evidence.kc(data.hotovost_prijato - castka)} Kč` : null });
+    }
+    // Úplně zaplacená objednávka → stav zaplacená (jen z nová / vyřizuje se)
+    if (castka >= zbyva && ['nova', 'vyrizuje'].includes(o.stav)) {
+      await client.query("UPDATE objednavky SET stav = 'zaplacena', zaplaceno_at = COALESCE(zaplaceno_at, NOW()) WHERE id = $1", [id]);
+    }
+    return { zapis, ...(await prehledPlatebObjednavky(client, id)) };
+  });
+  return opakovane ? { ...vysledek, opakovane: true } : vysledek;
+}));
+
+// POST /api/objednavky/:id/platby/vraceni { klic, zpusob, castka, duvod? } – vrácení přijatých peněz
+router.post('/:id/platby/vraceni', vyzadovatAdmina, (req, res) => vTransakciEvidence(res, async client => {
+  const id = Number(req.params.id);
+  const b = req.body || {};
+  if (!b.klic) throw new evidence.ChybaEvidence(400, 'Chybí identifikátor operace – obnovte stránku administrace.');
+  const castka = evidence.kc(b.castka);
+  const { vysledek, opakovane } = await evidence.jednou(client, 'objednavka-vraceni', b.klic, { id, zpusob: b.zpusob || null, castka }, async () => {
+    const o = (await client.query('SELECT * FROM objednavky WHERE id = $1 FOR UPDATE', [id])).rows[0];
+    if (!o) throw new evidence.ChybaEvidence(404, 'Objednávka nenalezena.');
+    if (!['hotovost', 'karta', 'qr', 'prevod'].includes(b.zpusob)) throw new evidence.ChybaEvidence(400, 'Vyberte, jak se peníze vracejí.');
+    const vlastni = await vlastniPrijato(client, id);
+    if (!(castka > 0) || castka > vlastni) throw new evidence.ChybaEvidence(400, `Vrátit jde nejvýš ${vlastni} Kč přijatých na této objednávce.`);
+    const puvodni = (await client.query("SELECT id FROM platby WHERE zdroj_typ = 'objednavka' AND zdroj_id = $1 AND typ = 'prijem' ORDER BY id LIMIT 1", [id])).rows[0];
+    const naDalku = b.zpusob === 'prevod';
+    const zapis = await evidence.zapsatPlatbu(client, { klic: 'objednavka-vraceni:' + b.klic, typ: 'vraceni', castka, zpusob: b.zpusob,
+      okolnosti: naDalku ? 'eshop' : (o.doprava === 'osobni_odber' ? 'osobni_odber' : 'prodejna'), kontaktni: !naDalku,
+      zdroj_typ: 'objednavka', zdroj_id: id, vraci_id: puvodni ? puvodni.id : null, poznamka: b.duvod ? String(b.duvod).slice(0, 300) : null });
+    return { zapis, ...(await prehledPlatebObjednavky(client, id)) };
+  });
+  return opakovane ? { ...vysledek, opakovane: true } : vysledek;
+}));
+
+// POST /api/objednavky/:id/dobirka { klic, prijato_at? } – zákazník zaplatil dobírku dopravci.
+// Úhrada zákazníka (příjem) se zapíše JEDNOU tady a zároveň vznikne pohledávka za
+// dopravcem (tabulka dobirky). Vyúčtování od dopravce (POST /api/evidence-plateb/
+// dobirky/vyuctovani: brutto − poplatek = netto) ji vyrovná a nový příjem nezapisuje.
+router.post('/:id/dobirka', vyzadovatAdmina, (req, res) => vTransakciEvidence(res, async client => {
+  const id = Number(req.params.id);
+  const b = req.body || {};
+  if (!b.klic) throw new evidence.ChybaEvidence(400, 'Chybí identifikátor operace – obnovte stránku administrace.');
+  const { vysledek, opakovane } = await evidence.jednou(client, 'objednavka-dobirka', b.klic, { id, prijato_at: b.prijato_at || null }, async () => {
+    const o = (await client.query('SELECT * FROM objednavky WHERE id = $1 FOR UPDATE', [id])).rows[0];
+    if (!o) throw new evidence.ChybaEvidence(404, 'Objednávka nenalezena.');
+    if (o.platba !== 'dobirka') throw new evidence.ChybaEvidence(400, 'Objednávka není na dobírku.');
+    if (o.stav === 'zrusena') throw new evidence.ChybaEvidence(409, 'Objednávka je zrušená.');
+    if ((await client.query('SELECT 1 FROM dobirky WHERE objednavka_id = $1', [id])).rows.length) throw new evidence.ChybaEvidence(409, 'Dobírka už je zapsaná.');
+    const castka = evidence.kc(o.celkem);
+    if (!(castka > 0)) throw new evidence.ChybaEvidence(400, 'Objednávka nemá co vybírat.');
+    const platba = await evidence.zapsatPlatbu(client, { klic: 'dobirka:' + id, typ: 'prijem', castka, zpusob: 'dobirka', okolnosti: 'dopravce',
+      kontaktni: false, prijato_at: b.prijato_at || null, zdroj_typ: 'objednavka', zdroj_id: id, poznamka: 'Úhrada dobírky dopravci (pohledávka za dopravcem)' });
+    const dobirka = (await client.query('INSERT INTO dobirky (klic, objednavka_id, platba_id, castka, dopravce) VALUES ($1,$2,$3,$4,$5) RETURNING *',
+      ['dobirka:' + id, id, platba.id, castka, o.dopravce || null])).rows[0];
+    return { dobirka, ...(await prehledPlatebObjednavky(client, id)) };
+  });
+  return opakovane ? { ...vysledek, opakovane: true } : vysledek;
+}));
+
 const CAS_STAVU = { zaplacena: 'zaplaceno_at', odeslana: 'expedovano_at', dorucena: 'dodano_at', zrusena: 'zruseno_at' };
 
 // Zmenit stav objednavky (jen pro admin)
@@ -988,7 +1138,26 @@ router.patch('/:id/stav', vyzadovatAdmina, async (req, res) => {
       return res.status(400).json({ chyba: 'Zrušenou objednávku nelze vrátit do jiného stavu.' });
     }
 
+    // Osobní odběr s platbou na prodejně nejde nově označit jako zaplacený ani
+    // vyzvednutý bez zaznamenané platby (POST /:id/platby) nebo přiřazené úhrady
+    if (['zaplacena', 'dorucena'].includes(stav) && !['zaplacena', 'dorucena'].includes(puvodniStav)) {
+      const o = (await client.query('SELECT doprava, platba, celkem FROM objednavky WHERE id = $1', [req.params.id])).rows[0];
+      if (o && o.doprava === 'osobni_odber' && o.platba === 'na_prodejne' && Number(o.celkem) > 0) {
+        const prijato = await evidence.prijatoNaObjednavku(client, req.params.id);
+        if (prijato < Number(o.celkem)) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ chyba: `Objednávka není zaplacená: přijato ${prijato} Kč z ${Number(o.celkem)} Kč. Nejdřív zaznamenejte platbu (Přijmout platbu).`, chybi_platba: true });
+        }
+      }
+    }
+
     if (stav === 'zrusena' && puvodniStav !== 'zrusena') {
+      // Přijaté peníze se musí nejdřív vrátit (zapsat vrácení), jinak by zůstaly bez dokladu
+      const prijatoNaZrusenou = await evidence.prijatoNaObjednavku(client, req.params.id);
+      if (prijatoNaZrusenou > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ chyba: `Na objednávce je přijato ${prijatoNaZrusenou} Kč. Před zrušením zapište vrácení peněz.` });
+      }
       // Pokud už na tuto objednávku existuje SKUTEČNĚ PROVEDENÁ vratka (tabulka
       // vratky - založená z prodejny/admin, ne pouhá zákaznická žádost v
       // vratky_zadosti), automatické zrušení zakázat. Jinak by se sklad, který
@@ -1029,7 +1198,11 @@ router.patch('/:id/stav', vyzadovatAdmina, async (req, res) => {
            WHERE id = $2`,
           [sleva, poukaz_id]
         );
-        await client.query('DELETE FROM poukazy_pouziti WHERE objednavka_id = $1', [req.params.id]);
+        // Původní čerpání zůstává, vrácení se zapíše navázaným záporným řádkem
+        // (součet čerpání v reportech vyjde stejně jako dřív po smazání)
+        await client.query('INSERT INTO poukazy_pouziti (poukaz_id, castka, objednavka_id) VALUES ($1,$2,$3)', [poukaz_id, -Number(sleva), Number(req.params.id)]);
+        await evidence.stornovatKredit(client, { zdroj_typ: 'objednavka', zdroj_id: Number(req.params.id), typy: ['cerpani'],
+          klicPrefix: `zruseni-objednavky:${req.params.id}`, poznamka: 'Zrušení objednávky' });
       }
 
       // Uvolnit slevový kód akce - místo ve stropu použití se vrátí

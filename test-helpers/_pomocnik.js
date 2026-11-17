@@ -3,6 +3,8 @@
 // takže testujeme reálný route handler z routes/objednavky.js, ale bez sítě/DB.
 // Soubor záměrně NENÍ ve složce test/, aby ho `node --test` nesebral jako testovací soubor.
 
+const { obsluhaEvidence } = require('./evidenceMock');
+
 function nacistRouterSMocky(routeRelPath, mocky) {
   const routePath = require.resolve(routeRelPath);
   const puvodni = {};
@@ -45,6 +47,13 @@ function vytvoritMockClient(stav) {
       if (stav.callLog) stav.callLog.push({ sql: s, params });
 
       if (s.startsWith('ALTER TABLE')) return {};
+      // evidence plateb (lib/evidencePlateb.js) - paměťově, viz evidenceMock.js
+      const ev = obsluhaEvidence(stav, s, params);
+      if (ev) return ev;
+      if (s === 'SELECT doprava, platba, celkem FROM objednavky WHERE id = $1') {
+        const o = stav.objednavky.find(o => o.id === Number(params[0]));
+        return { rows: o ? [{ doprava: o.doprava, platba: o.platba, celkem: o.celkem }] : [] };
+      }
       // migrace (tabulky, triggery) - v paměťové DB nic nedělají
       if (s.startsWith('CREATE') || s.startsWith('SELECT pg_advisory_xact_lock(')) return {};
       // Nastavení dopravy (lib/doprava.js) - bez uloženého platí výchozí ceny
@@ -169,7 +178,7 @@ function vytvoritMockClient(stav) {
       if (s.startsWith('INSERT INTO poukazy_pouziti')) {
         const [poukaz_id, castka, objednavka_id] = params;
         stav.poukazyPouziti.push({ poukaz_id, castka, objednavka_id });
-        return {};
+        return { rows: [{ id: stav.poukazyPouziti.length }] };
       }
       if (s.startsWith('DELETE FROM poukazy_pouziti')) {
         const [objednavka_id] = params;

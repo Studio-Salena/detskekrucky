@@ -1087,6 +1087,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           <button class="btn btn-csv no-print" onclick="exportUcetnictviPDF()">📄 PDF pro účetní</button>
           <button class="btn btn-print no-print" onclick="window.print()">🖨️ Tisk</button>
           <button class="refresh-btn no-print" onclick="loadUcetnictvi()">↻</button>
+          <button class="btn btn-outline no-print" onclick="kontrolaPlateb()">🔎 Kontrola plateb</button>
         </div>
         <div class="table-actions" data-pohled="faktury">
           <button class="refresh-btn no-print" onclick="loadNakupniFaktury()" aria-label="Načíst znovu">↻</button>
@@ -2801,6 +2802,7 @@ async function detailObjednavky(id) {
       <tr style="background:var(--cream)"><td colspan="4"><strong>CELKEM</strong></td>
         <td><strong style="color:var(--brown);font-size:1.1rem">${data.celkem.toLocaleString('cs-CZ')} Kč</strong></td></tr>
       </tbody></table>
+      <div id="detailObjPlatby"></div>
       ${data.poznamka?`<div class="info-box" style="margin-top:12px">📝 ${escH(data.poznamka)}</div>`:''}
       ${(data.zaplaceno_at||data.expedovano_at||data.dodano_at)?`<div class="info-box" style="margin-top:12px">📅 ${[
         data.zaplaceno_at?`Zaplaceno ${new Date(data.zaplaceno_at).toLocaleDateString('cs-CZ')}`:'',
@@ -2818,7 +2820,117 @@ async function detailObjednavky(id) {
     btnS.dataset.email = data.email || '';
     btnS.dataset.poslano = data.storno_odeslano ? new Date(data.storno_odeslano).toLocaleString('cs-CZ') : '';
     openModal('modalDetailObj');
+    nacistPlatbyObjednavky(id);
   } catch(e) { alert('Chyba'); }
+}
+
+// Kontrola plateb: doklady proti evidenci plateb a kreditu (jen čtení).
+// Kontrolují se doklady od začátku evidence; starší nic nedopočítávají.
+async function kontrolaPlateb() {
+  try {
+    const res = await adminFetch(API + '/evidence-plateb/kontrola');
+    const d = await res.json();
+    if (!res.ok) { alert(d.chyba || 'Kontrolu nejde načíst.'); return; }
+    if (!d.od) { alert('Evidence plateb zatím nemá žádný záznam.'); return; }
+    const z = d.zkontrolovano;
+    const souhrn = `Od ${new Date(d.od).toLocaleString('cs-CZ')} zkontrolováno: ${z.prodeje} účtenek, ${z.vratky} vratek, ${z.poukazy} poukazů.`;
+    if (!d.rozdily.length) { alert('✅ ' + souhrn + '\nDoklady a evidence plateb sedí.'); return; }
+    alert('⚠️ ' + souhrn + '\n\nRozdíly:\n' + d.rozdily.slice(0, 30).map(r => `• ${r.doklad} – ${r.co}: doklad ${r.doklad_castka} Kč, evidence ${r.evidence} Kč`).join('\n')
+      + (d.rozdily.length > 30 ? `\n… a dalších ${d.rozdily.length - 30}` : ''));
+  } catch (e) { alert('Chyba spojení.'); }
+}
+
+// ═══ Identifikátor operace proti opakování (vratka, výměna, poukaz, platba) ═══
+// Platí, dokud server neodpoví - opakování po výpadku spojení pošle stejný.
+const klicoveOperace = {};
+function klicOperace(nazev) { return klicoveOperace[nazev] || (klicoveOperace[nazev] = novyKlicProdeje()); }
+function hotovaOperace(nazev) { delete klicoveOperace[nazev]; }
+// Odeslání operace: při odpovědi serveru (úspěch i chyba) se klíč uvolní, při výpadku zůstane
+async function odeslatOperaci(nazev, url, telo, metoda = 'POST') {
+  const res = await adminFetch(url, { method: metoda, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...telo, klic: klicOperace(nazev) }) });
+  hotovaOperace(nazev);
+  const data = await res.json().catch(() => ({}));
+  return { res, data };
+}
+
+// ═══ Platby objednávky (evidence plateb) ═══
+const ZPUSOBY_PLATBY_POPIS = { hotovost: 'hotově', karta: 'kartou', qr: 'QR', prevod: 'převodem', dobirka: 'dobírka' };
+const TYPY_PLATBY_POPIS = { prijem: 'Přijato', vraceni: 'Vráceno', storno_prijmu: 'Storno příjmu', storno_vraceni: 'Storno vrácení' };
+async function nacistPlatbyObjednavky(id) {
+  const box = document.getElementById('detailObjPlatby');
+  if (!box) return;
+  try {
+    const res = await adminFetch(API + '/objednavky/' + id + '/platby');
+    const d = await res.json();
+    if (!res.ok) { box.innerHTML = `<div class="error-msg">${escH(d.chyba || 'Platby nejde načíst.')}</div>`; return; }
+    box.innerHTML = platbyObjednavkyHtml(d);
+  } catch (e) { box.innerHTML = '<div class="error-msg">Platby nejde načíst (chyba spojení).</div>'; }
+}
+function platbyObjednavkyHtml(d) {
+  const o = d.objednavka, kc = n => Number(n).toLocaleString('cs-CZ') + ' Kč';
+  const osobne = o.doprava === 'osobni_odber' && o.platba === 'na_prodejne';
+  const radky = d.platby.map(p => `<tr><td>${new Date(p.prijato_at).toLocaleString('cs-CZ')}</td><td>${escH(TYPY_PLATBY_POPIS[p.typ] || p.typ)}</td>
+      <td>${escH(ZPUSOBY_PLATBY_POPIS[p.zpusob] || p.zpusob)}</td><td>${p.typ === 'prijem' || p.typ === 'storno_vraceni' ? '' : '−'}${kc(p.castka)}</td><td>${escH(p.poznamka || '')}</td></tr>`)
+    .concat(d.prirazeni.map(p => `<tr><td>${new Date(p.vytvoreno).toLocaleString('cs-CZ')}</td><td>Přiřazená platba #${escH(p.platba_id)}</td><td>${escH(ZPUSOBY_PLATBY_POPIS[p.zpusob] || p.zpusob)}</td><td>${kc(p.castka)}</td><td></td></tr>`)).join('');
+  let akce = '';
+  if (o.stav !== 'zrusena' && d.zbyva > 0 && o.platba !== 'dobirka') {
+    const zpusoby = osobne ? [['hotovost', '💵 Hotovost'], ['karta', '💳 Karta'], ['qr', '📱 QR']] : [['prevod', '🏦 Převod']];
+    akce += `<div class="pos-dvojice" style="align-items:end;margin-top:8px">
+      <div class="form-group" style="margin:0"><label for="objPlatbaZpusob">Způsob</label><select id="objPlatbaZpusob">${zpusoby.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></div>
+      <div class="form-group" style="margin:0"><label for="objPlatbaCastka">Částka Kč</label><input type="number" id="objPlatbaCastka" value="${d.zbyva}" min="1" step="0.01"></div>
+      ${osobne ? '<div class="form-group" style="margin:0"><label for="objPlatbaPrijato">Přijato hotově</label><input type="number" id="objPlatbaPrijato" placeholder="volitelné"></div>' : ''}
+      <button class="btn btn-primary btn-sm" id="objPlatbaBtn" onclick="prijmoutPlatbuObjednavky(${o.id})">💰 Přijmout platbu</button></div>`;
+  }
+  if (o.platba === 'dobirka' && !d.dobirka && o.stav !== 'zrusena') {
+    akce += `<button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="dobirkaVybrana(${o.id})">📦 Dobírka vybrána (zákazník zaplatil dopravci ${kc(o.celkem)})</button>`;
+  }
+  if (d.dobirka) akce += `<div class="polozka" style="margin-top:6px">Dobírka ${kc(d.dobirka.castka)} – ${d.dobirka.vyuctovani_id ? 'vyúčtovaná dopravcem' : 'čeká na vyúčtování od dopravce'}</div>`;
+  if (d.platby.some(p => p.typ === 'prijem')) {
+    akce += `<button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="vratitPlatbuObjednavky(${o.id})">↩️ Vrátit platbu</button>`;
+  }
+  return `<div class="section-divider">Platby</div>
+    <div class="info-box">Přijato <strong>${kc(d.prijato)}</strong> z ${kc(o.celkem)}${d.zbyva > 0 ? ` · zbývá uhradit <strong>${kc(d.zbyva)}</strong>` : ' · <strong>zaplaceno</strong>'}
+    ${osobne && d.zbyva > 0 ? '<br>Osobní odběr: před vydáním zboží zapište platbu – bez ní nejde objednávku označit jako zaplacenou ani vyzvednutou.' : ''}</div>
+    ${radky ? `<table><thead><tr><th>Kdy</th><th>Co</th><th>Jak</th><th>Částka</th><th>Pozn.</th></tr></thead><tbody>${radky}</tbody></table>` : ''}
+    ${akce}<div id="objPlatbaMsg"></div>`;
+}
+async function prijmoutPlatbuObjednavky(id) {
+  const btn = document.getElementById('objPlatbaBtn'), msg = document.getElementById('objPlatbaMsg');
+  if (btn) btn.disabled = true;
+  try {
+    const prijato = document.getElementById('objPlatbaPrijato');
+    const { res, data } = await odeslatOperaci('obj-platba-' + id, API + '/objednavky/' + id + '/platby', {
+      zpusob: document.getElementById('objPlatbaZpusob').value,
+      castka: Number(document.getElementById('objPlatbaCastka').value),
+      ...(prijato && prijato.value ? { hotovost_prijato: Number(prijato.value) } : {})
+    });
+    if (!res.ok) { msg.innerHTML = `<div class="error-msg">${escH(data.chyba || 'Platbu se nepodařilo zapsat.')}</div>`; return; }
+    document.getElementById('detailObjPlatby').innerHTML = platbyObjednavkyHtml(data);
+    const o = vsechnyObjednavky.find(x => x.id === id);
+    if (o) o.stav = data.objednavka.stav;
+    if (typeof nastavitFiltrObjednavek === 'function') nastavitFiltrObjednavek(objednavkyFiltr);
+  } catch (e) {
+    msg.innerHTML = '<div class="error-msg">Spojení selhalo – klikněte znovu, platba se nezapíše dvakrát.</div>';
+  } finally { if (btn) btn.disabled = false; }
+}
+async function dobirkaVybrana(id) {
+  if (!confirm('Zapsat, že zákazník zaplatil dobírku dopravci? (Peníze přijdou až s vyúčtováním od dopravce.)')) return;
+  try {
+    const { res, data } = await odeslatOperaci('obj-dobirka-' + id, API + '/objednavky/' + id + '/dobirka', {});
+    if (!res.ok) { alert(data.chyba || 'Nepodařilo se zapsat.'); return; }
+    document.getElementById('detailObjPlatby').innerHTML = platbyObjednavkyHtml(data);
+  } catch (e) { alert('Spojení selhalo – zkuste to znovu, nezapíše se dvakrát.'); }
+}
+async function vratitPlatbuObjednavky(id) {
+  const castka = Number(prompt('Kolik Kč se vrací zákazníkovi?'));
+  if (!(castka > 0)) return;
+  const zpusob = prompt('Jak se peníze vracejí? (hotovost / karta / qr / prevod)', 'hotovost');
+  if (!zpusob) return;
+  try {
+    const { res, data } = await odeslatOperaci('obj-vraceni-' + id, API + '/objednavky/' + id + '/platby/vraceni', { castka, zpusob: zpusob.trim().toLowerCase() });
+    if (!res.ok) { alert(data.chyba || 'Vrácení se nepodařilo zapsat.'); return; }
+    document.getElementById('detailObjPlatby').innerHTML = platbyObjednavkyHtml(data);
+  } catch (e) { alert('Spojení selhalo – zkuste to znovu, nezapíše se dvakrát.'); }
 }
 
 function tiskObjednavky() {
@@ -5797,9 +5909,19 @@ async function odeslatProdej(prodej) {
     const res = await adminFetch(API+'/prodejna', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(prodej) });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
+      // Stejný nákup už je před chvílí uložený - uložit jen po výslovném potvrzení
+      if (data.mozna_duplicita && !prodej.potvrdit_duplicitu) {
+        if (confirm(`${data.chyba}\n\nJe to opravdu DALŠÍ nákup (jiný zákazník / další kus)? Pokud jde o ten samý nákup, zvolte Zrušit.`)) {
+          return odeslatProdej({ ...prodej, potvrdit_duplicitu: true });
+        }
+        smazatNedokoncenyProdej();
+        document.getElementById('prodejnaMsg').innerHTML = `<div class="error-msg">Neuloženo – nákup už je uložený jako účtenka #${escH(data.ulozeny_prodej_id)}.</div>`;
+        return false;
+      }
       // server odpověděl: pod tímto klíčem se nic dalšího neuloží (chyba), nebo
       // je pod ním uložený jiný prodej - v obou případech nový pokus = nový klíč
       if (res.status !== 401 && res.status !== 403) smazatNedokoncenyProdej();
+      if (data.zahozeno) klicProdeje = null;
       if (data.ulozeny_prodej_id) { klicProdeje = null; loadProdejna(); }
       document.getElementById('prodejnaMsg').innerHTML = `<div class="error-msg">${escH(data.chyba || 'Prodej se nepodařilo uložit.')}</div>`;
       return false;
@@ -5876,10 +5998,36 @@ async function dokoncitNedokoncenyProdej() {
   try { await odeslatProdej(z.prodej); }
   finally { prodejUkladaSe = false; if (btn) btn.disabled = false; zobrazitNedokoncenyProdej(); }
 }
-function zahoditNedokoncenyProdej() {
-  if (!confirm('Zahodit nedokončený prodej? Pokud se přesto uložil, najdete ho v seznamu prodejů.')) return;
-  smazatNedokoncenyProdej();
-  zobrazitNedokoncenyProdej();
+// „Zahodit“ se nejdřív zeptá serveru (pod stejným zámkem jako uložení):
+// uložený prodej se nezahodí - jen se ukáže a vytiskne jeho účtenka; neuložený
+// se na serveru zneplatní, takže ho pozdní pokus už neuloží. Bez spojení
+// zahodit nejde - klíč je jediná stopa, podle které server prodej pozná.
+async function zahoditNedokoncenyProdej() {
+  const z = nacistNedokoncenyProdej();
+  if (!z || prodejUkladaSe) return;
+  if (!confirm('Zahodit nedokončený prodej? Nejdřív se ověří, jestli se na serveru přece jen neuložil.')) return;
+  prodejUkladaSe = true;
+  const msg = document.getElementById('prodejnaMsg');
+  try {
+    const res = await adminFetch(API + '/prodejna/nedokonceny/' + encodeURIComponent(z.prodej.klic) + '/zahodit', { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { msg.innerHTML = `<div class="error-msg">${escH(data.chyba || 'Nepodařilo se ověřit stav prodeje – zkuste to znovu.')}</div>`; return; }
+    smazatNedokoncenyProdej();
+    if (klicProdeje === z.prodej.klic) klicProdeje = null;
+    if (data.stav === 'ulozeny') {
+      msg.innerHTML = `<div class="success-msg">Prodej se na serveru uložil jako účtenka #${escH(data.prodej.id)} – nezadávejte ho znovu. Účtenka se vytiskne.</div>`;
+      tiskUctenkyData(data.prodej, data.prodej.id);
+      loadProdejna();
+      nacistSkladProProdejna();
+    } else {
+      msg.innerHTML = '<div class="success-msg">Nedokončený prodej se neuložil a byl zahozen.</div>';
+    }
+  } catch (e) {
+    msg.innerHTML = '<div class="error-msg">Bez spojení se serverem nejde ověřit, jestli se prodej uložil – zahodit ho teď nejde. Zkuste to po obnovení spojení.</div>';
+  } finally {
+    prodejUkladaSe = false;
+    zobrazitNedokoncenyProdej();
+  }
 }
 
 function prepnoutPoukazPole() {
@@ -6598,8 +6746,7 @@ async function ulozitNahraniKarty() {
   };
   btn.disabled = true;
   try {
-    const res = await adminFetch(API + '/poukazy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(telo) });
-    const data = await res.json().catch(() => ({}));
+    const { res, data } = await odeslatOperaci('nabiti-karty', API + '/poukazy', telo);
     if (!res.ok) { msg.innerHTML = `<div class="error-msg">${escH(data.chyba || 'Chyba')}</div>`; return; }
     closeModal('modalNahratKartu');
     loadPoukazy();
@@ -6960,8 +7107,7 @@ async function pripsatNaPoukaz(id) {
   const castka = Number(String(zadano).replace(/\s|Kč/g, '').replace(',', '.'));
   if (!Number.isInteger(castka) || castka <= 0 || castka > max) { alert(`❌ Zadejte celé číslo od 1 do ${max}.`); return; }
   try {
-    const res = await adminFetch(API + '/poukazy/' + id + '/pripsat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ castka }) });
-    const data = await res.json().catch(() => ({}));
+    const { res, data } = await odeslatOperaci('pripsat-' + id, API + '/poukazy/' + id + '/pripsat', { castka });
     if (!res.ok) { alert('❌ ' + (data.chyba || 'Nepodařilo se.')); return; }
     const poPlatnosti = new Date(data.platnost_do) < new Date();
     alert(`✅ Připsáno ${castka.toLocaleString('cs-CZ')} Kč. Nový zůstatek: ${Number(data.zustatek).toLocaleString('cs-CZ')} Kč.`
@@ -7021,8 +7167,9 @@ async function vyriditPoukazZadost(id) {
 
     const res = await adminFetch(API+'/poukazy', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ hodnota: zadost.hodnota, zakoupeno_kde: 'eshop', kupujici_jmeno: zadost.kupujici_jmeno, kupujici_email: zadost.kupujici_email, poznamka: zadost.pro_koho ? `Pro: ${zadost.pro_koho}` : '', platba: 'prevod', vzhled: zadost.vzhled === 'vanocni' || zadost.vzhled === 'klasicky' ? zadost.vzhled : vychoziVzhledPoukazu() })
+      body: JSON.stringify({ klic: klicOperace('poukaz-zadost-' + id), hodnota: zadost.hodnota, zakoupeno_kde: 'eshop', kupujici_jmeno: zadost.kupujici_jmeno, kupujici_email: zadost.kupujici_email, poznamka: zadost.pro_koho ? `Pro: ${zadost.pro_koho}` : '', platba: 'prevod', vzhled: zadost.vzhled === 'vanocni' || zadost.vzhled === 'klasicky' ? zadost.vzhled : vychoziVzhledPoukazu() })
     });
+    hotovaOperace('poukaz-zadost-' + id);
     if (res.ok) {
       const poukaz = await res.json();
       await adminFetch(API+'/poukazy/zadosti/'+id+'/stav', {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({stav:'vyrizena'})});
@@ -7087,8 +7234,9 @@ async function ulozitPoukaz() {
   try {
     const res = await adminFetch(API+'/poukazy', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(dataNovehoPoukazu())
+      body: JSON.stringify({ ...dataNovehoPoukazu(), klic: klicOperace('vydat-poukaz') })
     });
+    hotovaOperace('vydat-poukaz');
     if (res.ok) {
       const poukaz = await res.json();
       closeModal('modalVydatPoukaz');
@@ -7558,9 +7706,11 @@ async function ulozitVratku() {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
         prodej_id: prodejId, objednavka_id: objednavkaId, polozky: polozkyProSklad.length ? polozkyProSklad : polozky,
-        castka, duvod, zpusob_vraceni: zpusobVraceni, vratit_na_sklad: vratitNaSklad && polozkyProSklad.length > 0
+        castka, duvod, zpusob_vraceni: zpusobVraceni, vratit_na_sklad: vratitNaSklad && polozkyProSklad.length > 0,
+        klic: klicOperace('vratka')
       })
     });
+    hotovaOperace('vratka');
     if (res.ok) {
       if (zadostId) { try { await adminFetch(API+'/vratky-zadosti/'+zadostId+'/stav', {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({stav:'vyrizena'})}); } catch(e){} }
       zavritKameruVratka();
@@ -7710,15 +7860,17 @@ async function ulozitVymenu() {
     const res = await adminFetch(API+'/prodejna/vymeny', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
       prodej_id: vymenaPuvodni.prodej.id, vracene, nove, zapocet, platba: platba || null,
       hotovost_prijato: Number(document.getElementById('vymenaPrijato').value) || null,
-      duvod: document.getElementById('vymenaDuvod').value.trim() || null
+      duvod: document.getElementById('vymenaDuvod').value.trim() || null,
+      klic: klicOperace('vymena')
     }) });
+    hotovaOperace('vymena');
     const data = await res.json().catch(()=>({}));
     if (!res.ok) return chyba(data.chyba || 'Výměnu se nepodařilo uložit.');
     closeModal('modalVymena');
     tiskUctenkyData(data.prodej, data.prodej.id);
     loadVratky(); loadProdejna(); loadPrehled(); nacistSkladProProdejna();
   } catch(e) {
-    chyba('Chyba spojení – výměna se neuložila.');
+    chyba('Chyba spojení – klikněte znovu, výměna se neuloží dvakrát.');
   } finally {
     btn.disabled = false;
   }

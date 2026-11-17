@@ -6,6 +6,7 @@ const vyzadovatAdmina = require('../middleware/adminAuth');
 const promo = require('../lib/promo');
 const vymena = require('../lib/vymena');
 const prodejPokladna = require('../lib/prodejPokladna');
+const evidence = require('../lib/evidencePlateb');
 
 // Jak byly peníze z vratky vráceny (hotově se odečítá z hotovosti v uzávěrce)
 const ZPUSOBY_VRACENI = vymena.PLATBY;
@@ -64,6 +65,13 @@ async function initTabulky() {
       ALTER TABLE prodejna_prodeje ADD COLUMN IF NOT EXISTS klic TEXT;
       ALTER TABLE prodejna_prodeje ADD COLUMN IF NOT EXISTS klic_otisk TEXT;
       CREATE UNIQUE INDEX IF NOT EXISTS prodejna_prodeje_klic_uq ON prodejna_prodeje (klic) WHERE klic IS NOT NULL;
+      -- „Zahodit“ nepotvrzený prodej (2026-11-17): klíč, pod kterým server nic
+      -- neuložil, se zneplatní - pozdě doručený původní požadavek už nic neuloží.
+      CREATE TABLE IF NOT EXISTS prodejna_klice_zahozene (klic TEXT PRIMARY KEY, zahozeno TIMESTAMPTZ NOT NULL DEFAULT NOW());
+      -- Otisk obsahu nákupu (bez klíče a hotovosti) - stejný nákup zadaný znovu
+      -- do 30 minut se bez potvrzení neuloží (lib/prodejPokladna.js)
+      ALTER TABLE prodejna_prodeje ADD COLUMN IF NOT EXISTS obsah_otisk TEXT;
+      CREATE INDEX IF NOT EXISTS prodejna_prodeje_obsah_idx ON prodejna_prodeje (obsah_otisk, datum) WHERE obsah_otisk IS NOT NULL;
       CREATE TABLE IF NOT EXISTS prodejna_opravy (
         id SERIAL PRIMARY KEY,
         prodej_id INTEGER,
@@ -156,18 +164,67 @@ router.post('/', async (req, res) => {
   }
 });
 
+// POST /api/prodejna/nedokonceny/:klic/zahodit – „Zahodit“ nepotvrzený prodej.
+// Když ho server pod klíčem uložil, nezahodí se a vrátí se uložený (pokladna
+// vytiskne účtenku); jinak se klíč zneplatní a pozdní pokus už nic neuloží.
+router.post('/nedokonceny/:klic/zahodit', async (req, res) => {
+  const klic = String(req.params.klic || '');
+  if (!/^[A-Za-z0-9_-]{8,100}$/.test(klic)) return res.status(400).json({ chyba: 'Neplatný identifikátor prodeje.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const vysledek = await prodejPokladna.zahoditKlic(client, klic);
+    await client.query('COMMIT');
+    res.json(vysledek);
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ chyba: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // PUT /api/prodejna/:id – upravit záznam prodeje (např. špatně zvolená platba, překlep ve jméně)
+// Změna způsobu platby u prodeje s evidencí plateb = storno původního příjmu
+// a nový příjem se správným způsobem (ve stejné transakci); původní záznam zůstane.
 router.put('/:id', async (req, res) => {
   const { zakaznik, platba, poznamka } = req.body;
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
+    await client.query('BEGIN');
+    const puvodni = (await client.query('SELECT * FROM prodejna_prodeje WHERE id = $1 FOR UPDATE', [req.params.id])).rows[0];
+    if (!puvodni) { await client.query('ROLLBACK'); return res.status(404).json({ chyba: 'Prodej nenalezen.' }); }
+    const novaPlatba = platba || null;
+    if (novaPlatba !== puvodni.platba) {
+      const prijmy = (await client.query(
+        `SELECT p.* FROM platby p WHERE p.zdroj_typ = 'prodej' AND p.zdroj_id = $1 AND p.typ = 'prijem'
+           AND NOT EXISTS (SELECT 1 FROM platby s WHERE s.opravuje_id = p.id)`, [puvodni.id])).rows;
+      const maEvidenci = prijmy.length || (await client.query("SELECT 1 FROM kredit_pohyby WHERE zdroj_typ = 'prodej' AND zdroj_id = $1 LIMIT 1", [puvodni.id])).rows.length;
+      if (maEvidenci) {
+        if (!['hotovost', 'karta', 'qr'].includes(novaPlatba) || !['hotovost', 'karta', 'qr'].includes(puvodni.platba)) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ chyba: 'U této účtenky jde způsob platby změnit jen mezi hotovostí, kartou a QR. Jinak použijte vratku.' });
+        }
+        const poznamkaOpravy = `Změna způsobu platby ${puvodni.platba} → ${novaPlatba}`;
+        const n = (await client.query("SELECT COUNT(*)::int n FROM platby WHERE zdroj_typ = 'prodej' AND zdroj_id = $1", [puvodni.id])).rows[0].n;
+        const storna = await evidence.stornovatPrijmy(client, { zdroj_typ: 'prodej', zdroj_id: puvodni.id, klicPrefix: `zmena-platby:${puvodni.id}:${n}`, poznamka: poznamkaOpravy });
+        for (const s of storna) {
+          await evidence.zapsatPlatbu(client, { klic: `zmena-platby:${puvodni.id}:${n}:prijem:${s.opravuje_id}`, typ: 'prijem', castka: s.castka, zpusob: novaPlatba,
+            okolnosti: s.okolnosti, kontaktni: s.kontaktni, prijato_at: puvodni.datum, zdroj_typ: 'prodej', zdroj_id: puvodni.id, poznamka: poznamkaOpravy });
+        }
+      }
+    }
+    const result = await client.query(
       'UPDATE prodejna_prodeje SET zakaznik=$1, platba=$2, poznamka=$3 WHERE id=$4 RETURNING *',
-      [zakaznik || null, platba || null, poznamka || null, req.params.id]
+      [zakaznik || null, novaPlatba, poznamka || null, req.params.id]
     );
-    if (!result.rows.length) return res.status(404).json({ chyba: 'Prodej nenalezen.' });
+    await client.query('COMMIT');
     res.json(result.rows[0]);
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     res.status(500).json({ chyba: err.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -191,6 +248,9 @@ router.delete('/:id', async (req, res) => {
     const poukaz = prodej.platba === 'poukaz' || prodej.poukaz_kod ||
       (await client.query('SELECT 1 FROM poukazy_pouziti WHERE prodej_id = $1 LIMIT 1', [id])).rows.length;
     if (poukaz) { await client.query('ROLLBACK'); return res.status(409).json({ chyba: 'Účtenka byla placená dárkovým poukazem – nejde smazat (poukaz by zůstal vyčerpaný). Použijte vratku a částku připište zpět na poukaz.' }); }
+    // Doklad se smaže jako dřív (součty se nemění), v evidenci plateb ale
+    // původní příjem zůstane a dostane navázané storno
+    await evidence.stornovatPrijmy(client, { zdroj_typ: 'prodej', zdroj_id: id, klicPrefix: `smazani-prodeje:${id}`, poznamka: `Smazání účtenky #${id}` });
     await client.query('DELETE FROM prodejna_prodeje WHERE id = $1', [id]);
     // Smazaný prodej uvolní slevový kód akce (místo ve stropu se vrátí)
     await promo.uvolnit(client, { prodejId: id }, 'Smazání prodeje v pokladně');
@@ -312,9 +372,15 @@ router.post('/vratky', async (req, res) => {
     }
   }
 
+  if (Number(castka) > 0 && !zpusobVraceni) {
+    return res.status(400).json({ chyba: 'Vyberte, jak byly peníze vráceny.' });
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // Opakované odeslání se stejným klíčem (výpadek, dvojklik) vrátí uloženou vratku
+    const { vysledek, opakovane } = await evidence.jednou(client, 'vratka', req.body.klic, { prodej_id, objednavka_id, polozky, castka, zpusobVraceni, vratit_na_sklad }, async () => {
 
     // Admin frontend není autorita - když je vratka navázaná na konkrétní
     // prodej/objednávku, ověřit položky proti tomu, co v ní skutečně bylo,
@@ -322,12 +388,13 @@ router.post('/vratky', async (req, res) => {
     // Bez vazby (ruční/historická oprava skladu bez zdroje) se ověřit nedá -
     // tam zůstává jen základní validace tvaru výše.
     const chybaPolozek = await overitVracenePolozky(client, { prodej_id, objednavka_id, polozky });
-    if (chybaPolozek) { await client.query('ROLLBACK'); return res.status(chybaPolozek.status).json({ chyba: chybaPolozek.chyba }); }
+    if (chybaPolozek) throw new evidence.ChybaEvidence(chybaPolozek.status, chybaPolozek.chyba);
 
     const vratka = await client.query(
       'INSERT INTO vratky (prodej_id, objednavka_id, polozky, castka, duvod, vraceno_na_sklad, zpusob_vraceni) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
       [prodej_id || null, objednavka_id || null, JSON.stringify(polozky), castka, duvod || null, vratit_na_sklad !== false, zpusobVraceni]
     );
+    await zapsatVraceniPenez(client, vratka.rows[0], { prodejId: prodej_id, objednavkaId: objednavka_id });
 
     // Pokud se má zboží vrátit zpět na sklad, naskladníme ho
     if (vratit_na_sklad !== false) {
@@ -344,16 +411,33 @@ router.post('/vratky', async (req, res) => {
         `, [p.produkt_id, p.velikost, p.pocet, `Vratka #${vratka.rows[0].id}`]);
       }
     }
+    return vratka.rows[0];
+    });
 
     await client.query('COMMIT');
-    res.json(vratka.rows[0]);
+    res.json(opakovane ? { ...vysledek, opakovane: true } : vysledek);
   } catch (err) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
+    if (err instanceof evidence.ChybaEvidence) return res.status(err.status).json({ chyba: err.chyba });
     res.status(500).json({ chyba: err.message });
   } finally {
     client.release();
   }
 });
+
+// Vrácené peníze z vratky do evidence plateb (hotově/kartou/QR u pultu, převodem
+// na dálku). U výměny bez vrácení peněz ('vymena') a nulové částky nic.
+async function zapsatVraceniPenez(client, vratka, { prodejId, objednavkaId }) {
+  const castka = Number(vratka.castka);
+  if (!(castka > 0) || !['hotovost', 'karta', 'qr', 'prevod'].includes(vratka.zpusob_vraceni)) return null;
+  const puvodni = prodejId
+    ? (await client.query("SELECT id FROM platby WHERE zdroj_typ = 'prodej' AND zdroj_id = $1 AND typ = 'prijem' ORDER BY id LIMIT 1", [prodejId])).rows[0]
+    : objednavkaId ? (await client.query("SELECT id FROM platby WHERE zdroj_typ = 'objednavka' AND zdroj_id = $1 AND typ = 'prijem' ORDER BY id LIMIT 1", [objednavkaId])).rows[0] : null;
+  const naDalku = vratka.zpusob_vraceni === 'prevod';
+  return evidence.zapsatPlatbu(client, { klic: `vratka:${vratka.id}:vraceni`, typ: 'vraceni', castka, zpusob: vratka.zpusob_vraceni,
+    okolnosti: naDalku ? 'eshop' : 'prodejna', kontaktni: !naDalku, prijato_at: vratka.vytvoreno, zdroj_typ: 'vratka', zdroj_id: vratka.id,
+    vraci_id: puvodni ? puvodni.id : null });
+}
 
 // ═══════════════════════════════
 // VÝMĚNA ZBOŽÍ (lib/vymena.js)
@@ -371,16 +455,17 @@ router.post('/vymeny', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const { vysledek, opakovane } = await evidence.jednou(client, 'vymena', b.klic,
+      { prodejId, vracene: b.vracene, nove: b.nove, zapocet: b.zapocet, platba: b.platba, hotovost_prijato: b.hotovost_prijato || null }, async () => {
     // původní účtenka: zamknout a ověřit, že vrácené kusy na ní byly a ještě nebyly vrácené
     const chybaVracenych = await overitVracenePolozky(client, { prodej_id: prodejId, polozky: b.vracene });
-    if (chybaVracenych) { await client.query('ROLLBACK'); return res.status(chybaVracenych.status).json({ chyba: chybaVracenych.chyba }); }
+    if (chybaVracenych) throw new evidence.ChybaEvidence(chybaVracenych.status, chybaVracenych.chyba);
 
     // nové zboží ze skladu (zámek řádku, ať ho souběžně neprodá pokladna)
     for (const p of b.nove) {
       const r = await client.query('SELECT pocet_kusu FROM sklad WHERE produkt_id = $1 AND velikost = $2 FOR UPDATE', [p.produkt_id, String(p.velikost)]);
       if (!r.rows.length || Number(r.rows[0].pocet_kusu) < p.pocet) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ chyba: `${p.nazev || 'Nové zboží'} vel. ${p.velikost} není skladem v potřebném počtu.` });
+        throw new evidence.ChybaEvidence(400, `${p.nazev || 'Nové zboží'} vel. ${p.velikost} není skladem v potřebném počtu.`);
       }
     }
 
@@ -412,15 +497,52 @@ router.post('/vymeny', async (req, res) => {
         [p.produkt_id, String(p.velikost), p.pocet, `Výměna – účtenka #${prodej.id}`]);
     }
 
+    // Evidence plateb: jen skutečné peníze - doplatek, nebo vrácený rozdíl (zápočet není platba)
+    if (v.doplatek > 0) {
+      const naDalku = b.platba === 'prevod';
+      await evidence.zapsatPlatbu(client, { klic: `prodej:vymena-${prodej.id}:prijem`, typ: 'prijem', castka: v.doplatek, zpusob: b.platba,
+        okolnosti: naDalku ? 'eshop' : 'prodejna', kontaktni: !naDalku, prijato_at: prodej.datum, zdroj_typ: 'prodej', zdroj_id: prodej.id });
+    }
+    await zapsatVraceniPenez(client, vratka, { prodejId });
+    return { prodej, vratka };
+    });
+
     await client.query('COMMIT');
-    res.json({ prodej, vratka });
+    res.json(opakovane ? { ...vysledek, opakovane: true } : vysledek);
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
+    if (err instanceof evidence.ChybaEvidence) return res.status(err.status).json({ chyba: err.chyba });
     res.status(500).json({ chyba: err.message });
   } finally {
     client.release();
   }
 });
+
+// Převod na výměnu v evidenci plateb: původní záznamy zůstanou, stornují se
+// a zapíše se skutečnost (doplatek / vrácený rozdíl). Doklady bez evidence
+// (vzniklé před jejím zavedením) se nedoplňují.
+async function opravitEvidenciPrevodu(client, { prodej, vratka, novyProdej, novaVratka }) {
+  const klic = `prevod:${vratka.id}-${prodej.id}`;
+  const poznamka = `Převod na výměnu (vratka #${vratka.id}, účtenka #${prodej.id})`;
+  const storPrijmy = await evidence.stornovatPrijmy(client, { zdroj_typ: 'prodej', zdroj_id: prodej.id, klicPrefix: klic, poznamka });
+  if (storPrijmy.length && Number(novyProdej.celkem) > 0) {
+    const vzor = storPrijmy[0];
+    await evidence.zapsatPlatbu(client, { klic: klic + ':prijem', typ: 'prijem', castka: novyProdej.celkem, zpusob: vzor.zpusob,
+      okolnosti: vzor.okolnosti, kontaktni: vzor.kontaktni, prijato_at: prodej.datum, zdroj_typ: 'prodej', zdroj_id: prodej.id, poznamka });
+  }
+  const vraceni = (await client.query(
+    `SELECT p.* FROM platby p WHERE p.zdroj_typ = 'vratka' AND p.zdroj_id = $1 AND p.typ = 'vraceni'
+       AND NOT EXISTS (SELECT 1 FROM platby s WHERE s.opravuje_id = p.id) ORDER BY p.id`, [vratka.id])).rows;
+  for (const r of vraceni) {
+    await evidence.zapsatPlatbu(client, { klic: `${klic}:storno-vraceni:${r.id}`, typ: 'storno_vraceni', castka: r.castka, zpusob: r.zpusob,
+      okolnosti: r.okolnosti, kontaktni: r.kontaktni, zdroj_typ: 'vratka', zdroj_id: vratka.id, opravuje_id: r.id, poznamka });
+  }
+  if (vraceni.length && Number(novaVratka.castka) > 0 && ['hotovost', 'karta', 'qr', 'prevod'].includes(novaVratka.zpusob_vraceni)) {
+    const naDalku = novaVratka.zpusob_vraceni === 'prevod';
+    await evidence.zapsatPlatbu(client, { klic: klic + ':vraceni', typ: 'vraceni', castka: novaVratka.castka, zpusob: novaVratka.zpusob_vraceni,
+      okolnosti: naDalku ? 'eshop' : 'prodejna', kontaktni: !naDalku, prijato_at: vratka.vytvoreno, zdroj_typ: 'vratka', zdroj_id: vratka.id, poznamka });
+  }
+}
 
 // POST /api/prodejna/vymeny/prevest { vratka_id, prodej_id } – dodatečně zapsat,
 // že vratka a pozdější prodej byly jedna výměna (dřív se výměna jinak zadat
@@ -452,6 +574,7 @@ router.post('/vymeny/prevest', async (req, res) => {
       'UPDATE vratky SET castka = $2, hodnota_zbozi = $3, zpusob_vraceni = $4, vymena_prodej_id = $5 WHERE id = $1 RETURNING *',
       [vratkaId, p.vratkaCastka, Number(vratka.castka), p.zpusobVraceni, prodejId]
     )).rows[0];
+    await opravitEvidenciPrevodu(client, { prodej, vratka, novyProdej, novaVratka });
     await client.query('INSERT INTO prodejna_opravy (prodej_id, vratka_id, popis, puvodni) VALUES ($1,$2,$3,$4)', [
       prodejId, vratkaId,
       `Převod na výměnu: účtenka #${prodejId} ${Number(prodej.celkem)} → ${p.prodejCelkem} Kč (zápočet ${p.kredit} Kč), vratka #${vratkaId} ${Number(vratka.castka)} → ${p.vratkaCastka} Kč`,

@@ -42,6 +42,7 @@ test('PostgreSQL generálka KRUCKY2026: e-shop i pokladna od 30. 11. 2026, strop
     const prodejna = nacistRouterSMocky('../routes/prodejna.js', { '../db/pool': pool });
     const promoRouter = nacistRouterSMocky('../routes/promo.js', { '../db/pool': pool });
     assert.equal(await vsePripraveno(20000), true);
+    await require('../lib/evidencePlateb').migrovat(pool); // evidence plateb (routes/evidencePlateb.js)
     await pool.query('UPDATE produkty SET cena_pred_slevou = 1000 WHERE id = 2');
 
     const zavolat = async (router, metoda, cesta, req) => { const res = vytvoritRes(); await najitHandler(router, metoda, cesta)({ params: {}, ip: '10.1.1.' + Math.floor(Math.random() * 250), ...req }, res); return res; };

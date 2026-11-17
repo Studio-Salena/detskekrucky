@@ -17,12 +17,16 @@ function vytvoritStav() {
   };
 }
 
+const { obsluhaEvidence } = require('../test-helpers/evidenceMock');
+
 function vytvoritMockClient(stav) {
   return {
     release() {},
     async query(sql, params = []) {
       const s = sql.replace(/\s+/g, ' ').trim();
       if (stav.callLog) stav.callLog.push({ sql: s, params });
+      const ev = obsluhaEvidence(stav, s, params);
+      if (ev) return ev;
       if (s.startsWith('BEGIN') || s.startsWith('COMMIT') || s.startsWith('ROLLBACK')) return {};
       if (s.startsWith('CREATE TABLE') || s.startsWith('ALTER TABLE')) return {};
 
@@ -102,7 +106,7 @@ test('vratka navázaná na prodej se skutečně prodanými kusy projde', async (
   const router = nacistProdejnaSMockPoolem(stav);
   const handler = najitHandler(router, 'post', '/vratky');
   const res = vytvoritRes();
-  await handler({ body: { prodej_id: 10, polozky: [{ produkt_id: 1, velikost: 24, pocet: 2 }], castka: 1000 } }, res);
+  await handler({ body: { prodej_id: 10, polozky: [{ produkt_id: 1, velikost: 24, pocet: 2 }], castka: 1000, zpusob_vraceni: 'hotovost' } }, res);
 
   assert.equal(res.statusCode, 200);
   assert.equal(stav.sklad.get('1_24'), 2);
@@ -113,7 +117,7 @@ test('položka, která v navázaném prodeji nebyla, je odmítnuta', async () =>
   const router = nacistProdejnaSMockPoolem(stav);
   const handler = najitHandler(router, 'post', '/vratky');
   const res = vytvoritRes();
-  await handler({ body: { prodej_id: 10, polozky: [{ produkt_id: 999, velikost: 24, pocet: 1 }], castka: 500 } }, res);
+  await handler({ body: { prodej_id: 10, polozky: [{ produkt_id: 999, velikost: 24, pocet: 1 }], castka: 500, zpusob_vraceni: 'hotovost' } }, res);
 
   assert.equal(res.statusCode, 400);
   assert.equal(stav.vratky.length, 0);
@@ -124,7 +128,7 @@ test('vrácení víc kusů, než bylo v prodeji, je odmítnuto', async () => {
   const router = nacistProdejnaSMockPoolem(stav);
   const handler = najitHandler(router, 'post', '/vratky');
   const res = vytvoritRes();
-  await handler({ body: { prodej_id: 10, polozky: [{ produkt_id: 1, velikost: 24, pocet: 10 }], castka: 5000 } }, res); // prodáno jen 3
+  await handler({ body: { prodej_id: 10, polozky: [{ produkt_id: 1, velikost: 24, pocet: 10 }], castka: 5000, zpusob_vraceni: 'hotovost' } }, res); // prodáno jen 3
 
   assert.equal(res.statusCode, 400);
   assert.equal(stav.vratky.length, 0);
@@ -137,17 +141,17 @@ test('opakovaná vratka zohledňuje už dřív vrácené množství', async () =
 
   // Poprvé vrátit 2 z 3 ks - má projít.
   const res1 = vytvoritRes();
-  await handler({ body: { prodej_id: 10, polozky: [{ produkt_id: 1, velikost: 24, pocet: 2 }], castka: 1000 } }, res1);
+  await handler({ body: { prodej_id: 10, polozky: [{ produkt_id: 1, velikost: 24, pocet: 2 }], castka: 1000, zpusob_vraceni: 'hotovost' } }, res1);
   assert.equal(res1.statusCode, 200);
 
   // Podruhé zkusit vrátit dalšího 2 ks - zbývá jen 1, musí selhat.
   const res2 = vytvoritRes();
-  await handler({ body: { prodej_id: 10, polozky: [{ produkt_id: 1, velikost: 24, pocet: 2 }], castka: 1000 } }, res2);
+  await handler({ body: { prodej_id: 10, polozky: [{ produkt_id: 1, velikost: 24, pocet: 2 }], castka: 1000, zpusob_vraceni: 'hotovost' } }, res2);
   assert.equal(res2.statusCode, 400);
 
   // Podruhé zkusit vrátit přesně zbývající 1 ks - musí projít.
   const res3 = vytvoritRes();
-  await handler({ body: { prodej_id: 10, polozky: [{ produkt_id: 1, velikost: 24, pocet: 1 }], castka: 500 } }, res3);
+  await handler({ body: { prodej_id: 10, polozky: [{ produkt_id: 1, velikost: 24, pocet: 1 }], castka: 500, zpusob_vraceni: 'hotovost' } }, res3);
   assert.equal(res3.statusCode, 200);
 });
 
@@ -157,14 +161,14 @@ test('vratka navázaná na e-shop objednávku se ověřuje proti objednavky_polo
   const handler = najitHandler(router, 'post', '/vratky');
 
   const ok = vytvoritRes();
-  await handler({ body: { objednavka_id: 20, polozky: [{ produkt_id: 5, velikost: 26, pocet: 2 }], castka: 1000 } }, ok);
+  await handler({ body: { objednavka_id: 20, polozky: [{ produkt_id: 5, velikost: 26, pocet: 2 }], castka: 1000, zpusob_vraceni: 'hotovost' } }, ok);
   assert.equal(ok.statusCode, 200);
 
   const stav2 = vytvoritStav();
   const router2 = nacistProdejnaSMockPoolem(stav2);
   const handler2 = najitHandler(router2, 'post', '/vratky');
   const spatne = vytvoritRes();
-  await handler2({ body: { objednavka_id: 20, polozky: [{ produkt_id: 5, velikost: 26, pocet: 3 }], castka: 1500 } }, spatne); // objednáno jen 2
+  await handler2({ body: { objednavka_id: 20, polozky: [{ produkt_id: 5, velikost: 26, pocet: 3 }], castka: 1500, zpusob_vraceni: 'hotovost' } }, spatne); // objednáno jen 2
   assert.equal(spatne.statusCode, 400);
 });
 
@@ -173,7 +177,7 @@ test('vratka bez vazby na prodej/objednávku (ruční oprava skladu) stále proj
   const router = nacistProdejnaSMockPoolem(stav);
   const handler = najitHandler(router, 'post', '/vratky');
   const res = vytvoritRes();
-  await handler({ body: { polozky: [{ produkt_id: 1, velikost: 24, pocet: 1 }], castka: 500, duvod: 'ruční oprava' } }, res);
+  await handler({ body: { polozky: [{ produkt_id: 1, velikost: 24, pocet: 1 }], castka: 500, zpusob_vraceni: 'hotovost', duvod: 'ruční oprava' } }, res);
 
   assert.equal(res.statusCode, 200);
 });
@@ -183,7 +187,7 @@ test('vratka navázaná na objednávku zamyká objednávku (FOR UPDATE) PŘED č
   const router = nacistProdejnaSMockPoolem(stav);
   const handler = najitHandler(router, 'post', '/vratky');
   const res = vytvoritRes();
-  await handler({ body: { objednavka_id: 20, polozky: [{ produkt_id: 5, velikost: 26, pocet: 1 }], castka: 500 } }, res);
+  await handler({ body: { objednavka_id: 20, polozky: [{ produkt_id: 5, velikost: 26, pocet: 1 }], castka: 500, zpusob_vraceni: 'hotovost' } }, res);
 
   assert.equal(res.statusCode, 200);
   const lockIdx = stav.callLog.findIndex(c => c.sql.startsWith('SELECT id, stav FROM objednavky WHERE id') && c.sql.includes('FOR UPDATE'));
@@ -198,7 +202,7 @@ test('vratka na neexistující objednávku vrací 404 a nevznikne', async () => 
   const router = nacistProdejnaSMockPoolem(stav);
   const handler = najitHandler(router, 'post', '/vratky');
   const res = vytvoritRes();
-  await handler({ body: { objednavka_id: 999, polozky: [{ produkt_id: 5, velikost: 26, pocet: 1 }], castka: 500 } }, res);
+  await handler({ body: { objednavka_id: 999, polozky: [{ produkt_id: 5, velikost: 26, pocet: 1 }], castka: 500, zpusob_vraceni: 'hotovost' } }, res);
 
   assert.equal(res.statusCode, 404);
   assert.equal(stav.vratky.length, 0);
@@ -209,7 +213,7 @@ test('zdrojový prodej se při vratce zamyká FOR UPDATE (serializace souběžn�
   const router = nacistProdejnaSMockPoolem(stav);
   const handler = najitHandler(router, 'post', '/vratky');
   const res = vytvoritRes();
-  await handler({ body: { prodej_id: 10, polozky: [{ produkt_id: 1, velikost: 24, pocet: 1 }], castka: 500 } }, res);
+  await handler({ body: { prodej_id: 10, polozky: [{ produkt_id: 1, velikost: 24, pocet: 1 }], castka: 500, zpusob_vraceni: 'hotovost' } }, res);
 
   assert.equal(res.statusCode, 200);
   const lockDotaz = stav.callLog.find(c => c.sql.startsWith('SELECT id, polozky FROM prodejna_prodeje WHERE id'));
@@ -223,7 +227,7 @@ test('vratku na už zrušenou objednávku nelze vytvořit (409) - sklad by se vr
   const router = nacistProdejnaSMockPoolem(stav);
   const handler = najitHandler(router, 'post', '/vratky');
   const res = vytvoritRes();
-  await handler({ body: { objednavka_id: 20, polozky: [{ produkt_id: 5, velikost: 26, pocet: 1 }], castka: 500 } }, res);
+  await handler({ body: { objednavka_id: 20, polozky: [{ produkt_id: 5, velikost: 26, pocet: 1 }], castka: 500, zpusob_vraceni: 'hotovost' } }, res);
 
   assert.equal(res.statusCode, 409);
   assert.match(res.body.chyba, /zrušenou objednávku/);
@@ -247,7 +251,7 @@ test('neplatný počet kusů (desetinný/záporný) je odmítnut i tady', async 
   const router = nacistProdejnaSMockPoolem(stav);
   const handler = najitHandler(router, 'post', '/vratky');
   const res = vytvoritRes();
-  await handler({ body: { prodej_id: 10, polozky: [{ produkt_id: 1, velikost: 24, pocet: -1 }], castka: 500 } }, res);
+  await handler({ body: { prodej_id: 10, polozky: [{ produkt_id: 1, velikost: 24, pocet: -1 }], castka: 500, zpusob_vraceni: 'hotovost' } }, res);
 
   assert.equal(res.statusCode, 400);
 });
@@ -257,7 +261,7 @@ test('DELETE /vratky/:id na existující vratku je zakázán (409) - vratka je i
   const router = nacistProdejnaSMockPoolem(stav);
   const vytvoritHandler = najitHandler(router, 'post', '/vratky');
   const vytvorRes = vytvoritRes();
-  await vytvoritHandler({ body: { prodej_id: 10, polozky: [{ produkt_id: 1, velikost: 24, pocet: 1 }], castka: 500 } }, vytvorRes);
+  await vytvoritHandler({ body: { prodej_id: 10, polozky: [{ produkt_id: 1, velikost: 24, pocet: 1 }], castka: 500, zpusob_vraceni: 'hotovost' } }, vytvorRes);
   assert.equal(vytvorRes.statusCode, 200);
   const skladPredMazanim = stav.sklad.get('1_24');
 

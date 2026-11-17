@@ -1,205 +1,166 @@
-# Krok 2 – jednotná evidence plateb (návrh k odsouhlasení)
+# Krok 2 – jednotná evidence plateb
 
-Stav: **návrh, nic z toho není implementované.** Odesílání do EET (krok 3) tento krok neobsahuje,
-připravuje pro něj jen data. Vychází z kódu větve `fix/pokladna-atomicky-prodej` (commit `1e55088`)
-a z oficiálních podkladů Finanční správy (odkazy na konci).
+Stav: **implementováno ve větvi `fix/pokladna-atomicky-prodej`, nenasazeno.** Odesílání do EET
+(krok 3) není součástí; tento krok pro něj jen připravuje data. Pravidla vycházejí z oficiálních
+podkladů Finanční správy (odkazy na konci).
 
-## 1. Tři vrstvy
+## Rozhodnutí (zadání majitelky / vývojářky, 2026-11-17)
 
-| Vrstva | Co to je | Kde | Mění se? |
+1. Osobní odběr nejde nově označit jako zaplacený bez záznamu platby nebo vazby na existující
+   úhradu. Sklad ani prodej se nevytvoří podruhé.
+2. Skutečné peníze a kredit poukazu se vedou odděleně. U kreditu se uchovává původ:
+   zaplacený, darovaný, vrácený, převedený.
+3. Pravidlo EET pro darovaný kredit zůstává **výslovně nevyřešené** (`eet_pravidlo =
+   'nevyreseno'`), dokud se nedoloží metodika. Nesmí se automaticky zaměnit za zaplacený kredit.
+4. Nové platby se zapisují ve stejné transakci jako související operace a s ochranou proti
+   opakování.
+5. Historie se automaticky nedoplňuje domnělými platbami. Případný import bude oddělený,
+   s označeným původem a neúplnými údaji (zatím neimplementováno).
+6. U dobírky se rozlišuje úhrada zákazníka, pohledávka za dopravcem, poplatek a čisté
+   vyúčtování. Příjem se nezapočítá dvakrát.
+7. Původní finanční záznamy se opravují navázanými záznamy. Současné účetní součty se nemění.
+
+## Vrstvy
+
+| Vrstva | Tabulky | Poznámka |
+|---|---|---|
+| Obchodní doklad | `prodejna_prodeje`, `objednavky`, `vratky`, `darkove_poukazy`, `poukazy_pouziti` | beze změny tvaru; uzávěrky, Účetnictví a reporty čtou jen tyto tabulky |
+| Skutečné peníze | `platby`, `platby_prirazeni` | příjem, vrácení, storno příjmu, storno vrácení |
+| Kredit poukazu | `kredit_pohyby` | nabití, čerpání, připsání (+ storna), s původem a pravidlem EET |
+| Dobírka | `dobirky`, `dobirky_vyuctovani` | pohledávka za dopravcem a její vyúčtování |
+| Opakování | `operace_klice`, `prodejna_klice_zahozene` | výsledek operace podle klíče, zneplatněné klíče pokladny |
+| Událost EET | – | krok 3 (sloupec `eet_pravidlo` ukazuje, jak se kredit promítne) |
+
+Kód: `lib/evidencePlateb.js` (schéma, pravidla, zápisy, `jednou()`), `routes/evidencePlateb.js`
+(`/api/evidence-plateb`: přehled, volná platba, vyúčtování dobírek, kontrola), zápisy v
+`lib/prodejPokladna.js`, `routes/prodejna.js`, `routes/poukazy.js`, `routes/objednavky.js`.
+
+## Schéma (zkráceně)
+
+- **`platby`**: `klic` UNIQUE, `typ` (`prijem`/`vraceni`/`storno_prijmu`/`storno_vraceni`),
+  `castka` > 0, `mena` CZK, `zpusob` (`hotovost`/`karta`/`qr`/`prevod`/`dobirka`),
+  `okolnosti` (`prodejna`/`osobni_odber`/`eshop`/`dopravce`), `kontaktni` (NOT NULL),
+  `prijato_at`, `zdroj_typ`/`zdroj_id` (`prodej`/`objednavka`/`vratka`/`volna`),
+  `urceno_k_cerpani` (část nabíjející kredit), `vraci_id` (vrácení → původní příjem),
+  `opravuje_id` (storno → opravovaný řádek), `puvod = 'provoz'`.
+- **`kredit_pohyby`**: `klic` UNIQUE, `poukaz_id`, `typ` (`nabiti`/`cerpani`/`pripsani` +
+  `storno_*`), `castka`, `puvod` (`zaplaceny`/`darovany`/`vraceny`/`prevedeny`), `kontaktni`,
+  `platba_id` (u zaplaceného nabití), `zdroj_typ`/`zdroj_id`, `opravuje_id`, `eet_pravidlo`
+  (`urceno_cerp_zuct`/`cerp_zuct`/`neeviduje`/`nevyreseno`).
+- **`platby_prirazeni`**: přiřazení volné platby (bez dokladu, např. převod) k objednávce.
+- **`dobirky`**: jedna na objednávku, vazba na platbu úhrady zákazníka a na vyúčtování.
+  **`dobirky_vyuctovani`**: `brutto`, `poplatek`, `netto` (`CHECK netto = brutto − poplatek`).
+- Triggery zakazují `UPDATE` a `DELETE` u `platby`, `platby_prirazeni`, `kredit_pohyby`,
+  `dobirky_vyuctovani`. U `dobirky` jde jen jednou doplnit vyúčtování.
+
+## Pravidlo EET pro kredit (`pravidloEet`)
+
+| Pohyb | Původ / okolnosti | `eet_pravidlo` |
+|---|---|---|
+| nabití | zaplacené kontaktně | `urceno_cerp_zuct` |
+| nabití | zaplacené převodem | `neeviduje` |
+| nabití | prodaný poukaz bez zapsané platby | `nevyreseno` |
+| nabití | darované | `neeviduje` (nic se neplatilo) |
+| čerpání / připsání | u pultu, zaplacený kredit | `cerp_zuct` |
+| čerpání / připsání | u pultu, **darovaný** kredit | **`nevyreseno`** |
+| čerpání | online (e-shop) | `neeviduje` |
+
+Připsání (vrácení zboží na poukaz) má původ `vraceny`, pravidlo se určuje podle původu poukazu.
+Původ `prevedeny` je ve schématu připravený. Dnešní převod zůstatku mezi kartami jen mění
+nosič stejného poukazu, kredit se nepřesouvá, a proto nevzniká žádný pohyb.
+
+## Toky
+
+| Operace | Peníze (`platby`) | Kredit (`kredit_pohyby`) | Opakování |
 |---|---|---|---|
-| **Obchodní doklad** | co se prodalo / vrátilo / vydalo | stávající `prodejna_prodeje`, `objednavky`, `vratky`, `darkove_poukazy` | zůstává, jak je |
-| **Platba** | skutečný pohyb peněz nebo kreditu poukazu: kolik, kdy, čím, za jakých okolností, k jakému dokladu | nová tabulka `platby` | jen přibývají řádky; oprava = nový navázaný řádek |
-| **Událost EET** | jedna evidovaná tržba pro datovou zprávu (může spojit víc plateb téhož okamžiku, např. poukaz + karta) | nová tabulka `eet_udalosti` (v kroku 2 jen výpočet „kandidátů“, žádné odesílání) | v kroku 3 |
+| prodej v pokladně | `prijem` (kromě celé platby poukazem) | `cerpani` | klíč prodeje |
+| poukaz + doplatek | `prijem` doplatku | `cerpani` | klíč prodeje |
+| prodej / nabití poukazu | `prijem` s `urceno_k_cerpani`, zdroj = účtenka | `nabiti` zaplacené | `klic` |
+| darovaný poukaz | – | `nabiti` darované | `klic` |
+| `/poukazy/pouzit` | – | `cerpani` | – (starý endpoint, pokladna ho nevolá) |
+| připsání na poukaz | – | `pripsani` (zdroj vratka, je-li zadaná) | `klic` |
+| vratka | `vraceni` (je-li částka a peněžní způsob), `vraci_id` | – | `klic` |
+| výměna | `prijem` doplatku nebo `vraceni` rozdílu | – | `klic` |
+| převod na výměnu | storno původních + skutečný doplatek/rozdíl | – | – |
+| změna způsobu platby | `storno_prijmu` + nový `prijem` | – | – |
+| smazání účtenky | `storno_prijmu` (doklad se smaže jako dřív) | – | – |
+| poukaz → dar | `storno_prijmu` | `storno_nabiti` + `nabiti` darované | – |
+| zrušení nepoužitého poukazu | `storno_prijmu` | `storno_nabiti` | – |
+| objednávka s poukazem | – | `cerpani` online | (transakce objednávky) |
+| zrušení objednávky | (musí být 0 Kč přijato) | `storno_cerpani`; v `poukazy_pouziti` záporný řádek místo smazání | – |
+| osobní odběr – přijetí platby | `prijem` `osobni_odber`, kontaktní; stav zaplacená | – | `klic` |
+| přiřazení volné platby | `platby_prirazeni` | – | `klic` |
+| vrácení platby objednávky | `vraceni` | – | `klic` |
+| dobírka vybrána | `prijem` `dobirka`, nekontaktní + `dobirky` (pohledávka) | – | `klic` + 1 na objednávku |
+| vyúčtování dobírek | – (žádný nový příjem) | – | `klic`, dobírka jen jednou |
 
-Stávající účetní součty (uzávěrky, Účetnictví, reporty) **dál čtou jen obchodní doklady**. Tabulka
-`platby` se do nich nepřičítá, takže nemůže dojít k dvojímu započtení. Slouží jako samostatná kniha
-plateb a ke kontrole, že obě strany sedí (část 6).
+Pravidla stavů objednávky:
+- U osobního odběru s platbou na prodejně se do stavu `zaplacena`/`dorucena` nově přejde,
+  jen když přijato ≥ celkem.
+- Zrušení objednávky s přijatými penězi je možné až po zápisu vrácení.
 
-## 2. Schéma
+Pokladna, „Zahodit“:
+- „Zahodit“ se pod zámkem klíče zeptá serveru. Uložený prodej se nezahodí a vrátí se
+  (vytiskne se účtenka). Neuložený klíč se zneplatní, takže pozdní pokus nic neuloží.
+- Stejný nákup (otisk obsahu) do 30 minut se uloží jen s výslovným potvrzením.
 
-### `platby` (kniha plateb, neměnná)
+## Účetní součty
 
-| Sloupec | Typ | Význam |
-|---|---|---|
-| `id` | serial PK | |
-| `klic` | text UNIQUE NOT NULL | proti duplicitám (z pokladny UUID pokusu; u migrace `mig:<zdroj>:<id>:<typ>`) |
-| `typ` | text NOT NULL | `prijem` (nové peníze od zákazníka), `vraceni` (peníze vrácené zákazníkovi), `cerpani` (kredit poukazu použitý k úhradě), `pripsani` (kredit vrácený na poukaz) |
-| `castka` | numeric(12,2) NOT NULL, > 0 | vždy kladná, směr určuje `typ` |
-| `mena` | char(3) NOT NULL DEFAULT `CZK` | |
-| `urceno_k_cerpani` | numeric(12,2) NULL | část příjmu, která nabíjí kredit (prodej poukazu, nabití karty); jinak NULL |
-| `prijato_at` | timestamptz NULL | okamžik přijetí / vrácení peněz; NULL = neznámý (jen historie) |
-| `zpusob` | text NOT NULL | `hotovost`, `karta`, `qr`, `prevod`, `dobirka`, `poukaz`, `neznamy` |
-| `okolnosti` | text NOT NULL | `prodejna` (u pultu), `osobni_odber` (vyzvednutí e-shopové objednávky), `eshop` (online, bez kontaktu), `dopravce` (dobírka), `neznamo` |
-| `kontaktni` | boolean NULL | platba při osobním kontaktu; NULL = neznámo. Ukládá se, ne odvozuje, aby šlo zpětně doložit, z čeho se vycházelo |
-| `zdroj_typ`, `zdroj_id` | text, int NOT NULL | `prodej`, `objednavka`, `vratka`, `poukaz` + id dokladu |
-| `poukaz_id` | int NULL | u `cerpani`, `pripsani` a nabití |
-| `opravuje_id` | int NULL → `platby.id` | oprava / storno navázané na původní platbu |
-| `puvod` | text NOT NULL | `pokladna`, `admin`, `migrace` |
-| `uplnost` | text NOT NULL DEFAULT `uplne` | `uplne` / `neuplne` (chybí způsob, čas nebo okolnosti; jen historie) |
-| `poznamka` | text NULL | |
-| `vytvoreno` | timestamptz DEFAULT now() | |
+Nemění se. Kniha plateb se do nich nepřičítá a doklady mají stejný tvar.
 
-- Trigger zakáže `UPDATE` i `DELETE` (stejně jako u `faktury`). Oprava = nový řádek s `opravuje_id`
-  a opačným typem (např. `vraceni` proti `prijem`).
-- `CHECK`: `cerpani`/`pripsani` ⇒ `zpusob = 'poukaz'` a `poukaz_id NOT NULL`; `urceno_k_cerpani <= castka`.
-- Index `(zdroj_typ, zdroj_id)`, `(prijato_at)`.
+Jediná změna v dokladech: zrušení objednávky s poukazem dřív mazalo řádek v `poukazy_pouziti`.
+Nově zůstane a přidá se záporný řádek, takže součet čerpání zůstává stejný. Ověřeno testem.
 
-### `poukazy_pouziti` (stávající)
+Přehled **Účetnictví → 🔎 Kontrola plateb** (`GET /api/evidence-plateb/kontrola`) porovná doklady
+od prvního zápisu evidence:
+- příjem účtenky,
+- čerpání poukazu,
+- vrácené peníze z vratek,
+- zůstatek poukazu proti kreditu.
 
-Zůstává jako kniha kreditu poukazu (zůstatek). Každý nový řádek dostane `platba_id` → `platby.id`,
-aby se čerpání v knize plateb a v historii poukazu nedalo rozpojit.
+## Migrace a návrat
 
-### `eet_udalosti` (jen struktura; plnění v kroku 3)
+- Tabulky a triggery zakládá idempotentně `routes/evidencePlateb.js` při startu (dvojí běh
+  ověřen). Ostatní routy do nich jen zapisují.
+- Historie se nedoplňuje. Kontrola plateb proto začíná prvním zápisem.
+- Před nasazením: záloha produkční DB (`pg_dump`), zkušební start na její kopii, Kontrola plateb
+  a porovnání součtů Účetnictví před a po.
+- Návrat: předchozí verze kódu tabulky evidence ignoruje. Data dokladů zůstávají v původním
+  tvaru, takže stará verze funguje dál.
 
-`id`, `porad_cis` (unikátní, pevné), `id_pokl`, `id_jednotky`, `dat_trzby`, `celk_trzba`,
-`urceno_cerp_zuct`, `cerp_zuct`, `stav` (`ceka`/`potvrzeno`/`chyba`/`neeviduje`), `pok`,
-`lhuta_do` (= `dat_trzby` + 48 h) + vazební tabulka `eet_udalosti_platby` a tabulka pokusů
-`eet_pokusy` (`uuid_zpravy` nový pro každý pokus, `dat_odesl`, `prvni_zaslani`, výsledek, kód chyby).
-Hodnoty, které tvoří jednoznačný kód tržby (`eic|id_jednotky|id_pokl|porad_cis|dat_trzby|celk_trzba`),
-se při opakování **nesmí změnit**; mění se jen UUID a `prvni_zaslani=false`.
+## Testy
 
-## 3. Které toky vytvoří jaké platby
+- `test/evidence-plateb-postgres.test.js`: migrace 2×, triggery neměnnosti, 5× stejný klíč
+  souběžně (prodej, platba objednávky), rollback po chybě zápisu platby, poukazy (prodej 3×
+  souběžně, dar, čerpání daru = `nevyreseno`, připsání 2×, dodatečný dar), osobní odběr (blokace
+  zaplacení, platba bez prodeje a druhého odečtu skladu, přeplatek, zrušení až po vrácení,
+  přiřazení volné platby), dobírka (3× souběžně, vyúčtování brutto/poplatek/netto, druhé
+  vyúčtování odmítnuto, příjem jen jednou), opravy (změna způsobu, smazání), vratka a výměna 2×,
+  kontrola (nula rozdílů, umělý rozdíl nalezen), účetní součty beze změny.
+- `test/prodejna-prodej-postgres.test.js`: „Zahodit“ souběžně s pozdním požadavkem (6×), ztracená
+  odpověď → Zahodit → nové zadání = žádný druhý prodej.
+- `test/prodejna-doplatek.test.js`: totéž v paměti + evidence z pokladny + statická kontrola adminu.
+- Prohlížeč (Chrome, lokální server, dočasná DB): pokladna 8 scénářů včetně Zahodit; osobní odběr
+  v detailu objednávky (blokace Zaplaceno, platba po ztracené odpovědi jednou).
 
-Kontaktní = při osobním kontaktu (podléhá EET). „EET kandidát“ = jak by vypadala datová zpráva podle
-oficiálního popisu položek; v kroku 2 se jen počítá a ukazuje, neodesílá se.
+## Otevřené otázky
 
-| Tok (endpoint) | Řádky v `platby` | EET kandidát |
-|---|---|---|
-| Prodej v pokladně hotově / kartou / QR (`POST /api/prodejna`) | `prijem` (částka = `celkem`) | `celk_trzba` = částka |
-| Celý nákup poukazem | `cerpani` (poukaz) | `celk_trzba` = `cerp_zuct` = čerpaná částka |
-| Poukaz + doplatek (1 200 = 1 000 poukaz + 200 karta) | `cerpani` 1 000 + `prijem` 200, stejný `prijato_at` | **jedna** zpráva: `celk_trzba` 1 200, `cerp_zuct` 1 000 |
-| Prodej poukazu / nabití karty (`POST /api/poukazy`) | `prijem` s `urceno_k_cerpani` = hodnota | `celk_trzba` = `urceno_cerp_zuct` = hodnota (je-li platba kontaktní) |
-| Darovaný poukaz (`druh = dar`) | žádná (peníze nepřišly) | žádná; **čerpání daru – otázka pro účetní (část 8)** |
-| Osobní odběr, platba na prodejně (nové – část 4) | `prijem`, `okolnosti = osobni_odber`, kontaktní | `celk_trzba` = přijatá částka (bez části zaplacené poukazem online) |
-| Objednávka převodem / online poukazem | `prijem` `prevod` / `cerpani`, `okolnosti = eshop`, nekontaktní | neeviduje se |
-| Dobírka | `prijem` `dobirka`, `okolnosti = dopravce`, nekontaktní | neeviduje se |
-| Vratka – peníze zpět (`POST /api/prodejna/vratky`) | `vraceni` se `zpusob_vraceni` | záporná `celk_trzba`, pokud byla původní tržba evidovaná |
-| Vratka – částka zpět na poukaz (`POST /api/poukazy/:id/pripsat`) | `pripsani` navázané na vratku | `celk_trzba` = `cerp_zuct` = −částka |
-| Výměna (`POST /api/prodejna/vymeny`) | jen skutečný rozdíl: `prijem` (doplatek) nebo `vraceni` (přeplatek), nic při 0 | jen doplatek / vrácený rozdíl |
-| Převod na výměnu (`POST /vymeny/prevest`) | opravné řádky k původní platbě vratky a prodeje (`opravuje_id`), původní zůstanou | v kroku 3 zakázat pro už evidované tržby |
-
-## 4. Osobní odběr – zaznamenání skutečné úhrady
-
-Dnes se platba na prodejně zapíše jen změnou stavu objednávky na `zaplacena`. Chybí částka, způsob
-i čas. Návrh:
-
-- V detailu objednávky (jen `doprava = osobni_odber`, `platba = na_prodejne`, ne zrušená) přibude
-  tlačítko **„Přijmout platbu“**: způsob hotovost / karta / QR, přijatá hotovost, částka předvyplněná
-  = zbývá uhradit (`celkem` minus už přijaté platby).
-- `POST /api/objednavky/:id/platby { klic, zpusob, castka, hotovost_prijato }` v jedné transakci:
-  zámek objednávky, kontrola, že nejde o přeplatek ani o zrušenou objednávku, zápis do `platby`,
-  stav `zaplacena` + `zaplaceno_at`. **Nevzniká prodej v pokladně a sklad se neodečítá** (už se
-  odečetl při objednání).
-- Stejný `klic` = vrácení uloženého (stejná ochrana jako u pokladny, i po obnovení stránky).
-- Volitelně doklad o přijetí platby (58 mm, stejná tiskárna jako účtenka).
-- Ruční změna stavu na `zaplacena` u osobního odběru bez platby: upozornění „Platba není
-  zaznamenaná“. Zákaz zatím ne, rozhodnutí je na majitelce.
-
-## 5. Opravy stávajících toků (původní záznamy zachovat)
-
-Tyhle akce dnes finanční záznam mažou nebo přepisují. Návrh je nahradit je navázaným záznamem:
-
-| Dnes | Návrh |
-|---|---|
-| `PATCH /poukazy/:id/dar` smaže prodej poukazu | prodej zůstane, vznikne `vraceni` (peníze vráceny) nebo oprava „omylem zapsaný prodej“ s důvodem |
-| `DELETE /poukazy/:id` u nepoužitého poukazu smaže poukaz i prodej | stav `zruseny` + opravná platba; mazat jen poukaz bez jakékoli platby |
-| `PUT /prodejna/:id` mění `platba` | změna způsobu = oprava (`opravuje_id`) se starou i novou hodnotou; účtenka beze změny |
-| `DELETE /prodejna/:id` | jen bez navázané platby; jinak storno (opravná platba) |
-| `POST /poukazy` (prodej poukazu) | doplnit `klic` proti dvojímu vydání (dvojklik = dva poukazy) |
-
-## 6. Účetní součty a kontrola
-
-- **Uzávěrky, Účetnictví a reporty se nemění.** Čtou stejné tabulky jako dnes. Osobní odběr se dál
-  počítá v e-shopu při objednání, platba ho jen doplní a do prodejny se nepřičítá.
-- Nový přehled **Reporty → Kontrola plateb** (jen čtení), po dnech:
-  - prodejna: Σ `prodejna_prodeje.celkem` (bez `platba = 'poukaz'`) proti Σ `prijem` z pokladny;
-  - poukazem: Σ `celkem` s `platba = 'poukaz'` + Σ `poukaz_castka` proti Σ `cerpani`;
-  - vratky: Σ `vratky.castka` proti Σ `vraceni`;
-  - hotovost: hotovost z uzávěrky proti Σ hotovostních `prijem` − `vraceni`.
-  - Každý rozdíl ukáže konkrétní doklad.
-
-## 7. Migrace
-
-1. **Záloha produkční DB** (`pg_dump` na Forpsi VPS) a zkušební běh na její kopii, nikdy rovnou
-   na produkci.
-2. Při startu serveru idempotentní `CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS`
-   + trigger (opakovatelné jako ostatní migrace). Od nasazení zapisují nové toky do `platby`
-   ve stejné transakci jako doklad.
-3. **Doplnění historie** jako samostatný krok spouštěný ručně (`node scripts/platby-historie.js
-   --nanecisto` → přehled, pak ostrý běh). Idempotentní díky `klic = mig:…`:
-   - prodeje v pokladně: `zpusob` z uloženého `platba` (bylo zaznamenáno při prodeji),
-     `prijato_at = datum`, `okolnosti = prodejna`, `kontaktni = true`; plná platba poukazem →
-     `cerpani`, doplatek → `cerpani` + `prijem`;
-   - prodej poukazu: `prijem` s `urceno_k_cerpani`, způsob z uloženého `platba`;
-   - vratky: `zpusob_vraceni`; kde chybí (starší vratky) → `zpusob = neznamy`, `uplnost = neuplne`;
-   - objednávky: způsob z objednávky (`prevod`/`dobirka`), čas = `zaplaceno_at`, pokud existuje,
-     jinak NULL a `neuplne`; **osobní odběry z minulosti → `zpusob = neznamy`, `okolnosti =
-     osobni_odber`, `kontaktni = NULL`** (způsob úhrady na prodejně se nikde nezapisoval);
-   - nic se nedopočítává ani neodhaduje; neznámé zůstává neznámé a je vidět v přehledu.
-4. Po migraci musí Kontrola plateb (část 6) vyjít bez rozdílu u všech úplných záznamů. Rozdíly
-   u neúplných se jen vypíšou.
-5. Návrat: nové tabulky jde odpojit vypínačem `PLATBY_ZAPIS=false` (toky pak jen nezapisují do
-   `platby`), stávající data a součty nejsou dotčené.
-
-## 8. Otevřené otázky (majitelka / účetní)
-
-1. **Darovaný poukaz:** při vydání žádná platba. Má se čerpání daru evidovat jako `cerp_zuct`?
-   Podle popisu položek podléhá evidenci čerpání kreditu, dar ale není předchozí platbou.
-2. **EET OFF:** splňuje majitelka podmínky (první pásmo paušálního režimu, příjmy do 1 mil. Kč,
-   přihláška do 10. dne období)? Na kroku 2 to nic nemění.
-3. **Ruční „zaplaceno“ u osobního odběru:** jen upozornit, nebo vyžadovat zápis platby?
-4. **Historie:** doplnit celou, nebo jen od zvoleného data?
-5. **Dobírka:** zapisovat příjem až podle výpisu od dopravce, nebo stačí stav `dorucena`?
-
-## 9. Testovací scénáře (krok 2)
-
-Unit + izolovaný PostgreSQL (`TEST_PG_URL`) + prohlížeč (stejný postup jako u kroku 1):
-
-1. Každý tok z tabulky v části 3 vytvoří přesně očekávané řádky (typ, částka, způsob, okolnosti,
-   kontaktní, zdroj, poukaz) ve stejné transakci jako doklad. Chyba uprostřed = nic.
-2. Poukaz + doplatek: dva řádky se stejným `prijato_at`, kandidát EET = jedna zpráva 1 200 / 1 000.
-3. Osobní odběr: platba se zapíše jednou (5× stejný klíč souběžně), nevznikne prodej, sklad se
-   nezmění, přeplatek a zrušená objednávka se odmítnou, ztráta odpovědi + obnovení stránky.
-4. Neměnnost: `UPDATE`/`DELETE` na `platby` selže (trigger), oprava vytvoří navázaný řádek.
-5. Opravy z části 5: dar, zrušení poukazu, změna způsobu platby, smazání prodeje – původní řádky
-   zůstanou, opravný řádek sedí.
-6. Migrace dvakrát za sebou = stejný výsledek; historické osobní odběry jsou `neznamy`/`neuplne`,
-   nic se nedopočítá.
-7. Kontrola plateb: na datech po migraci nulové rozdíly u úplných záznamů; uměle vložený rozdíl
-   se ukáže u správného dokladu.
-8. Uzávěrky a Účetnictví: stejné součty před a po nasazení na stejných datech (snímek z kopie
-   produkční DB).
-9. Kandidáti EET: příklady z oficiálního popisu položek (stravenka + karta, nabití a čerpání,
-   vratka na kartu, výměna s doplatkem) dávají stejné hodnoty polí.
-
-## 10. Dotčené obrazovky a endpointy
-
-| Obrazovka (admin.html) | Změna |
-|---|---|
-| Prodejna → pokladna | beze změny ovládání; zápis platby proběhne na serveru |
-| E-shop → detail objednávky | tlačítko „Přijmout platbu“, seznam plateb objednávky, upozornění u ručního „zaplaceno“ |
-| Prodejna → Vratky / Výměna | způsob vrácení povinný u nových vratek (už je), zápis platby |
-| Dárkové poukazy (vydání, nabití, připsání, dar, zrušení) | zápis platby; dar a zrušení přes opravu místo mazání |
-| Reporty → Kontrola plateb | nový přehled (jen čtení) |
-| Detail prodeje / účtenky | seznam navázaných plateb a oprav |
-
-| Endpoint | Změna |
-|---|---|
-| `POST /api/prodejna`, `/vratky`, `/vymeny`, `/vymeny/prevest`, `PUT`/`DELETE /api/prodejna/:id` | zápis / oprava v `platby` |
-| `POST /api/poukazy`, `/pouzit`, `/:id/pripsat`, `PATCH /:id/dar`, `DELETE /:id` | zápis / oprava; `klic` u vydání |
-| `POST /api/objednavky` (online poukaz), `PATCH /:id/stav` (zrušení vrací čerpání) | zápis / oprava |
-| **nový** `POST /api/objednavky/:id/platby`, `GET /api/objednavky/:id/platby` | osobní odběr |
-| **nový** `GET /api/platby?od&do&zdroj`, `GET /api/platby/kontrola?od&do` | přehled a kontrola (admin) |
+1. **Darovaný kredit v EET:** metodika ke čerpání daru (a připsání na darovaný poukaz).
+2. **Prodaný poukaz bez zapsané platby** (žádost z e-shopu bez platby, dřívější postupy):
+   `nevyreseno`. Dořešit, jak se platba za takový poukaz zapisuje.
+3. **Import historie:** zda vůbec. Pokud ano, oddělená tabulka s `puvod = 'import'` a `uplnost`.
+4. **Vyúčtování dobírek v adminu:** API hotové, obrazovka (výběr dobírek, poplatek) zatím ne.
+   Totéž přiřazení volné platby (API ano, obrazovka jen v API).
+5. **Mazání účtenek a převod na výměnu** po zapnutí EET zakázat. Evidovanou tržbu jde opravit
+   jen záporným záznamem.
+6. **Poukaz s kombinovaným původem** (darovaný poukaz s připsaným vráceným kreditem): čerpání se
+   přiřazuje podle původu poukazu, ne podle jednotlivých vkladů.
 
 ## Zdroje (oficiální)
 
-- Popis položek datové zprávy EET 2.0, verze 1.0 z 5. 10. 2026 – kap. 1 (UUID), 3 (první zaslání),
-  10 (pořadové číslo), 12 (celková částka, doplatky), 13–14 (nabití a čerpání, příklady 1–4),
-  4 Storno a oprava (příklady 1–3): <https://eet.gov.cz/assets/cs/cmsmedia/pro-vyvojare/EET_popis_polozek_datove_zpravy.pdf>
-- Popis datového rozhraní v1.2 z 25. 8. 2026 – kap. 2.2 (kritické a propustné kontroly),
-  4 (jednoznačný kód tržby): <https://eet.gov.cz/assets/cs/cmsmedia/pro-vyvojare/EET_popis_rozhrani_v1.2.pdf>
-- XSD schéma v4.1: <https://eet.gov.cz/assets/cs/cmsmedia/pro-vyvojare/EETXMLSchema.xsd>
-- Chyby a jejich řešení (48 h po výpadku): <https://eet.gov.cz/cs/zacinam-s-eet/chyby-a-jejich-reseni>
+- Popis položek datové zprávy EET 2.0 (5. 10. 2026), kap. 12–14 a 4 (storno):
+  <https://eet.gov.cz/assets/cs/cmsmedia/pro-vyvojare/EET_popis_polozek_datove_zpravy.pdf>
+- Popis datového rozhraní v1.2 (25. 8. 2026), kap. 2.2 a 4:
+  <https://eet.gov.cz/assets/cs/cmsmedia/pro-vyvojare/EET_popis_rozhrani_v1.2.pdf>
+- Chyby a jejich řešení (48 h): <https://eet.gov.cz/cs/zacinam-s-eet/chyby-a-jejich-reseni>
 - EET OFF: <https://eet.gov.cz/cs/eet-off/co-je-rezim-eet-off>
-- Harmonogram: <https://eet.gov.cz/cs/o-eet/jaky-je-harmonogram-eet-2-0>

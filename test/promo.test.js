@@ -200,13 +200,17 @@ test('faktura ukáže řádek slevového kódu, opravný doklad ho vrátí', () 
 
 // ─── pokladna v prodejně ───
 
+const { obsluhaEvidence } = require('../test-helpers/evidenceMock');
+
 function mockPoolProdejna(stav) {
   const client = {
     release() {},
     async query(sql, params = []) {
       const s = sql.replace(/\s+/g, ' ').trim();
       if (/^(BEGIN|COMMIT|ROLLBACK)/.test(s) || s.startsWith('CREATE') || s.startsWith('ALTER')) return {};
-      // jednotný prodej (lib/prodejPokladna.js): klíč, sklad, mazání
+      // jednotný prodej (lib/prodejPokladna.js): klíč, sklad, mazání, evidence plateb
+      const ev = obsluhaEvidence(stav, s, params);
+      if (ev) return ev;
       if (s.startsWith('SELECT pg_advisory_xact_lock')) return {};
       if (s.startsWith('SELECT * FROM darkove_poukazy')) return { rows: (stav.poukazy || []).filter(x => x.kod === params[0]) };
       if (s.startsWith('SELECT * FROM poukazove_karty')) return { rows: [] };

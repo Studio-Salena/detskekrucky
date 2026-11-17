@@ -5,6 +5,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { pripravitProdej, variantyKOdectu } = require('../lib/prodejPokladna');
+const { obsluhaEvidence } = require('../test-helpers/evidenceMock');
 
 function vytvoritStav(poukaz, sklad) {
   return {
@@ -28,6 +29,8 @@ function vytvoritMockClient(stav) {
       if (s === 'ROLLBACK') { tx = null; return {}; }
       if (/^(CREATE|ALTER)/.test(s) || s.startsWith('SELECT pg_advisory_xact_lock')) return {};
       const d = db();
+      const ev = obsluhaEvidence(d, s, params);
+      if (ev) return ev;
       if (s.startsWith('SELECT * FROM prodejna_prodeje WHERE klic')) return { rows: d.prodeje.filter(p => p.klic === params[0]) };
       if (s.startsWith('SELECT pocet_kusu FROM sklad')) return { rows: d.sklad.filter(x => x.produkt_id === params[0] && x.velikost === params[1]) };
       if (s.startsWith('UPDATE sklad SET pocet_kusu')) { d.sklad.find(x => x.produkt_id === params[0] && x.velikost === params[1]).pocet_kusu -= params[2]; return {}; }
@@ -35,8 +38,8 @@ function vytvoritMockClient(stav) {
       if (s.startsWith('SELECT * FROM darkove_poukazy')) return { rows: d.poukazy.filter(p => p.kod === params[0] || p.ean === params[0]).map(p => ({ ...p })) };
       if (s.startsWith('SELECT * FROM poukazove_karty')) return { rows: [] };
       if (s.startsWith('INSERT INTO prodejna_prodeje')) {
-        const [zakaznik, platba, poznamka, polozky, celkem, mezisoucet, sleva, sleva_popis, hotovost_prijato, hotovost_vraceno, poukaz_castka, poukaz_kod, klic, klic_otisk] = params;
-        const prodej = { id: 50 + d.prodeje.length, zakaznik, platba, polozky: JSON.parse(polozky), celkem, mezisoucet, sleva, sleva_popis, hotovost_prijato, hotovost_vraceno, poukaz_castka, poukaz_kod, klic, klic_otisk };
+        const [zakaznik, platba, poznamka, polozky, celkem, mezisoucet, sleva, sleva_popis, hotovost_prijato, hotovost_vraceno, poukaz_castka, poukaz_kod, klic, klic_otisk, obsah_otisk] = params;
+        const prodej = { id: 50 + d.prodeje.length, datum: new Date(), zakaznik, platba, polozky: JSON.parse(polozky), celkem, mezisoucet, sleva, sleva_popis, hotovost_prijato, hotovost_vraceno, poukaz_castka, poukaz_kod, klic, klic_otisk, obsah_otisk };
         d.prodeje.push(prodej);
         return { rows: [prodej] };
       }
@@ -205,4 +208,75 @@ test('stará pokladna (okno otevřené před nasazením): /sklad/odecist s pozn�
   res = vytvoritRes();
   await handler({ body: { produkt_id: 1, velikost: 25, pocet: 1, poznamka: 'Odečtení z adminu' } }, res);
   assert.equal(res.statusCode, 200);
+});
+
+// ── „Zahodit“ nepotvrzený prodej a stejný nákup zadaný znovu ──
+function nacistHandler(stav, metoda, cesta) {
+  const routePath = require.resolve('../routes/prodejna.js');
+  const poolPath = require.resolve('../db/pool');
+  delete require.cache[routePath];
+  delete require.cache[poolPath];
+  const pool = { async connect() { return vytvoritMockClient(stav); }, async query(sql, p) { return vytvoritMockClient(stav).query(sql, p); } };
+  require.cache[poolPath] = { id: poolPath, filename: poolPath, loaded: true, exports: pool };
+  const router = require(routePath);
+  delete require.cache[poolPath];
+  delete require.cache[routePath];
+  const layer = router.stack.find(l => l.route && l.route.path === cesta && l.route.methods[metoda]);
+  return layer.route.stack[layer.route.stack.length - 1].handle;
+}
+
+test('Zahodit po ztracené odpovědi: server prodej uložil → nezahodí se, vrátí účtenku; nové zadání téhož nákupu se bez potvrzení neuloží', async () => {
+  const stav = vytvoritStav();
+  const nakup = { ...PRODEJ(), platba: 'karta' };
+  // 1) server prodej uloží, odpověď se ztratí (pokladna ji nedostane)
+  assert.equal((await prodat(stav, nakup)).statusCode, 200);
+  // 2) obsluha zvolí Zahodit → server pod stejným klíčem prodej najde
+  const res = vytvoritRes();
+  await nacistHandler(stav, 'post', '/nedokonceny/:klic/zahodit')({ params: { klic: nakup.klic } }, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.stav, 'ulozeny');
+  assert.equal(res.body.prodej.id, stav.prodeje[0].id);
+  assert.equal(stav.evidence.zahozene.length, 0, 'uložený prodej se nezahazuje');
+  // 3) obsluha zadá stejný nákup znovu (nový klíč) → upozornění, nic se neuloží
+  const znovu = await prodat(stav, { ...nakup, klic: 'test-znovu-1' });
+  assert.equal(znovu.statusCode, 409);
+  assert.equal(znovu.body.mozna_duplicita, true);
+  assert.equal(znovu.body.ulozeny_prodej_id, stav.prodeje[0].id);
+  assert.equal(stav.prodeje.length, 1, 'žádný druhý prodej');
+  assert.equal(stav.sklad[0].pocet_kusu, 2, 'sklad odečtený jen jednou');
+  assert.equal(stav.evidence.platby.length, 1, 'jedna platba');
+  // 4) jen výslovné potvrzení „je to další nákup“ uloží druhý
+  const potvrzeny = await prodat(stav, { ...nakup, klic: 'test-znovu-1', potvrdit_duplicitu: true });
+  assert.equal(potvrzeny.statusCode, 200);
+  assert.equal(stav.prodeje.length, 2);
+});
+
+test('Zahodit, když se požadavek na server nedostal: klíč se zneplatní a pozdní pokus nic neuloží', async () => {
+  const stav = vytvoritStav();
+  const nakup = { ...PRODEJ(), platba: 'karta' };
+  const res = vytvoritRes();
+  await nacistHandler(stav, 'post', '/nedokonceny/:klic/zahodit')({ params: { klic: nakup.klic } }, res);
+  assert.equal(res.body.stav, 'zahozeny');
+  const pozde = await prodat(stav, nakup);
+  assert.equal(pozde.statusCode, 409);
+  assert.equal(pozde.body.zahozeno, true);
+  assert.deepEqual([stav.prodeje.length, stav.sklad[0].pocet_kusu, stav.evidence.platby.length], [0, 3, 0]);
+});
+
+test('evidence z pokladny: příjem jen skutečných peněz, čerpání poukazu jako kredit s původem', async () => {
+  const stav = vytvoritStav({ druh: 'dar' });
+  await prodat(stav, { ...PRODEJ(), platba: 'poukaz', poukaz_kod: 'DK-AAAA-BBBB', doplatek_platba: 'hotovost', hotovost_prijato: 1000 });
+  assert.deepEqual(stav.evidence.platby.map(p => [p.typ, p.castka, p.zpusob, p.okolnosti, p.kontaktni, p.zdroj_typ]), [['prijem', 600, 'hotovost', 'prodejna', true, 'prodej']]);
+  assert.deepEqual(stav.evidence.kredit_pohyby.map(k => [k.typ, k.castka, k.puvod, k.eet_pravidlo]), [['cerpani', 1000, 'darovany', 'nevyreseno']],
+    'darovaný kredit: pravidlo EET výslovně nevyřešené');
+});
+
+test('admin: Zahodit se ptá serveru a bez spojení nezahodí; možná duplicita jen s potvrzením', () => {
+  const html = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'admin.html'), 'utf8').replace(/\r\n/g, '\n');
+  const z = html.slice(html.indexOf('async function zahoditNedokoncenyProdej()'), html.indexOf('\nfunction prepnoutPoukazPole()'));
+  assert.match(z, /\/prodejna\/nedokonceny\/' \+ encodeURIComponent\(z\.prodej\.klic\) \+ '\/zahodit'/);
+  const ulozeni = z.indexOf("data.stav === 'ulozeny'"), smazani = z.indexOf('smazatNedokoncenyProdej()');
+  assert.ok(ulozeni > 0 && smazani > z.indexOf('if (!res.ok)'), 'klíč se maže až po odpovědi serveru');
+  assert.match(z, /catch \(e\) \{\s*msg\.innerHTML = '<div class="error-msg">Bez spojení/);
+  assert.match(html, /data\.mozna_duplicita && !prodej\.potvrdit_duplicitu/);
 });

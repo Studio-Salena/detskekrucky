@@ -54,7 +54,7 @@ function klientSPoukazem(p) {
       if (/FROM darkove_poukazy WHERE/.test(sql)) return { rows: p ? [p] : [] };
       if (/^UPDATE darkove_poukazy/.test(sql)) { zapisy.push(sql); if (/zustatek=\$1/.test(sql)) { p.zustatek = params[0]; p.stav = params[1]; } else { p.zustatek = 0; p.stav = 'pouzity'; } return { rows: [] }; }
       if (/^INSERT INTO prodejna_prodeje/.test(sql)) return { rows: [{ id: 9 }] };
-      if (/^INSERT INTO poukazy_pouziti/.test(sql)) { zapisy.push(sql); return { rows: [] }; }
+      if (/^INSERT INTO poukazy_pouziti/.test(sql)) { zapisy.push(sql); return { rows: [{ id: 1 }] }; }
       return { rows: [] };
     },
     release() {}

@@ -47,6 +47,7 @@ test('PostgreSQL pokladna: jedna transakce, ochrana před dvojím prodejem, soub
     const prodejna = nacistRouterSMocky('../routes/prodejna.js', { '../db/pool': pool });
     nacistRouterSMocky('../routes/promo.js', { '../db/pool': pool });
     assert.equal(await vsePripraveno(20000), true);
+    await require('../lib/evidencePlateb').migrovat(pool); // evidence plateb (routes/evidencePlateb.js)
 
     const zavolat = async (metoda, cesta, req) => { const res = vytvoritRes(); await najitHandler(prodejna, metoda, cesta)({ params: {}, ...req }, res); return res; };
     const prodat = body => zavolat('post', '/', { body });
@@ -68,14 +69,14 @@ test('PostgreSQL pokladna: jedna transakce, ochrana před dvojím prodejem, soub
     assert.deepEqual([Number(prvni.celkem), Number(prvni.hotovost_prijato), Number(prvni.hotovost_vraceno), prvni.platba], [1200, 2000, 800, 'hotovost']);
 
     // 2) poslední kus: 5 různých prodejů souběžně, projde jen jeden, sklad nejde do minusu
-    const posledni = await Promise.all([1, 2, 3, 4, 5].map(i => prodat({ klic: 'posledni-kus-' + i, platba: 'karta', polozky: [{ produkt_id: 3, nazev: 'Poslední kus', velikost: '30', pocet: 1, cena: 1000 }] })));
+    const posledni = await Promise.all([1, 2, 3, 4, 5].map(i => prodat({ klic: 'posledni-kus-' + i, potvrdit_duplicitu: true, platba: 'karta', polozky: [{ produkt_id: 3, nazev: 'Poslední kus', velikost: '30', pocet: 1, cena: 1000 }] })));
     assert.equal(posledni.filter(r => r.statusCode === 200).length, 1);
     assert.equal(posledni.filter(r => r.statusCode === 400).length, 4);
     assert.equal(await kusu(3, '30'), 0);
 
     // 3) jeden poukaz 1000 Kč, tři souběžné nákupy po 600 Kč celým poukazem: projde jen jeden
     const sandal = [{ produkt_id: 2, nazev: 'Sandál', velikost: '24.5', pocet: 1, cena: 600 }];
-    const poukazem = await Promise.all([1, 2, 3].map(i => prodat({ klic: 'poukaz-soubeh-' + i, platba: 'poukaz', poukaz_kod: 'DK-AAAA-0001', celkem: 600, polozky: sandal })));
+    const poukazem = await Promise.all([1, 2, 3].map(i => prodat({ klic: 'poukaz-soubeh-' + i, potvrdit_duplicitu: true, platba: 'poukaz', poukaz_kod: 'DK-AAAA-0001', celkem: 600, polozky: sandal })));
     assert.equal(poukazem.filter(r => r.statusCode === 200).length, 1, JSON.stringify(poukazem.map(r => r.body)));
     assert.deepEqual(await poukaz('DK-AAAA-0001'), { zustatek: '400', stav: 'aktivni' });
     assert.equal(Number((await pool.query('SELECT SUM(castka) AS s FROM poukazy_pouziti WHERE poukaz_id = 1')).rows[0].s), 600);
@@ -153,6 +154,27 @@ test('PostgreSQL pokladna: jedna transakce, ochrana před dvojím prodejem, soub
     stare.push(res.statusCode);
     assert.deepEqual(stare, [409, 409, 409], 'starý odečet i starý prodej odmítnuté');
     assert.deepEqual(await snimek(), pred, 'po starém postupu nezůstal žádný odečet skladu, prodej ani čerpání');
+
+    // 8b) „Zahodit“ souběžně s pozdě doručeným původním požadavkem: vždy právě jeden výsledek
+    for (let i = 0; i < 6; i++) {
+      const body = { klic: 'zahodit-soubeh-' + i, potvrdit_duplicitu: true, platba: 'karta', polozky: [{ produkt_id: 2, nazev: 'Sandál', velikost: '24.5', pocet: 1, cena: 600 }] };
+      const [p, z] = await Promise.all([prodat(body), zavolat('post', '/nedokonceny/:klic/zahodit', { params: { klic: body.klic } })]);
+      const ulozeno = await pocet('prodejna_prodeje', `klic = '${body.klic}'`);
+      if (z.body.stav === 'ulozeny') {
+        assert.deepEqual([p.statusCode, ulozeno, z.body.prodej.id], [200, 1, p.body.id], 'uloženo → Zahodit vrátí tutéž účtenku');
+      } else {
+        assert.equal(z.body.stav, 'zahozeny');
+        assert.deepEqual([p.statusCode, p.body.zahozeno, ulozeno], [409, true, 0], 'zahozeno → pozdní požadavek nic neuloží');
+      }
+    }
+    // 8c) ztracená odpověď → Zahodit (prodej se uložil) → stejný nákup zadaný znovu: druhý prodej nevznikne
+    const nakup = { klic: 'ztracena-odpoved-1', platba: 'karta', polozky: [{ produkt_id: 1, nazev: 'Zimní bota', velikost: '24', pocet: 1, cena: 999 }] };
+    assert.equal((await prodat(nakup)).statusCode, 200);
+    const zahodit = await zavolat('post', '/nedokonceny/:klic/zahodit', { params: { klic: nakup.klic } });
+    assert.equal(zahodit.body.stav, 'ulozeny');
+    const znovuZadany = await prodat({ ...nakup, klic: 'ztracena-odpoved-2' });
+    assert.deepEqual([znovuZadany.statusCode, znovuZadany.body.mozna_duplicita, znovuZadany.body.ulozeny_prodej_id], [409, true, zahodit.body.prodej.id]);
+    assert.equal(await pocet('prodejna_prodeje', 'celkem = 999'), 1, 'jediný prodej');
 
     // 9) unikátní index klíče drží i mimo aplikační zámek
     await assert.rejects(pool.query("INSERT INTO prodejna_prodeje (polozky, celkem, klic) VALUES ('[]', 0, 'vypadek-1')"), /prodejna_prodeje_klic_uq/);
