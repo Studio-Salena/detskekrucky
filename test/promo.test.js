@@ -206,6 +206,15 @@ function mockPoolProdejna(stav) {
     async query(sql, params = []) {
       const s = sql.replace(/\s+/g, ' ').trim();
       if (/^(BEGIN|COMMIT|ROLLBACK)/.test(s) || s.startsWith('CREATE') || s.startsWith('ALTER')) return {};
+      // jednotný prodej (lib/prodejPokladna.js): klíč, sklad, mazání
+      if (s.startsWith('SELECT pg_advisory_xact_lock')) return {};
+      if (s.startsWith('SELECT * FROM darkove_poukazy')) return { rows: (stav.poukazy || []).filter(x => x.kod === params[0]) };
+      if (s.startsWith('SELECT * FROM poukazove_karty')) return { rows: [] };
+      if (s.startsWith('SELECT * FROM prodejna_prodeje WHERE klic')) return { rows: [] };
+      if (s.startsWith('SELECT pocet_kusu FROM sklad')) return { rows: [{ pocet_kusu: 10 }] };
+      if (s.startsWith('UPDATE sklad SET pocet_kusu') || s.startsWith('INSERT INTO pohyby_skladu')) return {};
+      if (s.startsWith('SELECT id, platba, poukaz_kod FROM prodejna_prodeje')) return { rows: [{ id: params[0], platba: 'karta', poukaz_kod: null }] };
+      if (s.startsWith('SELECT id FROM vratky WHERE prodej_id') || s.startsWith('SELECT 1 FROM poukazy_pouziti')) return { rows: [] };
       if (s.startsWith('SELECT id FROM produkty WHERE id = ANY($1::int[]) AND cena_pred_slevou IS NOT NULL')) {
         return { rows: params[0].filter(id => (stav.veSleve || []).includes(id)).map(id => ({ id })) };
       }
@@ -247,9 +256,9 @@ test('pokladna: prodej s kódem - slevu spočítá server, zapíše se do spole�
   const router = nacistProdejnu(stav);
   const res = vytvoritRes();
   await najitHandler(router, 'post', '/')({ body: {
-    platba: 'hotovost', hotovost_prijato: 1000, promo_kod: 'KRUCKY2026',
-    // klient posílá vlastní slevu/celkem - server je přepočítá
-    sleva: 999, celkem: 1,
+    klic: 'test-promo-1', platba: 'hotovost', hotovost_prijato: 1000, promo_kod: 'KRUCKY2026',
+    // klient posílá vlastní slevu - server ji u kódu ignoruje a spočítá sám
+    sleva: 999,
     polozky: [{ produkt_id: 1, velikost: 24, pocet: 1, cena: 700 }, { produkt_id: 9, velikost: 30, pocet: 1, cena: 300 }]
   } }, res);
   assert.equal(res.statusCode, 200, JSON.stringify(res.body));
@@ -258,6 +267,19 @@ test('pokladna: prodej s kódem - slevu spočítá server, zapíše se do spole�
   assert.equal(res.body.celkem, 930);
   assert.equal(res.body.sleva_popis, 'kód KRUCKY2026 – 10 %');
   assert.deepEqual(stav.promoPouziti.map(p => p.kanal), ['eshop', 'prodejna']);
+});
+
+test('pokladna: jiná částka, než spočítal server (kód se mezitím změnil) = 409, nic se neuloží', async () => {
+  const stav = { prodeje: [], veSleve: [], promoPouziti: [], promoAkce: stavSAkci().promoAkce };
+  const res = vytvoritRes();
+  await najitHandler(nacistProdejnu(stav), 'post', '/')({ body: {
+    klic: 'test-promo-2', platba: 'karta', promo_kod: 'KRUCKY2026', celkem: 1,
+    polozky: [{ produkt_id: 1, velikost: 24, pocet: 1, cena: 700 }]
+  } }, res);
+  assert.equal(res.statusCode, 409);
+  assert.match(res.body.chyba, /630 Kč/);
+  assert.equal(stav.prodeje.length, 0);
+  assert.equal(stav.promoPouziti.length, 0);
 });
 
 test('pokladna: smazání prodeje kód uvolní', async () => {
@@ -269,14 +291,16 @@ test('pokladna: smazání prodeje kód uvolní', async () => {
 });
 
 test('pokladna: kód nejde kombinovat s doplatkem k poukazu', async () => {
-  const stav = { prodeje: [], promoPouziti: [], promoAkce: stavSAkci().promoAkce };
+  const stav = { prodeje: [], promoPouziti: [], promoAkce: stavSAkci().promoAkce, poukazy: [{ id: 7, kod: 'DP1', zustatek: 100, stav: 'aktivni', platnost_do: '2099-12-31' }] };
   const res = vytvoritRes();
   await najitHandler(nacistProdejnu(stav), 'post', '/')({ body: {
-    platba: 'karta', promo_kod: 'KRUCKY2026', poukaz_kod: 'DP1', doplatek_platba: 'karta',
+    klic: 'test-promo-3', platba: 'poukaz', promo_kod: 'KRUCKY2026', poukaz_kod: 'DP1', doplatek_platba: 'karta',
     polozky: [{ produkt_id: 1, velikost: 24, pocet: 1, cena: 700 }]
   } }, res);
   assert.equal(res.statusCode, 400);
+  assert.match(res.body.chyba, /nejde v pokladně kombinovat/);
   assert.equal(stav.prodeje.length, 0);
+  assert.equal(stav.promoPouziti.length, 0);
 });
 
 // ─── skutečný PostgreSQL: strop pod souběhem ───

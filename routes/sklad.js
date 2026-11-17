@@ -167,6 +167,12 @@ router.post('/naskladnit', async (req, res) => {
 
 router.post('/odecist', async (req, res) => {
   const { produkt_id, velikost, pocet, poznamka } = req.body;
+  // Prodej v pokladně odečítá sklad sám v transakci s prodejem (lib/prodejPokladna.js).
+  // Tuhle poznámku posílala jen stará pokladna (okno otevřené před nasazením) -
+  // odečet by proběhl dvakrát, proto se odmítne.
+  if (poznamka === 'Prodej v prodejně') {
+    return res.status(409).json({ chyba: 'Pokladna v tomto okně je zastaralá. Obnovte stránku administrace (Ctrl+F5).' });
+  }
   try {
     const check = await pool.query(`
       SELECT pocet_kusu FROM sklad

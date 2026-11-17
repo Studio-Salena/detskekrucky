@@ -131,7 +131,7 @@ test('API proti PostgreSQL: celý životní cyklus plastové karty', { skip: pre
 
       // pokladna: doplatek – karta pokryje 300 Kč z nákupu za 1 000 Kč
       r = await zavolat('POST', '/prodejna', {
-        polozky: [{ nazev: 'Boty', pocet: 1, cena: 1000 }], celkem: 1000, poukaz_kod: k1.ean, doplatek_platba: 'karta'
+        klic: 'karty-doplatek-1', platba: 'poukaz', polozky: [{ nazev: 'Boty', pocet: 1, cena: 1000 }], celkem: 1000, poukaz_kod: k1.ean, doplatek_platba: 'karta'
       });
       assert.equal(r.status, 200, JSON.stringify(r.data));
       assert.equal(Number(r.data.celkem), 700);

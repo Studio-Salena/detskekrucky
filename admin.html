@@ -1644,7 +1644,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
 
         <div class="modal-footer pos-akce">
           <button class="btn btn-outline" onclick="closeModal('modalProdejnaProdat')">Zrušit</button>
-          <button class="btn btn-primary" onclick="ulozitProdejnaProdat()">💾 Uložit a vytisknout účtenku</button>
+          <button class="btn btn-primary" id="prodejnaUlozitBtn" onclick="ulozitProdejnaProdat()">💾 Uložit a vytisknout účtenku</button>
         </div>
       </section>
     </div>
@@ -5680,7 +5680,25 @@ function aktualizovatQrPlatbu() {
   document.getElementById('qrPlatbaObrazek').src = qrPlatbaUrl(castka, 'Prodejna Detske krucky');
 }
 
+// Identifikátor právě zadávaného prodeje (ochrana proti dvojímu uložení).
+// Platí, dokud server prodej nepotvrdí - i po zavření a otevření okna.
+let klicProdeje = null;
+let prodejUkladaSe = false;
+function novyKlicProdeje() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+}
+
 async function ulozitProdejnaProdat() {
+  if (prodejUkladaSe) return; // druhé kliknutí během ukládání
+  prodejUkladaSe = true;
+  const tlacitko = document.getElementById('prodejnaUlozitBtn');
+  if (tlacitko) tlacitko.disabled = true;
+  try { await ulozitProdejnaProdatJednou(); }
+  finally { prodejUkladaSe = false; if (tlacitko) tlacitko.disabled = false; }
+}
+
+async function ulozitProdejnaProdatJednou() {
   const polozky = [];
   let ok = true;
 
@@ -5693,7 +5711,8 @@ async function ulozitProdejnaProdat() {
     if (!prodSel.value && !cena) return;
     if (!prodSel.value || !velSel.value || pocet<=0) { ok=false; return; }
     const nazev = prodSel.options[prodSel.selectedIndex]?.text || '';
-    polozky.push({produkt_id:parseInt(prodSel.value), nazev, velikost:parseInt(velSel.value), pocet, cena});
+    // velikost jako text přesně podle skladu (např. 24.5 by parseInt pokazil)
+    polozky.push({produkt_id:parseInt(prodSel.value), nazev, velikost:String(velSel.value), pocet, cena});
   });
 
   if (!ok || !polozky.length) {
@@ -5711,8 +5730,8 @@ async function ulozitProdejnaProdat() {
   const platba = document.getElementById('prodejnaPlatba').value;
   const poukazKod = document.getElementById('prodejnaPoukazKod').value.trim();
 
-  // Pokud platba poukazem, ověřit PŘED uložením prodeje, ať nevznikne prodej bez pokrytí platby.
-  // Když poukaz nepokryje celý nákup, zbytek se doplatí (doplatekPlatba) a vše uloží server najednou.
+  // Platba poukazem: ověřit zůstatek předem jen kvůli rozhodnutí o doplatku.
+  // Skutečné čerpání poukazu udělá server v jedné transakci s prodejem.
   let doplatekPlatba = null;
   if (platba === 'poukaz') {
     if (!poukazKod) { document.getElementById('prodejnaMsg').innerHTML = '<div class="error-msg">Zadejte kód poukazu.</div>'; return; }
@@ -5735,61 +5754,41 @@ async function ulozitProdejnaProdat() {
     }
   }
 
+  if (!klicProdeje) klicProdeje = novyKlicProdeje();
   const prodej = {
+    klic: klicProdeje,
     zakaznik: document.getElementById('prodejnaZakaznik').value,
     platba: platba,
     poznamka: document.getElementById('prodejnaPoznamka').value,
     polozky, celkem,
     mezisoucet, sleva, sleva_popis: sleva_popis || null,
     hotovost_prijato, hotovost_vraceno,
-    ...(doplatekPlatba ? { poukaz_kod: poukazKod, doplatek_platba: doplatekPlatba } : {}),
+    ...(platba === 'poukaz' ? { poukaz_kod: poukazKod } : {}),
+    ...(doplatekPlatba ? { doplatek_platba: doplatekPlatba } : {}),
     ...(promoKod ? { promo_kod: promoKod } : {})
   };
 
-  // Prodej s doplatkem nebo se slevovým kódem uloží server najednou (poukaz / strop
-  // kódu se ověří pod zámkem) PŘED odečtením skladu - při chybě se nic neodečte
-  let ulozenySDoplatkem = null;
-  if (doplatekPlatba || promoKod) {
-    try {
-      const res = await adminFetch(API+'/prodejna', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(prodej) });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) { document.getElementById('prodejnaMsg').innerHTML = `<div class="error-msg">${escH(data.chyba || 'Prodej se nepodařilo uložit.')}</div>`; return; }
-      ulozenySDoplatkem = data;
-    } catch(e) { document.getElementById('prodejnaMsg').innerHTML = '<div class="error-msg">Chyba spojení – prodej se neuložil.</div>'; return; }
-  }
-
-  // Odečíst ze skladu
+  // Celý prodej (sklad, slevový kód, poukaz, účtenka) uloží server v jedné
+  // transakci. Při výpadku spojení se odešle znovu se STEJNÝM klíčem - server
+  // pozná, že už prodej má, a nezdvojí ho. Účtenka se tiskne až po potvrzení.
+  let ulozenyProdej;
   try {
-    for (const p of polozky) {
-      await adminFetch(API+'/sklad/odecist', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({produkt_id:p.produkt_id, velikost:p.velikost, pocet:p.pocet, poznamka:'Prodej v prodejně'})
-      });
+    const res = await adminFetch(API+'/prodejna', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(prodej) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (data.ulozeny_prodej_id) { klicProdeje = null; loadProdejna(); }
+      document.getElementById('prodejnaMsg').innerHTML = `<div class="error-msg">${escH(data.chyba || 'Prodej se nepodařilo uložit.')}</div>`;
+      return;
     }
-  } catch(e) { console.error('Chyba odečtení skladu'); }
-
-  // Uložit na server
-  let ulozenyProdej = ulozenySDoplatkem || { ...prodej, datum: new Date().toISOString() };
-  if (!ulozenySDoplatkem) try {
-    const res = await adminFetch(API+'/prodejna', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(prodej)
-    });
-    if (res.ok) ulozenyProdej = await res.json();
-  } catch(e) { console.error('Chyba ukládání prodeje na server'); }
-
-  // Pokud platba poukazem, teď ho skutečně uplatnit (odečíst zůstatek)
-  if (platba === 'poukaz' && !doplatekPlatba && ulozenyProdej.id) {
-    try {
-      await adminFetch(API+'/poukazy/pouzit', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ kod: poukazKod, castka: celkem, prodej_id: ulozenyProdej.id })
-      });
-    } catch(e) { console.error('Chyba při uplatnění poukazu'); }
+    ulozenyProdej = data;
+  } catch(e) {
+    document.getElementById('prodejnaMsg').innerHTML = '<div class="error-msg">Spojení se serverem selhalo a nevíme, jestli se prodej uložil. Klikněte znovu na „Uložit“ – prodej se nezdvojí. Okno nezavírejte.</div>';
+    return;
   }
+  klicProdeje = null;
 
   // Vytisknout účtenku
-  tiskUctenkyData(ulozenyProdej, ulozenyProdej.id || '');
+  tiskUctenkyData(ulozenyProdej, ulozenyProdej.id);
 
   closeModal('modalProdejnaProdat');
   loadProdejna();
@@ -5981,7 +5980,8 @@ async function ulozitUpravuProdeje() {
 async function smazatProdej(id) {
   if (!confirm('Opravdu smazat tento prodej? (Sklad se tím nezmění, jde jen o záznam.)')) return;
   try {
-    await adminFetch(API+'/prodejna/'+id, {method:'DELETE'});
+    const res = await adminFetch(API+'/prodejna/'+id, {method:'DELETE'});
+    if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.chyba || 'Prodej se nepodařilo smazat.'); }
     loadProdejna();
   } catch(e) { alert('Chyba při mazání'); }
 }

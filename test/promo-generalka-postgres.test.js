@@ -60,7 +60,7 @@ test('PostgreSQL generálka KRUCKY2026: e-shop i pokladna od 30. 11. 2026, strop
     assert.match(res.body.chyba, /platí od 30\. 11\. 2026/);
     assert.equal(await pocetObjednavek(), 0);
     assert.equal(await sklad(1), 10, 'sklad se nesnížil');
-    res = await zavolat(prodejna, 'post', '/', { body: { platba: 'karta', polozky: [{ produkt_id: 1, nazev: 'Zimní bota', velikost: '24', pocet: 1, cena: 1200 }], promo_kod: 'KRUCKY2026' } });
+    res = await zavolat(prodejna, 'post', '/', { body: { klic: 'generalka-pred-akci', platba: 'karta', polozky: [{ produkt_id: 1, nazev: 'Zimní bota', velikost: '24', pocet: 1, cena: 1200 }], promo_kod: 'KRUCKY2026' } });
     assert.equal(res.statusCode, 400);
 
     // 2) 30. 11. v 0:01: e-shop – 10 % ze zboží, kód psaný s diakritikou a mezerou
@@ -92,7 +92,7 @@ test('PostgreSQL generálka KRUCKY2026: e-shop i pokladna od 30. 11. 2026, strop
     assert.equal(Number(obj2.promo_sleva), 120);
 
     // 4) pokladna: stejný kód, sleva spočítaná serverem
-    res = await zavolat(prodejna, 'post', '/', { body: { platba: 'hotovost', hotovost_prijato: 2000, polozky: [{ produkt_id: 1, nazev: 'Zimní bota', velikost: '24', pocet: 1, cena: 1200 }], promo_kod: 'krucky2026' } });
+    res = await zavolat(prodejna, 'post', '/', { body: { klic: 'generalka-prodejna-1', platba: 'hotovost', hotovost_prijato: 2000, polozky: [{ produkt_id: 1, nazev: 'Zimní bota', velikost: '24', pocet: 1, cena: 1200 }], promo_kod: 'krucky2026' } });
     assert.equal(res.statusCode, 200, JSON.stringify(res.body));
     assert.equal(Number(res.body.celkem), 1080);
     assert.equal(Number(res.body.sleva), 120);

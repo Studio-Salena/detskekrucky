@@ -80,7 +80,7 @@ async function prodejnaDoplatek(p) {
   const { pool, zapisy } = klientSPoukazem(p);
   const router = nacistRouterSMocky('../routes/prodejna.js', { '../db/pool': pool });
   const res = vytvoritRes();
-  await najitHandler(router, 'post', '/')({ body: { polozky: [{ nazev: 'Bota', pocet: 1, cena: 1500 }], celkem: 1500, poukaz_kod: p.kod, doplatek_platba: 'hotovost' } }, res);
+  await najitHandler(router, 'post', '/')({ body: { klic: 'test-platnost-' + Math.random().toString(36).slice(2), platba: 'poukaz', polozky: [{ nazev: 'Bota', pocet: 1, cena: 1500 }], celkem: 1500, poukaz_kod: p.kod, doplatek_platba: 'hotovost' } }, res);
   return { res, zapisy };
 }
 async function eshopObjednat(stav) {
@@ -145,9 +145,10 @@ test('poslední den: ochrana proti opakovanému uplatnění a přečerpání zů
 
 test('kód: všechny cesty používají jedno pravidlo, staré porovnání s okamžikem zmizelo', () => {
   const fs = require('node:fs'), path = require('node:path');
-  for (const soubor of ['routes/poukazy.js', 'routes/objednavky.js', 'routes/prodejna.js']) {
+  // pokladna čerpá poukaz v lib/prodejPokladna.js (routes/prodejna.js ho jen volá)
+  for (const soubor of ['routes/poukazy.js', 'routes/objednavky.js', 'lib/prodejPokladna.js']) {
     const kod = fs.readFileSync(path.join(__dirname, '..', soubor), 'utf8');
-    assert.match(kod, /require\('\.\.\/lib\/poukazPlatnost'\)/, soubor);
+    assert.match(kod, /require\('\.\.?\/(lib\/)?poukazPlatnost'\)/, soubor);
     assert.doesNotMatch(kod, /new Date\(poukaz\.platnost_do\)/, soubor);
   }
 });

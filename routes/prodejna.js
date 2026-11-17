@@ -3,10 +3,9 @@ const router = express.Router();
 const pool = require('../db/pool');
 const { pripravit } = require('../lib/startServeru');
 const vyzadovatAdmina = require('../middleware/adminAuth');
-const { poukazPoPlatnosti } = require('../lib/poukazPlatnost');
-const { najitPoukaz } = require('../lib/poukazKarty');
 const promo = require('../lib/promo');
 const vymena = require('../lib/vymena');
+const prodejPokladna = require('../lib/prodejPokladna');
 
 // Jak byly peníze z vratky vráceny (hotově se odečítá z hotovosti v uzávěrce)
 const ZPUSOBY_VRACENI = vymena.PLATBY;
@@ -59,6 +58,12 @@ async function initTabulky() {
       CREATE UNIQUE INDEX IF NOT EXISTS vratky_vymena_prodej_uq ON vratky (vymena_prodej_id) WHERE vymena_prodej_id IS NOT NULL;
       -- Opravy dokladů (např. dodatečný převod vratky + prodeje na výměnu):
       -- co se změnilo a původní hodnoty, kvůli účetnictví nic beze stopy
+      -- Ochrana proti dvojímu uložení prodeje (lib/prodejPokladna.js, 2026-11-17):
+      -- klic = identifikátor pokusu o prodej z pokladny, klic_otisk = otisk obsahu.
+      -- Starší prodeje klíč nemají (NULL), unikátní je jen vyplněný.
+      ALTER TABLE prodejna_prodeje ADD COLUMN IF NOT EXISTS klic TEXT;
+      ALTER TABLE prodejna_prodeje ADD COLUMN IF NOT EXISTS klic_otisk TEXT;
+      CREATE UNIQUE INDEX IF NOT EXISTS prodejna_prodeje_klic_uq ON prodejna_prodeje (klic) WHERE klic IS NOT NULL;
       CREATE TABLE IF NOT EXISTS prodejna_opravy (
         id SERIAL PRIMARY KEY,
         prodej_id INTEGER,
@@ -129,99 +134,27 @@ router.post('/promo/overit', async (req, res) => {
   }
 });
 
-// Prodej se slevovým kódem: v jedné transakci zámek akce, kontrola stropu,
-// uložení prodeje se slevou spočítanou serverem a zápis použití kódu.
-async function prodejSKodem(req, res) {
-  const { zakaznik, platba, poznamka, polozky, hotovost_prijato, promo_kod } = req.body;
-  if (req.body.poukaz_kod) return res.status(400).json({ chyba: 'Slevový kód a doplatek k dárkovému poukazu nejde v pokladně kombinovat. Zaplaťte poukazem celý nákup, nebo bez poukazu.' });
+// POST /api/prodejna – nový prodej z pokladny. Sklad, slevový kód, dárkový
+// poukaz (celý nákup i s doplatkem) a účtenka se uloží v JEDNÉ transakci
+// (lib/prodejPokladna.js). Opakované odeslání se stejným `klic` (výpadek
+// spojení, druhé kliknutí) prodej nezdvojí - vrátí už uložený.
+router.post('/', async (req, res) => {
+  const vstup = prodejPokladna.pripravitProdej(req.body);
+  if (vstup.chyba) return res.status(vstup.status).json({ chyba: vstup.chyba });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const z = await zakladProdeje(client, polozky);
-    if (!z) { await client.query('ROLLBACK'); return res.status(400).json({ chyba: 'Neplatná položka prodeje.' }); }
-    const v = await promo.overit(client, promo_kod, { zaklad: z.zaklad, kanal: 'prodejna', zamknout: true });
-    if (!v.ok) { await client.query('ROLLBACK'); return res.status(400).json({ chyba: v.chyba }); }
-    const celkem = z.mezisoucet - v.sleva;
-    const prijato = platba === 'hotovost' && Number(hotovost_prijato) > 0 ? Number(hotovost_prijato) : null;
-    const prodej = (await client.query(
-      'INSERT INTO prodejna_prodeje (zakaznik, platba, poznamka, polozky, celkem, mezisoucet, sleva, sleva_popis, hotovost_prijato, hotovost_vraceno) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *',
-      [zakaznik || null, platba || null, poznamka || null, JSON.stringify(polozky), celkem, z.mezisoucet, v.sleva, popisProdejna(v),
-       prijato, prijato != null ? Math.max(0, prijato - celkem) : null]
-    )).rows[0];
-    await promo.zapsatPouziti(client, { kod: v.kod, kanal: 'prodejna', prodejId: prodej.id, zaklad: z.zaklad, sleva: v.sleva });
+    const { prodej, opakovane } = await prodejPokladna.ulozitProdej(client, vstup);
     await client.query('COMMIT');
-    res.json(prodej);
+    res.json(opakovane ? { ...prodej, opakovane: true } : prodej);
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
+    if (err instanceof prodejPokladna.ChybaProdeje) return res.status(err.status).json({ chyba: err.chyba, ...err.data });
     res.status(500).json({ chyba: err.message });
   } finally {
     client.release();
-  }
-}
-
-// POST /api/prodejna – vytvořit nový prodej
-router.post('/', async (req, res) => {
-  const { zakaznik, platba, poznamka, polozky, celkem, mezisoucet, sleva, sleva_popis, hotovost_prijato, hotovost_vraceno } = req.body;
-  if (!Array.isArray(polozky) || !polozky.length) {
-    return res.status(400).json({ chyba: 'Chybí položky prodeje.' });
-  }
-  if (req.body.promo_kod) return prodejSKodem(req, res);
-  if (req.body.poukaz_kod) return prodejSDoplatkem(req, res);
-  try {
-    const result = await pool.query(
-      'INSERT INTO prodejna_prodeje (zakaznik, platba, poznamka, polozky, celkem, mezisoucet, sleva, sleva_popis, hotovost_prijato, hotovost_vraceno) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *',
-      [zakaznik || null, platba || null, poznamka || null, JSON.stringify(polozky), celkem,
-       mezisoucet != null ? mezisoucet : celkem, sleva || 0, sleva_popis || null,
-       hotovost_prijato != null ? hotovost_prijato : null, hotovost_vraceno != null ? hotovost_vraceno : null]
-    );
-    res.json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({ chyba: err.message });
   }
 });
-
-// Poukaz nepokryje celý nákup: zbytek zákazník doplatí hotově, kartou nebo QR.
-// V jedné transakci se poukaz vyčerpá, uloží se prodej s celkem = doplatek
-// (jen ten jde do tržeb - hodnota poukazu se počítá při jeho prodeji, dar nikdy)
-// a zapíše se uplatnění poukazu. Když poukaz mezitím někdo použil, neuloží se nic.
-async function prodejSDoplatkem(req, res) {
-  const { zakaznik, poznamka, polozky, celkem, mezisoucet, sleva, sleva_popis, hotovost_prijato, poukaz_kod, doplatek_platba } = req.body;
-  const zaZbozi = Number(celkem);
-  if (!Number.isFinite(zaZbozi) || zaZbozi <= 0) return res.status(400).json({ chyba: 'Neplatná částka prodeje.' });
-  if (!['hotovost', 'karta', 'qr'].includes(doplatek_platba)) return res.status(400).json({ chyba: 'Vyberte, jak zákazník doplatí zbytek.' });
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    // Kód poukazu, jeho EAN nebo EAN plastové karty (lib/poukazKarty.js)
-    const nalez = await najitPoukaz(client, poukaz_kod, { zamknout: true });
-    const poukaz = nalez.poukaz;
-    const chyba = nalez.chyba ? nalez.chyba
-      : poukaz.stav !== 'aktivni' || Number(poukaz.zustatek) <= 0 ? 'Poukaz už není aktivní.'
-      : poukazPoPlatnosti(poukaz.platnost_do) ? 'Platnost poukazu vypršela.'
-      : Number(poukaz.zustatek) >= zaZbozi ? 'Poukaz pokryje celý nákup – zvolte platbu jen dárkovým poukazem.'
-      : null;
-    if (chyba) { await client.query('ROLLBACK'); return res.status(400).json({ chyba }); }
-    const zPoukazu = Number(poukaz.zustatek);
-    const doplatek = zaZbozi - zPoukazu;
-    const prijato = doplatek_platba === 'hotovost' && Number(hotovost_prijato) > 0 ? Number(hotovost_prijato) : null;
-    const prodej = (await client.query(
-      `INSERT INTO prodejna_prodeje (zakaznik, platba, poznamka, polozky, celkem, mezisoucet, sleva, sleva_popis, hotovost_prijato, hotovost_vraceno, poukaz_castka, poukaz_kod)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
-      [zakaznik || null, doplatek_platba, poznamka || null, JSON.stringify(polozky), doplatek,
-       mezisoucet != null ? mezisoucet : zaZbozi, sleva || 0, sleva_popis || null,
-       prijato, prijato != null ? Math.max(0, prijato - doplatek) : null, zPoukazu, poukaz.kod]
-    )).rows[0];
-    await client.query("UPDATE darkove_poukazy SET zustatek = 0, stav = 'pouzity' WHERE id = $1", [poukaz.id]);
-    await client.query('INSERT INTO poukazy_pouziti (poukaz_id, castka, prodej_id) VALUES ($1,$2,$3)', [poukaz.id, zPoukazu, prodej.id]);
-    await client.query('COMMIT');
-    res.json(prodej);
-  } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
-    res.status(500).json({ chyba: err.message });
-  } finally {
-    client.release();
-  }
-}
 
 // PUT /api/prodejna/:id – upravit záznam prodeje (např. špatně zvolená platba, překlep ve jméně)
 router.put('/:id', async (req, res) => {
@@ -239,16 +172,35 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /api/prodejna/:id – smazat záznam prodeje (oprava chyby)
+// Smazání + uvolnění slevového kódu v jedné transakci. Nejde smazat účtenku
+// výměny, účtenku s vratkou (vratka by ztratila vazbu a kontrolu vráceného
+// množství) ani účtenku placenou poukazem (poukaz by zůstal vyčerpaný bez
+// dokladu) - tam se použije vratka.
 router.delete('/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ chyba: 'Neplatné číslo účtenky.' });
+  const client = await pool.connect();
   try {
-    const vymenaVratka = (await pool.query('SELECT id FROM vratky WHERE vymena_prodej_id = $1', [req.params.id])).rows[0];
-    if (vymenaVratka) return res.status(409).json({ chyba: `Účtenka patří k výměně (vratka #${vymenaVratka.id}) a nejde smazat.` });
-    await pool.query('DELETE FROM prodejna_prodeje WHERE id=$1', [req.params.id]);
+    await client.query('BEGIN');
+    const prodej = (await client.query('SELECT id, platba, poukaz_kod FROM prodejna_prodeje WHERE id = $1 FOR UPDATE', [id])).rows[0];
+    if (!prodej) { await client.query('ROLLBACK'); return res.status(404).json({ chyba: 'Prodej nenalezen.' }); }
+    const vymenaVratka = (await client.query('SELECT id FROM vratky WHERE vymena_prodej_id = $1', [id])).rows[0];
+    if (vymenaVratka) { await client.query('ROLLBACK'); return res.status(409).json({ chyba: `Účtenka patří k výměně (vratka #${vymenaVratka.id}) a nejde smazat.` }); }
+    const vratka = (await client.query('SELECT id FROM vratky WHERE prodej_id = $1 LIMIT 1', [id])).rows[0];
+    if (vratka) { await client.query('ROLLBACK'); return res.status(409).json({ chyba: `K účtence existuje vratka #${vratka.id} – účtenku nejde smazat.` }); }
+    const poukaz = prodej.platba === 'poukaz' || prodej.poukaz_kod ||
+      (await client.query('SELECT 1 FROM poukazy_pouziti WHERE prodej_id = $1 LIMIT 1', [id])).rows.length;
+    if (poukaz) { await client.query('ROLLBACK'); return res.status(409).json({ chyba: 'Účtenka byla placená dárkovým poukazem – nejde smazat (poukaz by zůstal vyčerpaný). Použijte vratku a částku připište zpět na poukaz.' }); }
+    await client.query('DELETE FROM prodejna_prodeje WHERE id = $1', [id]);
     // Smazaný prodej uvolní slevový kód akce (místo ve stropu se vrátí)
-    await promo.uvolnit(pool, { prodejId: Number(req.params.id) }, 'Smazání prodeje v pokladně');
+    await promo.uvolnit(client, { prodejId: id }, 'Smazání prodeje v pokladně');
+    await client.query('COMMIT');
     res.json({ ok: true });
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     res.status(500).json({ chyba: err.message });
+  } finally {
+    client.release();
   }
 });
 
