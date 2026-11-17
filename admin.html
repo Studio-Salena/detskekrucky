@@ -1549,6 +1549,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
   <!-- Pokladna: vlevo položky (EAN + seznam), vpravo souhrn, platba a akce; vše bez posouvání okna -->
   <div class="modal pos-okno">
     <h3>🏪 Nový prodej</h3>
+    <div id="prodejnaNedokonceny" style="display:none"></div>
     <div id="prodejnaMsg"></div>
     <div class="pos-mrizka">
       <section class="pos-levy" aria-label="Položky prodeje">
@@ -5342,9 +5343,13 @@ async function nacistSkladProProdejna() {
     const produkty = {};
     prodejnaSkladData.forEach(s=>{if(!produkty[s.id])produkty[s.id]={nazev:s.nazev,cena:s.cena,ean:s.ean};});
     const popisky = popiskyProduktu(produkty);
+    // Načtení doběhne asynchronně (např. po předchozím prodeji, zatímco se už
+    // skenuje další) - už vybraný produkt v řádku se nesmí ztratit
     document.querySelectorAll('.prod-select').forEach(sel=>{
+      const vybrano = sel.value;
       sel.innerHTML = '<option value="">Vyberte produkt...</option>' +
         Object.entries(produkty).map(([id,p])=>`<option value="${id}" data-cena="${p.cena}">${popisky[id]}</option>`).join('');
+      if (vybrano) sel.value = vybrano;
     });
   } catch(e) {}
 }
@@ -5383,6 +5388,7 @@ function pridatPolozku() {
 function otevritNovyProdejProdejna() {
   openModal('modalProdejnaProdat');
   prepnoutPoukazPole();
+  zobrazitNedokoncenyProdej();
   // Kurzor rovnou do EAN pole, aby šlo skenovat fyzickou čtečkou hned bez klikání
   setTimeout(() => {
     const ean = document.getElementById('eanInput');
@@ -5754,6 +5760,14 @@ async function ulozitProdejnaProdatJednou() {
     }
   }
 
+  // Čeká-li jiný nedokončený prodej (např. z doby před obnovením stránky),
+  // nejdřív ho dokončit nebo zahodit - jinak by se jeho klíč ztratil
+  const nedokonceny = nacistNedokoncenyProdej();
+  if (nedokonceny && nedokonceny.prodej.klic !== klicProdeje) {
+    zobrazitNedokoncenyProdej();
+    document.getElementById('prodejnaMsg').innerHTML = '<div class="error-msg">Nejdřív dokončete nebo zahoďte nedokončený prodej výše.</div>';
+    return;
+  }
   if (!klicProdeje) klicProdeje = novyKlicProdeje();
   const prodej = {
     klic: klicProdeje,
@@ -5768,23 +5782,34 @@ async function ulozitProdejnaProdatJednou() {
     ...(promoKod ? { promo_kod: promoKod } : {})
   };
 
-  // Celý prodej (sklad, slevový kód, poukaz, účtenka) uloží server v jedné
-  // transakci. Při výpadku spojení se odešle znovu se STEJNÝM klíčem - server
-  // pozná, že už prodej má, a nezdvojí ho. Účtenka se tiskne až po potvrzení.
+  await odeslatProdej(prodej);
+}
+
+// Odeslání prodeje na server. Celý prodej (sklad, slevový kód, poukaz, účtenka)
+// uloží server v jedné transakci. Než se odešle, uloží se i s klíčem do
+// prohlížeče (nedokončený prodej) - když se odpověď ztratí, jde ho odeslat
+// znovu se STEJNÝM klíčem i po obnovení stránky a server ho nezdvojí.
+// Účtenka se tiskne až po potvrzení serverem.
+async function odeslatProdej(prodej) {
+  ulozitNedokoncenyProdej(prodej);
   let ulozenyProdej;
   try {
     const res = await adminFetch(API+'/prodejna', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(prodej) });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
+      // server odpověděl: pod tímto klíčem se nic dalšího neuloží (chyba), nebo
+      // je pod ním uložený jiný prodej - v obou případech nový pokus = nový klíč
+      if (res.status !== 401 && res.status !== 403) smazatNedokoncenyProdej();
       if (data.ulozeny_prodej_id) { klicProdeje = null; loadProdejna(); }
       document.getElementById('prodejnaMsg').innerHTML = `<div class="error-msg">${escH(data.chyba || 'Prodej se nepodařilo uložit.')}</div>`;
-      return;
+      return false;
     }
     ulozenyProdej = data;
   } catch(e) {
-    document.getElementById('prodejnaMsg').innerHTML = '<div class="error-msg">Spojení se serverem selhalo a nevíme, jestli se prodej uložil. Klikněte znovu na „Uložit“ – prodej se nezdvojí. Okno nezavírejte.</div>';
-    return;
+    document.getElementById('prodejnaMsg').innerHTML = '<div class="error-msg">Spojení se serverem selhalo a nevíme, jestli se prodej uložil. Klikněte znovu na „Uložit“ – prodej se nezdvojí (i po obnovení stránky ho půjde dokončit).</div>';
+    return false;
   }
+  smazatNedokoncenyProdej();
   klicProdeje = null;
 
   // Vytisknout účtenku
@@ -5812,6 +5837,49 @@ async function ulozitProdejnaProdatJednou() {
   document.getElementById('prodejnaPolozky').innerHTML = '';
   nacistSkladProProdejna();
   prepocitatCelkem();
+  return true;
+}
+
+// Nedokončený prodej (odeslaný, ale bez odpovědi serveru) - jen v tomto
+// prohlížeči, přežije obnovení stránky. Platí pro něj původní klíč.
+const KLIC_NEDOKONCENY_PRODEJ = 'dkNedokoncenyProdej';
+function ulozitNedokoncenyProdej(prodej) {
+  try { localStorage.setItem(KLIC_NEDOKONCENY_PRODEJ, JSON.stringify({ prodej, cas: new Date().toISOString() })); } catch(e) {}
+}
+function nacistNedokoncenyProdej() {
+  try { const z = JSON.parse(localStorage.getItem(KLIC_NEDOKONCENY_PRODEJ) || 'null'); return z && z.prodej && z.prodej.klic ? z : null; } catch(e) { return null; }
+}
+function smazatNedokoncenyProdej() {
+  try { localStorage.removeItem(KLIC_NEDOKONCENY_PRODEJ); } catch(e) {}
+}
+function zobrazitNedokoncenyProdej() {
+  const box = document.getElementById('prodejnaNedokonceny');
+  if (!box) return;
+  const z = nacistNedokoncenyProdej();
+  if (!z) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  const p = z.prodej;
+  const zbozi = (p.polozky || []).map(x => `${escH(x.nazev || 'položka')}${x.velikost ? ' vel. ' + escH(x.velikost) : ''} × ${escH(x.pocet)}`).join(', ');
+  box.style.display = 'block';
+  box.innerHTML = `<div class="error-msg">⚠️ <strong>Nedokončený prodej</strong> z ${escH(new Date(z.cas).toLocaleString('cs-CZ'))}: ${zbozi} – ${Number(p.celkem).toLocaleString('cs-CZ')} Kč (${escH(platbaLabel(p.platba))}).
+    Spojení se přerušilo a nevíme, jestli se uložil. Dokončení ho uloží jen jednou (pokud už uložený je, jen se vytiskne účtenka).
+    <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" id="prodejnaDokoncitBtn" onclick="dokoncitNedokoncenyProdej()">Dokončit uložení</button>
+      <button class="btn btn-outline btn-sm" onclick="zahoditNedokoncenyProdej()">Zahodit</button>
+    </div></div>`;
+}
+async function dokoncitNedokoncenyProdej() {
+  const z = nacistNedokoncenyProdej();
+  if (!z || prodejUkladaSe) return;
+  prodejUkladaSe = true;
+  const btn = document.getElementById('prodejnaDokoncitBtn');
+  if (btn) btn.disabled = true;
+  try { await odeslatProdej(z.prodej); }
+  finally { prodejUkladaSe = false; if (btn) btn.disabled = false; zobrazitNedokoncenyProdej(); }
+}
+function zahoditNedokoncenyProdej() {
+  if (!confirm('Zahodit nedokončený prodej? Pokud se přesto uložil, najdete ho v seznamu prodejů.')) return;
+  smazatNedokoncenyProdej();
+  zobrazitNedokoncenyProdej();
 }
 
 function prepnoutPoukazPole() {

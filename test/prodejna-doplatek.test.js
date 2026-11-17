@@ -186,6 +186,10 @@ test('admin: pokladna neodečítá sklad ani nečerpá poukaz sama, posílá kl�
   assert.doesNotMatch(telo, /sklad\/odecist/);
   assert.doesNotMatch(telo, /poukazy\/pouzit/);
   assert.match(telo, /klic: klicProdeje/);
+  // neodeslaný prodej se uloží i s klíčem PŘED odesláním (přežije obnovení stránky)
+  const odeslat = telo.slice(telo.indexOf('async function odeslatProdej('));
+  assert.ok(odeslat.indexOf('ulozitNedokoncenyProdej(prodej)') > 0 && odeslat.indexOf('ulozitNedokoncenyProdej(prodej)') < odeslat.indexOf("adminFetch(API+'/prodejna'"));
+  assert.match(telo, /nedokonceny.prodej.klic !== klicProdeje/, 'nový prodej nepřepíše čekající nedokončený');
 });
 
 test('stará pokladna (okno otevřené před nasazením): /sklad/odecist s poznámkou prodeje se odmítne, ruční odečet funguje', async () => {

@@ -131,7 +131,30 @@ test('PostgreSQL pokladna: jedna transakce, ochrana před dvojím prodejem, soub
     assert.equal((await zavolat('delete', '/:id', { params: { id: String(karta.id) } })).statusCode, 200);
     assert.equal(await pocet('prodejna_prodeje', `id = ${karta.id}`), 0);
 
-    // 8) unikátní index klíče drží i mimo aplikační zámek
+    // 8) staré okno administrace (admin.html před opravou): přesná posloupnost
+    //    jeho požadavků - odečet skladu po položkách s poznámkou „Prodej
+    //    v prodejně“, pak POST prodeje bez klíče. Nic z toho nesmí nic zapsat.
+    const sklad = nacistRouterSMocky('../routes/sklad.js', { '../db/pool': pool });
+    assert.equal(await vsePripraveno(20000), true);
+    const snimek = async () => (await pool.query(`SELECT
+      (SELECT json_agg(s ORDER BY id) FROM (SELECT id, pocet_kusu FROM sklad) s) AS sklad,
+      (SELECT COUNT(*) FROM pohyby_skladu) AS pohyby, (SELECT COUNT(*) FROM prodejna_prodeje) AS prodeje,
+      (SELECT json_agg(p ORDER BY id) FROM (SELECT id, zustatek FROM darkove_poukazy) p) AS poukazy,
+      (SELECT COUNT(*) FROM poukazy_pouziti) AS pouziti`)).rows[0];
+    const pred = await snimek();
+    const stare = [];
+    for (const p of [{ produkt_id: 1, velikost: 24, pocet: 1 }, { produkt_id: 2, velikost: 24, pocet: 1 }]) {
+      const r = vytvoritRes();
+      await najitHandler(sklad, 'post', '/odecist')({ params: {}, body: { ...p, poznamka: 'Prodej v prodejně' } }, r);
+      stare.push(r.statusCode);
+    }
+    res = await prodat({ zakaznik: '', platba: 'hotovost', poznamka: '', celkem: 2000, mezisoucet: 2000, sleva: 0,
+      polozky: [{ produkt_id: 1, nazev: 'Zimní bota', velikost: 24, pocet: 1, cena: 1200 }, { produkt_id: 2, nazev: 'Sandál', velikost: 24, pocet: 1, cena: 800 }] });
+    stare.push(res.statusCode);
+    assert.deepEqual(stare, [409, 409, 409], 'starý odečet i starý prodej odmítnuté');
+    assert.deepEqual(await snimek(), pred, 'po starém postupu nezůstal žádný odečet skladu, prodej ani čerpání');
+
+    // 9) unikátní index klíče drží i mimo aplikační zámek
     await assert.rejects(pool.query("INSERT INTO prodejna_prodeje (polozky, celkem, klic) VALUES ('[]', 0, 'vypadek-1')"), /prodejna_prodeje_klic_uq/);
   } finally {
     console.log = puvodniLog;
