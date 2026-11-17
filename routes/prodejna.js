@@ -204,7 +204,7 @@ router.put('/:id', async (req, res) => {
     const puvodni = (await client.query('SELECT * FROM prodejna_prodeje WHERE id = $1 FOR UPDATE', [req.params.id])).rows[0];
     if (!puvodni) { await client.query('ROLLBACK'); return res.status(404).json({ chyba: 'Prodej nenalezen.' }); }
     const novaPlatba = platba || null;
-    if (novaPlatba !== puvodni.platba && eetZamek.jeZamceny(puvodni.datum)) {
+    if (novaPlatba !== puvodni.platba && (eetZamek.jeZamceny(puvodni.vytvoreno) || await evidence.maUdalostEet(client, 'prodej', puvodni.id))) {
       await client.query('ROLLBACK');
       return res.status(409).json({ chyba: eetZamek.CHYBA_ZAMKU });
     }
@@ -252,9 +252,9 @@ router.delete('/:id', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const prodej = (await client.query('SELECT id, platba, poukaz_kod, datum FROM prodejna_prodeje WHERE id = $1 FOR UPDATE', [id])).rows[0];
+    const prodej = (await client.query('SELECT id, platba, poukaz_kod, vytvoreno FROM prodejna_prodeje WHERE id = $1 FOR UPDATE', [id])).rows[0];
     if (!prodej) { await client.query('ROLLBACK'); return res.status(404).json({ chyba: 'Prodej nenalezen.' }); }
-    if (eetZamek.jeZamceny(prodej.datum)) { await client.query('ROLLBACK'); return res.status(409).json({ chyba: eetZamek.CHYBA_ZAMKU }); }
+    if (eetZamek.jeZamceny(prodej.vytvoreno) || await evidence.maUdalostEet(client, 'prodej', id)) { await client.query('ROLLBACK'); return res.status(409).json({ chyba: eetZamek.CHYBA_ZAMKU }); }
     const vymenaVratka = (await client.query('SELECT id FROM vratky WHERE vymena_prodej_id = $1', [id])).rows[0];
     if (vymenaVratka) { await client.query('ROLLBACK'); return res.status(409).json({ chyba: `Účtenka patří k výměně (vratka #${vymenaVratka.id}) a nejde smazat.` }); }
     const vratka = (await client.query('SELECT id FROM vratky WHERE prodej_id = $1 LIMIT 1', [id])).rows[0];
@@ -461,13 +461,21 @@ async function lzeVratitPenez(client, { prodejId, objednavkaId }) {
     if (Number(r.s_evidenci) === 0) {
       // účtenka placená jen poukazem (s evidencí kreditu) = penězi se nevrací nic
       const kreditem = (await client.query("SELECT 1 FROM kredit_pohyby WHERE zdroj_typ = 'prodej' AND zdroj_id = $1 AND typ = 'cerpani' LIMIT 1", [prodejId])).rows.length;
-      return kreditem ? 0 : null;
+      if (kreditem) return 0;
+      // Účtenka z doby před evidencí: strop podle dokladu - penězi přišlo „celkem“, jen když
+      // se platilo penězi (u poukazu nic, u doplatku jen doplatek), minus dřívější vratky
+      const d = (await client.query(`SELECT pr.platba, pr.celkem,
+          (SELECT COALESCE(SUM(v.castka), 0) FROM vratky v WHERE v.prodej_id = pr.id AND COALESCE(v.zpusob_vraceni, '') <> 'vymena') AS vraceno
+        FROM prodejna_prodeje pr WHERE pr.id = $1`, [prodejId])).rows[0];
+      if (!d) return null;
+      const penezi = ['hotovost', 'karta', 'qr', 'prevod'].includes(d.platba) ? Number(d.celkem) : 0;
+      return Math.max(0, evidence.kc(penezi - Number(d.vraceno)));
     }
     return Math.max(0, evidence.kc(Number(r.prijato) - Number(r.vraceno)));
   }
   if (objednavkaId) {
     const s = (await client.query(`SELECT (SELECT COUNT(*) FROM platby WHERE zdroj_typ = 'objednavka' AND zdroj_id = $1 AND typ = 'prijem')
-      + (SELECT COUNT(*) FROM platby_prirazeni WHERE objednavka_id = $1) AS n`, [objednavkaId])).rows[0];
+      + (SELECT COUNT(*) FROM platby_prirazeni pr WHERE objednavka_id = $1 AND NOT EXISTS (SELECT 1 FROM platby_prirazeni_storna st WHERE st.prirazeni_id = pr.id)) AS n`, [objednavkaId])).rows[0];
     if (Number(s.n) === 0) return null;
     return evidence.prijatoNaObjednavku(client, objednavkaId);
   }
@@ -509,6 +517,16 @@ router.post('/vymeny', async (req, res) => {
     // původní účtenka: zamknout a ověřit, že vrácené kusy na ní byly a ještě nebyly vrácené
     const chybaVracenych = await overitVracenePolozky(client, { prodej_id: prodejId, polozky: b.vracene });
     if (chybaVracenych) throw new evidence.ChybaEvidence(chybaVracenych.status, chybaVracenych.chyba);
+    // Pravidlo: rozdíl ve prospěch zákazníka jde vyplatit penězi jen do výše peněz, které na
+    // původní účtence opravdu přišly (minus dřívější vratky a výměny). Hodnotu zaplacenou
+    // poukazem nebo darovaným kreditem penězi vyplatit nejde - vrací se připsáním na poukaz.
+    // Původní účtenka je zamčená (overitVracenePolozky), souběžné operace se řadí.
+    if (v.vraceno > 0) {
+      const lze = await lzeVratitPenez(client, { prodejId });
+      if (lze != null && v.vraceno > lze) {
+        throw new evidence.ChybaEvidence(400, `Penězi jde při výměně vrátit nejvýš ${lze} Kč (tolik na původní účtence přišlo penězi a ještě se nevrátilo). Zbytek zaplacený poukazem připište zpět na poukaz.`);
+      }
+    }
 
     // nové zboží ze skladu (zámek řádku, ať ho souběžně neprodá pokladna)
     for (const p of b.nove) {
@@ -607,7 +625,10 @@ router.post('/vymeny/prevest', async (req, res) => {
     const vratka = (await client.query('SELECT * FROM vratky WHERE id = $1 FOR UPDATE', [vratkaId])).rows[0];
     const prodej = (await client.query('SELECT * FROM prodejna_prodeje WHERE id = $1 FOR UPDATE', [prodejId])).rows[0];
     if (!vratka || !prodej) { await client.query('ROLLBACK'); return res.status(404).json({ chyba: !vratka ? `Vratka #${vratkaId} neexistuje.` : `Účtenka #${prodejId} neexistuje.` }); }
-    if (eetZamek.jeZamceny(prodej.datum) || eetZamek.jeZamceny(vratka.vytvoreno)) { await client.query('ROLLBACK'); return res.status(409).json({ chyba: eetZamek.CHYBA_ZAMKU }); }
+    if (eetZamek.jeZamceny(prodej.vytvoreno) || eetZamek.jeZamceny(vratka.vytvoreno)
+      || await evidence.maUdalostEet(client, 'prodej', prodej.id) || await evidence.maUdalostEet(client, 'vratka', vratka.id)) {
+      await client.query('ROLLBACK'); return res.status(409).json({ chyba: eetZamek.CHYBA_ZAMKU });
+    }
     const jinaVymena = (await client.query('SELECT id FROM vratky WHERE vymena_prodej_id = $1', [prodejId])).rows[0];
     if (jinaVymena) { await client.query('ROLLBACK'); return res.status(400).json({ chyba: `Účtenka #${prodejId} už patří k výměně (vratka #${jinaVymena.id}).` }); }
     const p = vymena.prevodNaVymenu(vratka, prodej);

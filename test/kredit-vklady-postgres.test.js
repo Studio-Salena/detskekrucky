@@ -155,7 +155,8 @@ test('PostgreSQL kredit po vkladech, poukazy z e-shopu, Zahodit, opravy, zámek 
     res = await prodat({ klic: 'historicky-1', platba: 'poukaz', poukaz_kod: 'DK-HIST-0001', polozky: bota(200) });
     assert.equal(res.statusCode, 200, JSON.stringify(res.body));
     const hist = await poukazPodleKodu('DK-HIST-0001');
-    assert.deepEqual(await vklady(hist.id), [['zaplaceny', 600, 400, 'pocatecni_stav']], 'počáteční stav = zůstatek 600, ne hodnota 1000');
+    assert.deepEqual(await vklady(hist.id), [['nedolozeny', 600, 400, 'pocatecni_stav']], 'počáteční stav = zůstatek 600, ne hodnota 1000; bez dokladu prodeje původ NEDOLOŽENÝ (ne zaplacený)');
+    assert.equal((await q("SELECT eet_pravidlo FROM kredit_pohyby WHERE zdroj_typ = 'prodej' AND zdroj_id = $1 AND typ = 'cerpani'", [res.body.id]))[0].eet_pravidlo, 'nevyreseno');
     assert.equal(Number((await q('SELECT COUNT(*) n FROM platby'))[0].n), platebPred, 'žádná vymyšlená platba');
     res = await prodat({ klic: 'historicky-dar', platba: 'poukaz', poukaz_kod: 'DK-HIST-0002', polozky: bota(100) });
     const cerDar = (await q("SELECT eet_pravidlo FROM kredit_pohyby WHERE zdroj_typ = 'prodej' AND zdroj_id = $1 AND typ = 'cerpani'", [res.body.id]))[0];

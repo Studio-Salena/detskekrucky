@@ -38,6 +38,8 @@ for (const k of Object.keys(process.env)) {
   if (/^(RESEND|CLOUDINARY|ZASILKOVNA|GLS|PPL|STRIPE|SMTP|EMAIL)/.test(k)) delete process.env[k];
 }
 process.env.DATABASE_URL = url;
+// interní tajemství (ne externí služba) - bez něj modul přihlašování jen hlásí varování
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'overeni-migrace-' + crypto.randomBytes(8).toString('hex');
 process.env.ADMIN_HESLO = process.env.ADMIN_HESLO || 'overeni-migrace-' + crypto.randomBytes(6).toString('hex');
 
 const { Pool } = require(path.join(KOREN, 'node_modules', 'pg'));
@@ -52,8 +54,18 @@ const odeslane = [];
 require.cache[cestaEmaily] = { id: cestaEmaily, filename: cestaEmaily, loaded: true,
   exports: new Proxy({}, { get: (_, jmeno) => async (...a) => { odeslane.push(String(jmeno)); } }) };
 
-const FINANCNI_TABULKY = ['prodejna_prodeje', 'vratky', 'objednavky', 'objednavky_polozky', 'darkove_poukazy', 'poukazy_pouziti',
-  'sklad', 'pohyby_skladu', 'faktury', 'promo_pouziti', 'poukazove_karty', 'nakupni_faktury'];
+// Povinné tabulky musí v kopii produkce existovat (jinak to není úplná kopie a ověření selže);
+// volitelné se porovnají, jen pokud existují. Po migraci musí existovat tabulky evidence.
+const POVINNE = ['prodejna_prodeje', 'vratky', 'objednavky', 'objednavky_polozky', 'darkove_poukazy', 'poukazy_pouziti', 'sklad', 'pohyby_skladu'];
+const VOLITELNE = ['faktury', 'promo_pouziti', 'poukazove_karty', 'nakupni_faktury'];
+const FINANCNI_TABULKY = [...POVINNE, ...VOLITELNE];
+const POVINNE_PO_MIGRACI = ['platby', 'platby_prirazeni', 'platby_prirazeni_storna', 'kredit_pohyby', 'kredit_vklady', 'kredit_casti',
+  'kredit_vklady_zdroje', 'dobirky', 'dobirky_vyuctovani', 'operace_klice', 'prodejna_klice', 'eet_udalosti'];
+const chyby = { chybejici_povinne: [], chybejici_po_migraci: [], chyby_dotazu: [], chyby_migrace: [], rozdily_dat: [] };
+// Dotaz, jehož chyba znamená neúspěch ověření (nesmí se jen vypsat vedle výsledku)
+async function bezpecne(popis, fn, nahrada = null) {
+  try { return await fn(); } catch (e) { chyby.chyby_dotazu.push(`${popis}: ${e.message}`); return nahrada; }
+}
 
 async function existuje(tabulka) {
   return (await pool.query('SELECT to_regclass($1) IS NOT NULL AS e', [tabulka])).rows[0].e;
@@ -89,15 +101,16 @@ async function soucty() {
   return vysledek;
 }
 
-async function snimek(sloupcePred) {
+async function snimek(sloupcePred, faze) {
   const obsah = {};
   for (const t of FINANCNI_TABULKY) {
     if (!(await existuje(t))) continue;
     const sl = sloupcePred ? sloupcePred[t] : await sloupce(t);
     if (!sl) continue;
-    obsah[t] = { sloupce: sl, ...(await otiskTabulky(t, sl)) };
+    const o = await bezpecne(`otisk ${t} (${faze})`, () => otiskTabulky(t, sl));
+    if (o) obsah[t] = { sloupce: sl, ...o };
   }
-  return { obsah, soucty: await soucty() };
+  return { obsah, soucty: await bezpecne(`účetní součty (${faze})`, soucty, {}) };
 }
 
 async function spustitMigrace(kolo) {
@@ -122,37 +135,43 @@ async function spustitMigrace(kolo) {
 }
 
 (async () => {
-  console.log(`Kopie: ${cil.hostname}/${nazevDb}`);
+  for (const t of POVINNE) if (!(await existuje(t))) chyby.chybejici_povinne.push(t);
   const sloupcePred = {};
   for (const t of FINANCNI_TABULKY) if (await existuje(t)) sloupcePred[t] = await sloupce(t);
-  const pred = await snimek(sloupcePred);
+  const pred = await snimek(sloupcePred, 'před');
   const migrace1 = await spustitMigrace(1);
   const migrace2 = await spustitMigrace(2);
-  const po = await snimek(sloupcePred);
+  for (const m of [migrace1, migrace2]) for (const c of m.chyby) chyby.chyby_migrace.push(`kolo ${m.kolo}: ${c}`);
+  for (const t of POVINNE_PO_MIGRACI) if (!(await existuje(t))) chyby.chybejici_po_migraci.push(t);
+  const po = await snimek(sloupcePred, 'po');
 
-  const zmeny = [];
   for (const [t, v] of Object.entries(pred.obsah)) {
     const p = po.obsah[t];
-    if (!p) { zmeny.push(`${t}: tabulka po migraci chybí`); continue; }
-    if (p.pocet !== v.pocet) zmeny.push(`${t}: počet řádků ${v.pocet} → ${p.pocet}`);
-    else if (p.otisk !== v.otisk) zmeny.push(`${t}: změnil se obsah dosavadních sloupců`);
+    if (!p) { chyby.rozdily_dat.push(`${t}: tabulka (nebo její otisk) po migraci chybí`); continue; }
+    if (p.pocet !== v.pocet) chyby.rozdily_dat.push(`${t}: počet řádků ${v.pocet} → ${p.pocet}`);
+    else if (p.otisk !== v.otisk) chyby.rozdily_dat.push(`${t}: změnil se obsah dosavadních sloupců`);
   }
   const souctyShodne = JSON.stringify(pred.soucty) === JSON.stringify(po.soucty);
-  if (!souctyShodne) zmeny.push('účetní součty se liší (viz pred.soucty / po.soucty)');
+  if (!souctyShodne) chyby.rozdily_dat.push('účetní součty se liší (viz soucty_pred / soucty_po)');
+  if (odeslane.length) chyby.rozdily_dat.push(`během migrace se pokusilo odeslat ${odeslane.length} e-mailů`);
 
   const { kontrola } = require(path.join(KOREN, 'routes', 'evidencePlateb'));
-  const k = await kontrola(pool, null);
+  const k = await bezpecne('kontrola evidence', () => kontrola(pool, null), { od: null, v_rozsahu: {}, mimo_rozsah: {}, ceka_na_platbu: 0, rozdily: [] });
+  if (k.rozdily && k.rozdily.length) chyby.rozdily_dat.push(`kontrola evidence našla ${k.rozdily.length} rozdílů`);
   const nove = {};
-  for (const t of ['platby', 'kredit_pohyby', 'kredit_vklady', 'prodejna_klice']) {
-    if (await existuje(t)) nove[t] = Number((await pool.query(`SELECT COUNT(*) n FROM ${t}`)).rows[0].n);
+  for (const t of ['platby', 'kredit_pohyby', 'kredit_vklady', 'prodejna_klice', 'eet_udalosti']) {
+    if (await existuje(t)) nove[t] = await bezpecne(`počet ${t}`, async () => Number((await pool.query(`SELECT COUNT(*) n FROM ${t}`)).rows[0].n));
   }
+  if (nove.platby > 0 || nove.kredit_vklady > 0) chyby.rozdily_dat.push('migrace vytvořila platby nebo vklady kreditu - historie se nemá doplňovat');
   const historicke = (await existuje('darkove_poukazy'))
-    ? (await pool.query(`SELECT COALESCE(platba_stav, '-') AS platba_stav, stav, COUNT(*)::int AS pocet FROM darkove_poukazy GROUP BY 1, 2 ORDER BY 1, 2`)).rows : [];
+    ? await bezpecne('stav poukazů', async () => (await pool.query(`SELECT COALESCE(platba_stav, '-') AS platba_stav, stav, COUNT(*)::int AS pocet FROM darkove_poukazy GROUP BY 1, 2 ORDER BY 1, 2`)).rows, []) : [];
 
+  const pocetChyb = Object.values(chyby).reduce((a, x) => a + x.length, 0);
   const zprava = {
     cas: new Date().toISOString(), databaze: `${cil.hostname}/${nazevDb}`,
-    vysledek: zmeny.length || migrace1.chyby.length || migrace2.chyby.length ? 'ROZDILY' : 'OK',
-    zmeny, migrace: [migrace1, migrace2], odeslane_emaily: odeslane,
+    vysledek: pocetChyb ? 'SELHALO' : 'OK', chyby,
+    povinne_tabulky: POVINNE, volitelne_tabulky: VOLITELNE.map(t => ({ tabulka: t, existuje: !!sloupcePred[t] })),
+    migrace: [migrace1, migrace2], odeslane_emaily: odeslane,
     soucty_pred: pred.soucty, soucty_po: po.soucty, soucty_shodne: souctyShodne,
     nove_tabulky_radky: nove,
     kontrola_evidence: {
@@ -162,13 +181,18 @@ async function spustitMigrace(kolo) {
     poukazy_podle_stavu_platby: historicke
   };
   fs.writeFileSync(vystup, JSON.stringify(zprava, null, 2));
-  console.log(`Výsledek: ${zprava.vysledek}`);
-  console.log(`Účetní součty shodné: ${souctyShodne ? 'ano' : 'NE'}`);
-  if (zmeny.length) console.log('Změny:\n  ' + zmeny.join('\n  '));
-  for (const m of [migrace1, migrace2]) if (m.chyby.length) console.log(`Chyby migrace (kolo ${m.kolo}):\n  ` + m.chyby.join('\n  '));
-  console.log(`Mimo rozsah kontroly (starší doklady bez evidence): ${JSON.stringify(k.mimo_rozsah)}`);
-  console.log(`E-maily odeslané během migrace: ${odeslane.length}`);
+  // Verdikt jako PRVNÍ řádek; při chybě se úspěšné dílčí výsledky nevypisují jako „OK“
+  if (pocetChyb) {
+    console.log(`OVĚŘENÍ SELHALO (${pocetChyb} chyb):`);
+    const popisy = { chybejici_povinne: 'chybí povinná tabulka', chybejici_po_migraci: 'po migraci chybí tabulka evidence', chyby_dotazu: 'chyba dotazu', chyby_migrace: 'chyba migrace', rozdily_dat: 'rozdíl v datech' };
+    for (const [k2, seznam] of Object.entries(chyby)) for (const c of seznam) console.log(`  ✖ ${popisy[k2]}: ${c}`);
+  } else {
+    console.log('OVĚŘENÍ PROŠLO');
+    console.log(`  obsah dosavadních finančních sloupců beze změny, účetní součty shodné, e-maily 0`);
+    console.log(`  mimo rozsah kontroly (starší doklady bez evidence, NEspárované): ${JSON.stringify(k.mimo_rozsah)}`);
+  }
+  console.log(`Kopie: ${cil.hostname}/${nazevDb}`);
   console.log(`Zpráva: ${vystup}`);
   await pool.end();
-  process.exit(zprava.vysledek === 'OK' ? 0 : 1);
-})().catch(async e => { console.error('CHYBA:', e.message); await pool.end().catch(() => {}); process.exit(1); });
+  process.exit(pocetChyb ? 1 : 0);
+})().catch(async e => { console.log('OVĚŘENÍ SELHALO (neočekávaná chyba): ' + e.message); await pool.end().catch(() => {}); process.exit(1); });

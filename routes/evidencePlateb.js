@@ -63,6 +63,31 @@ router.post('/volna', (req, res) => vTransakci(res, async client => {
   return vysledek;
 }));
 
+// POST /api/evidence-plateb/prirazeni/:id/storno { klic, duvod? } – zrušení přiřazení volné
+// platby k objednávce (omyl). Přiřazení zůstane, storno se na něj naváže; platba je zase
+// volná. Stav objednávky se srovná se součtem platných úhrad. Přiřazení k poukazu se
+// takto neruší (poukaz už je aktivní - použijte vrácení poukazu), odeslanou nebo
+// doručenou objednávku také ne.
+router.post('/prirazeni/:id/storno', (req, res) => vTransakci(res, async client => {
+  const b = req.body || {};
+  if (!b.klic) throw new ev.ChybaEvidence(400, 'Chybí identifikátor operace.');
+  const id = Number(req.params.id);
+  const { vysledek, opakovane } = await ev.jednou(client, 'prirazeni-storno', b.klic, { id }, async () => {
+    const pr = (await client.query('SELECT * FROM platby_prirazeni WHERE id = $1', [id])).rows[0];
+    if (!pr) throw new ev.ChybaEvidence(404, 'Přiřazení nenalezeno.');
+    if (pr.poukaz_id) throw new ev.ChybaEvidence(409, 'Přiřazení k poukazu nejde zrušit – poukaz je aktivní. Použijte vrácení peněz za poukaz.');
+    const o = (await client.query('SELECT id, stav FROM objednavky WHERE id = $1 FOR UPDATE', [pr.objednavka_id])).rows[0];
+    if (o && ['odeslana', 'dorucena'].includes(o.stav)) throw new ev.ChybaEvidence(409, 'Objednávka už je odeslaná nebo předaná – přiřazení nejde zrušit. Použijte vrácení peněz.');
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['volna-platba:' + pr.platba_id]);
+    const st = (await client.query('INSERT INTO platby_prirazeni_storna (klic, prirazeni_id, duvod) VALUES ($1,$2,$3) ON CONFLICT (prirazeni_id) DO NOTHING RETURNING *',
+      ['prirazeni-storno:' + b.klic, id, b.duvod ? String(b.duvod).slice(0, 300) : null])).rows[0];
+    if (!st) throw new ev.ChybaEvidence(409, 'Přiřazení už je zrušené.');
+    const stav = o ? await ev.srovnatStavObjednavky(client, o.id) : null;
+    return { storno: st, objednavka_id: pr.objednavka_id, stav_objednavky: stav, prijato: o ? await ev.prijatoNaObjednavku(client, o.id) : 0 };
+  });
+  return opakovane ? { ...vysledek, opakovane: true } : vysledek;
+}));
+
 // GET /api/evidence-plateb/dobirky?nevyuctovane=1
 router.get('/dobirky', async (req, res) => {
   try {
@@ -123,7 +148,8 @@ router.get('/volne', async (req, res) => {
   try {
     const r = await pool.query(`SELECT p.*,
         p.castka - COALESCE((SELECT SUM(s.castka) FROM platby s WHERE s.opravuje_id = p.id AND s.typ = 'storno_prijmu'), 0)
-                 - COALESCE((SELECT SUM(pr.castka) FROM platby_prirazeni pr WHERE pr.platba_id = p.id), 0) AS volno
+                 - COALESCE((SELECT SUM(pr.castka) FROM platby_prirazeni pr WHERE pr.platba_id = p.id
+                     AND NOT EXISTS (SELECT 1 FROM platby_prirazeni_storna st WHERE st.prirazeni_id = pr.id)), 0) AS volno
       FROM platby p WHERE p.zdroj_typ = 'volna' AND p.typ = 'prijem' ORDER BY p.prijato_at DESC LIMIT 500`);
     res.json(r.rows.map(x => ({ ...x, volno: kc(x.volno) })));
   } catch (err) {
@@ -190,7 +216,7 @@ async function kontrola(db, od) {
     FROM vratky v WHERE v.vytvoreno >= $1 ORDER BY v.id`, [zacatek])).rows;
   const poukazy = (await db.query(`
     SELECT d.id, d.kod, d.zustatek,
-      (SELECT ${netto({ plus: "'nabiti','pocatecni_stav','pripsani','storno_cerpani'", minus: "'cerpani','storno_nabiti','storno_pripsani'" })} FROM kredit_pohyby WHERE poukaz_id = d.id) AS kredit,
+      (SELECT ${netto({ plus: "'nabiti','pocatecni_stav','pripsani','storno_cerpani'", minus: "'cerpani','storno_nabiti','storno_pripsani','vyplaceni','zruseni'" })} FROM kredit_pohyby WHERE poukaz_id = d.id) AS kredit,
       (SELECT COALESCE(SUM(v.castka), 0)
          - COALESCE((SELECT SUM(c.castka) FROM kredit_casti c JOIN kredit_vklady v2 ON v2.id = c.vklad_id WHERE v2.poukaz_id = d.id AND c.smer = 'odber'), 0)
          + COALESCE((SELECT SUM(c.castka) FROM kredit_casti c JOIN kredit_vklady v2 ON v2.id = c.vklad_id WHERE v2.poukaz_id = d.id AND c.smer = 'vraceni'), 0)

@@ -139,6 +139,16 @@ function obsluhaEvidence(stav, s, params = []) {
       .reduce((a, r) => a + (['prijem', 'storno_vraceni'].includes(r.typ) ? 1 : -1) * Number(r.castka), 0);
     return { rows: [{ vlastni: soucet, s: soucet }] };
   }
+  if (s.startsWith('SELECT 1 FROM eet_udalosti WHERE zdroj_typ')) return { rows: (e.eet_udalosti || []).filter(u => u.zdroj_typ === params[0] && Number(u.zdroj_id) === Number(params[1])).slice(0, 1) };
+  if (s.startsWith('SELECT pr.platba, pr.celkem,')) {
+    const pr = (stav.prodejnaProdeje || stav.prodeje || []).find(x => Number(x.id) === Number(params[0]));
+    if (!pr) return { rows: [] };
+    const vraceno = (stav.vratky || []).filter(v => Number(v.prodej_id) === Number(params[0]) && v.zpusob_vraceni !== 'vymena').reduce((a, v) => a + Number(v.castka || 0), 0);
+    return { rows: [{ platba: pr.platba, celkem: pr.celkem, vraceno }] };
+  }
+  if (s.startsWith('SELECT COALESCE(SUM(castka), 0) AS s FROM platby_prirazeni pr WHERE objednavka_id')) {
+    return { rows: [{ s: e.platby_prirazeni.filter(r => Number(r.objednavka_id) === Number(params[0])).reduce((a, r) => a + Number(r.castka), 0) }] };
+  }
   if (s.startsWith('SELECT COALESCE(SUM(castka), 0) AS s FROM platby_prirazeni WHERE objednavka_id')) {
     return { rows: [{ s: e.platby_prirazeni.filter(r => Number(r.objednavka_id) === Number(params[0])).reduce((a, r) => a + Number(r.castka), 0) }] };
   }

@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 
 function vytvoritStav() {
   return {
-    prodejnaProdeje: [{ id: 10, polozky: [{ produkt_id: 1, velikost: 24, pocet: 3 }, { produkt_id: 2, velikost: 25, pocet: 1 }] }],
+    prodejnaProdeje: [{ id: 10, platba: 'hotovost', celkem: 10000, polozky: [{ produkt_id: 1, velikost: 24, pocet: 3 }, { produkt_id: 2, velikost: 25, pocet: 1 }] }],
     objednavky: [{ id: 20, stav: 'nova' }],
     objednavkyPolozky: [{ objednavka_id: 20, produkt_id: 5, velikost: 26, pocet: 2 }],
     vratky: [],

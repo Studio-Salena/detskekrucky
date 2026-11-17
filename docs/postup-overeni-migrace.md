@@ -56,6 +56,19 @@ Co skript dělá:
 - vypíše kontrolu evidence: doklady **mimo rozsah** (starší bez evidence) zvlášť. Nejsou
   tím spárované, jen se nekontrolují a nic se jim nedopočítává.
 
+**Verdikt je první řádek výstupu** a určuje návratový kód:
+- `OVĚŘENÍ PROŠLO` = kód 0,
+- `OVĚŘENÍ SELHALO` = kód 1. Selže to při každé z těchto chyb a ty se vypíšou pod verdiktem:
+  - chybí povinná tabulka (`prodejna_prodeje`, `vratky`, `objednavky`, `objednavky_polozky`, `darkove_poukazy`, `poukazy_pouziti`, `sklad`, `pohyby_skladu`),
+  - po migraci chybí tabulka evidence,
+  - chyba dotazu nebo migrace,
+  - rozdíl v datech nebo součtech,
+  - pokus o e-mail,
+  - doplněné platby,
+  - rozdíl v kontrole evidence.
+
+Volitelné tabulky (`faktury`, `promo_pouziti`, `poukazove_karty`, `nakupni_faktury`) se porovnají, jen když existují.
+
 Očekávaný výsledek:
 - `zmeny: []` a `soucty_shodne: true`,
 - `nove_tabulky_radky.platby = 0`, `kredit_vklady = 0` (historie se nedoplňuje),

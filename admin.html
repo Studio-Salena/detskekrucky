@@ -2967,6 +2967,21 @@ function vykreslitVyuctovani(seznam) {
   document.getElementById('vyuctovaniTab').innerHTML = seznam.length ? `<table><thead><tr><th>Vyplaceno</th><th>Dopravce</th><th>Dobírek</th><th>Brutto</th><th>Poplatek</th><th>Netto</th></tr></thead><tbody>${seznam.map(v => `<tr>
     <td>${new Date(v.vyplaceno_at).toLocaleDateString('cs-CZ')}</td><td>${escH(v.dopravce)}</td><td>${v.pocet}</td><td>${kcFmt(v.brutto)}</td><td>${kcFmt(v.poplatek)}</td><td><strong>${kcFmt(v.netto)}</strong></td></tr>`).join('')}</tbody></table>` : '<div class="empty">Zatím žádné vyúčtování</div>';
 }
+// Vrácení peněz za zaplacený poukaz: nejdřív náhled (kolik a proč), pak zápis + zrušení
+async function vratitPenizePoukazu(id) {
+  try {
+    const nahled = await adminFetch(API + '/poukazy/' + id + '/vraceni').then(r => r.json());
+    if (nahled.chyba) { alert(nahled.chyba); return; }
+    if (!(nahled.lze > 0)) { alert('Peníze vrátit nejde: ' + (nahled.duvod || 'není co vrátit.')); return; }
+    const zpusob = prompt('Vrátit ' + kcFmt(nahled.lze) + ' (zaplaceno ' + kcFmt(nahled.zaplaceno) + ', už vráceno ' + kcFmt(nahled.vraceno) + ') a poukaz zrušit?\nZbylý nezaplacený kredit (zůstatek ' + kcFmt(nahled.zustatek) + ') se zruší také.\n\nJak se peníze vracejí? (hotovost / karta / qr / prevod)', nahled.zpusob_puvodni || 'hotovost');
+    if (!zpusob) return;
+    const { res, data } = await odeslatOperaci('poukaz-vraceni-' + id, API + '/poukazy/' + id + '/vraceni', { zpusob: zpusob.trim().toLowerCase(), castka: nahled.lze });
+    if (!res.ok) { alert(data.chyba || 'Vrácení se nepodařilo zapsat.'); return; }
+    alert('✅ Vráceno ' + kcFmt(data.vraceno) + ', poukaz je zrušený.');
+    loadPoukazy(); loadProdejna();
+    zobrazitPoukazDetail(id, data.poukaz);
+  } catch (e) { alert('Spojení selhalo – zkuste to znovu, nevrátí se dvakrát.'); }
+}
 async function zapsatPlatbuPoukazu(id) {
   const btn = document.getElementById('ppBtn'), msg = document.getElementById('ppMsg');
   btn.disabled = true;
@@ -3028,7 +3043,8 @@ function platbyObjednavkyHtml(d) {
   const osobne = o.doprava === 'osobni_odber' && o.platba === 'na_prodejne';
   const radky = d.platby.map(p => `<tr><td>${new Date(p.prijato_at).toLocaleString('cs-CZ')}</td><td>${escH(TYPY_PLATBY_POPIS[p.typ] || p.typ)}</td>
       <td>${escH(ZPUSOBY_PLATBY_POPIS[p.zpusob] || p.zpusob)}</td><td>${p.typ === 'prijem' || p.typ === 'storno_vraceni' ? '' : '−'}${kc(p.castka)}</td><td>${escH(p.poznamka || '')}</td></tr>`)
-    .concat(d.prirazeni.map(p => `<tr><td>${new Date(p.vytvoreno).toLocaleString('cs-CZ')}</td><td>Přiřazená platba #${escH(p.platba_id)}</td><td>${escH(ZPUSOBY_PLATBY_POPIS[p.zpusob] || p.zpusob)}</td><td>${kc(p.castka)}</td><td></td></tr>`)).join('');
+    .concat(d.prirazeni.map(p => `<tr><td>${new Date(p.vytvoreno).toLocaleString('cs-CZ')}</td><td>Přiřazená platba #${escH(p.platba_id)}${p.storno_id ? ' – <strong>zrušeno</strong>' : ''}</td><td>${escH(ZPUSOBY_PLATBY_POPIS[p.zpusob] || p.zpusob)}</td><td>${p.storno_id ? '<s>' + kc(p.castka) + '</s>' : kc(p.castka)}</td>
+      <td>${p.storno_id || ['odeslana', 'dorucena'].includes(o.stav) ? '' : `<button class="btn btn-outline btn-sm" onclick="zrusitPrirazeni(${p.id}, ${o.id})">Zrušit přiřazení</button>`}</td></tr>`)).join('');
   let akce = '';
   if (o.stav !== 'zrusena' && d.zbyva > 0 && o.platba !== 'dobirka') {
     const zpusoby = osobne ? [['hotovost', '💵 Hotovost'], ['karta', '💳 Karta'], ['qr', '📱 QR']] : [['prevod', '🏦 Převod']];
@@ -3069,6 +3085,16 @@ async function prijmoutPlatbuObjednavky(id) {
   } catch (e) {
     msg.innerHTML = '<div class="error-msg">Spojení selhalo – klikněte znovu, platba se nezapíše dvakrát.</div>';
   } finally { if (btn) btn.disabled = false; }
+}
+async function zrusitPrirazeni(prirazeniId, objId) {
+  if (!confirm('Zrušit přiřazení platby k objednávce? Platba bude zase volná a objednávka se vrátí mezi nezaplacené, pokud jí peníze přestanou stačit.')) return;
+  try {
+    const { res, data } = await odeslatOperaci('prirazeni-storno-' + prirazeniId, API + '/evidence-plateb/prirazeni/' + prirazeniId + '/storno', {});
+    if (!res.ok) { alert(data.chyba || 'Přiřazení se nepodařilo zrušit.'); return; }
+    nacistPlatbyObjednavky(objId);
+    const o = vsechnyObjednavky.find(x => x.id === objId);
+    if (o && data.stav_objednavky) o.stav = data.stav_objednavky;
+  } catch (e) { alert('Spojení selhalo – zkuste to znovu, nezruší se dvakrát.'); }
 }
 async function dobirkaVybrana(id) {
   if (!confirm('Zapsat, že zákazník zaplatil dobírku dopravci? (Peníze přijdou až s vyúčtováním od dopravce.)')) return;
@@ -7429,7 +7455,9 @@ async function zobrazitPoukazDetail(id, poukazData=null) {
         <button class="btn btn-primary btn-sm" id="ppBtn" onclick="zapsatPlatbuPoukazu(${poukaz.id})">💰 Zapsat platbu a aktivovat</button>
       </div>
       <div style="font-size:0.8rem;margin-top:6px">Převod, který už je zapsaný jako volná platba, přiřaďte v Účetnictví → Platby a dobírky (nezapočítá se dvakrát).</div>
-      <div id="ppMsg"></div></div>` : '';
+      <div id="ppMsg"></div></div>`
+    : (['aktivni', 'pouzity'].includes(poukaz.stav) && poukaz.platba_stav === 'zaplaceno')
+      ? `<div style="margin-top:8px"><button class="btn btn-outline btn-sm" onclick="vratitPenizePoukazu(${poukaz.id})">↩️ Vrátit peníze a zrušit poukaz</button><div id="ppMsg"></div></div>` : '';
   setTimeout(() => {
     try {
       JsBarcode('#poukazBarcode', poukaz.ean, {format:'EAN13', width:1.6, height:42, fontSize:12, margin:0, background:'transparent'});

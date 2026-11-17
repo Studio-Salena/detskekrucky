@@ -985,7 +985,8 @@ async function prehledPlatebObjednavky(db, id) {
   const o = (await db.query('SELECT id, cislo, stav, doprava, platba, celkem, dopravce FROM objednavky WHERE id = $1', [id])).rows[0];
   if (!o) return null;
   const platby = (await db.query("SELECT * FROM platby WHERE zdroj_typ = 'objednavka' AND zdroj_id = $1 ORDER BY id", [id])).rows;
-  const prirazeni = (await db.query('SELECT pr.*, p.zpusob, p.prijato_at FROM platby_prirazeni pr JOIN platby p ON p.id = pr.platba_id WHERE pr.objednavka_id = $1 ORDER BY pr.id', [id])).rows;
+  const prirazeni = (await db.query(`SELECT pr.*, p.zpusob, p.prijato_at, st.id AS storno_id FROM platby_prirazeni pr JOIN platby p ON p.id = pr.platba_id
+    LEFT JOIN platby_prirazeni_storna st ON st.prirazeni_id = pr.id WHERE pr.objednavka_id = $1 ORDER BY pr.id`, [id])).rows;
   const dobirka = (await db.query('SELECT * FROM dobirky WHERE objednavka_id = $1', [id])).rows[0] || null;
   const prijato = await evidence.prijatoNaObjednavku(db, id);
   return { objednavka: o, platby, prirazeni, dobirka, prijato, zbyva: Math.max(0, evidence.kc(Number(o.celkem) - prijato)) };
@@ -1075,6 +1076,7 @@ router.post('/:id/platby/vraceni', vyzadovatAdmina, (req, res) => vTransakciEvid
     const zapis = await evidence.zapsatPlatbu(client, { klic: 'objednavka-vraceni:' + b.klic, typ: 'vraceni', castka, zpusob: b.zpusob,
       okolnosti: naDalku ? 'eshop' : (o.doprava === 'osobni_odber' ? 'osobni_odber' : 'prodejna'), kontaktni: !naDalku,
       zdroj_typ: 'objednavka', zdroj_id: id, vraci_id: puvodni ? puvodni.id : null, poznamka: b.duvod ? String(b.duvod).slice(0, 300) : null });
+    await evidence.srovnatStavObjednavky(client, id);
     return { zapis, ...(await prehledPlatebObjednavky(client, id)) };
   });
   return opakovane ? { ...vysledek, opakovane: true } : vysledek;
