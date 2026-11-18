@@ -97,6 +97,15 @@ Systém vrácení u (i částečně) použitého poukazu odmítne a nechá ho na
 vylučuje (§ 1837 takový případ neuvádí). Pokud zákazník v takovém případě odstoupí, postupujte
 po poradě s právníkem a peníze vraťte mimo tuto funkci.
 
+## Případy mimo automatické zpracování
+Systém žádný právní závěr o nároku zákazníka nedělá. Kde vrácení neprovede automaticky
+(poukaz zapsaný jako koupený na prodejně, darovaný, historický bez platby, použitý, podle
+zapsaných údajů po lhůtě, jiná než celá přijatá částka), administrace uvádí, že **automatické
+zpracování není dostupné** a případ je třeba **posoudit individuálně**. Netvrdí, že zákazník
+zákonné právo nemá. U poukazu zapsaného jako „prodejna“ výslovně upozorní, že byl-li ve
+skutečnosti sjednaný na dálku, právo na odstoupení mít může. Další automatická právní
+pravidla se do systému nepřidávají (rozhodnutí majitelky 18. 11. 2026).
+
 ## Kontroly v systému (zachované)
 - Před výplatou se v jedné transakci zamkne poukaz, jeho vklady kreditu a původní platba.
   Ověří se soulad zůstatku, pohybů kreditu, vkladů, vyplaceného kreditu a vrácených peněz

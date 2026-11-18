@@ -129,7 +129,7 @@ test('PostgreSQL vrácení peněz za poukaz: odstoupení z e-shopu, lhůta, slev
     nl = await nahled(lh.id);
     assert.equal(nl.lhuta_do, pridatDny(predDny(20), 14));
     let r = await vratit(lh.id, { klic: 'lhuta-pozde', zpusob: 'prevod', prevzato_dne: undefined });
-    assert.equal(r.statusCode, 409, JSON.stringify(r.body)); assert.match(r.body.chyba, /Lhůta pro odstoupení skončila/);
+    assert.equal(r.statusCode, 409, JSON.stringify(r.body)); assert.match(r.body.chyba, /lhůta pro odstoupení uplynula/); assert.match(r.body.chyba, /individuálně/);
     r = await vratit(lh.id, { klic: 'lhuta-vcas-oznameno', zpusob: 'prevod', prevzato_dne: undefined, odstoupeno_dne: nl.lhuta_do });
     assert.equal(r.statusCode, 200, JSON.stringify(r.body));
 
@@ -190,7 +190,11 @@ test('PostgreSQL vrácení peněz za poukaz: odstoupení z e-shopu, lhůta, slev
     // karta koupená v prodejně: peníze se nevracejí
     const karta2 = (await zavolat(karty, 'post', '/', { body: {} })).body;
     const kp2 = (await zavolat(poukazy, 'post', '/', { body: { klic: 'karta-prodejna-1', hodnota: 700, karta_ean: karta2.ean, platba: 'karta', zakoupeno_kde: 'prodejna' } })).body;
-    assert.match((await nahled(kp2.id, dnes)).duvod, /nelze směnit za hotovost/);
+    const duvodProdejna = (await nahled(kp2.id, dnes)).duvod;
+    assert.match(duvodProdejna, /zapsaný jako koupený na prodejně/);
+    assert.match(duvodProdejna, /sjednaný na dálku/, 'poukaz sjednaný na dálku, ale zapsaný jako prodejna: odkaz na individuální posouzení');
+    assert.match(duvodProdejna, /individuálně/);
+    assert.doesNotMatch(duvodProdejna, /nevracejí|nemá právo|není možné/, 'administrace netvrdí, že zákazník nemá zákonné právo');
     assert.equal((await vratit(kp2.id, { klic: 'karta-prodejna-vr', zpusob: 'karta' })).statusCode, 409);
 
     // ── 6) platné odstoupení a opakovaný požadavek ──
@@ -198,7 +202,7 @@ test('PostgreSQL vrácení peněz za poukaz: odstoupení z e-shopu, lhůta, slev
     const nOk = await nahled(ok.id, dnes);
     assert.equal(nOk.lze, 500); assert.equal(nOk.duvod, null);
     r = await vratit(ok.id, { klic: 'odst-castecne', zpusob: 'prevod', castka: 200 });
-    assert.equal(r.statusCode, 400); assert.match(r.body.chyba, /částečné vrácení/);
+    assert.equal(r.statusCode, 400); assert.match(r.body.chyba, /jen celou přijatou částku/); assert.match(r.body.chyba, /individuálně/);
     r = await vratit(ok.id, { klic: 'odst-bez-dne', zpusob: 'prevod', odstoupeno_dne: null });
     assert.equal(r.statusCode, 400); assert.match(r.body.chyba, /odstoupil/);
     r = await vratit(ok.id, { klic: 'odst-budouci', zpusob: 'prevod', odstoupeno_dne: '2099-01-01' });
@@ -222,7 +226,7 @@ test('PostgreSQL vrácení peněz za poukaz: odstoupení z e-shopu, lhůta, slev
     const pouzity = await eshopovy(500);
     r = await prodat({ klic: 'pouzity-prodej', platba: 'poukaz', poukaz_kod: pouzity.kod, polozky: [polozka(200)] });
     assert.equal(r.statusCode, 200, JSON.stringify(r.body));
-    assert.match((await nahled(pouzity.id, dnes)).duvod, /použitý/);
+    assert.match((await nahled(pouzity.id, dnes)).duvod, /použitý.*individuálně/);
     r = await vratit(pouzity.id, { klic: 'pouzity-vraceni', zpusob: 'prevod' });
     assert.equal(r.statusCode, 409); assert.equal(await vraceniPenez(pouzity.id), 0);
 

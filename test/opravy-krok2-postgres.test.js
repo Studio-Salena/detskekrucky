@@ -7,6 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { nacistRouterSMocky, najitHandler, vytvoritRes } = require('../test-helpers/_pomocnik');
 const { vsePripraveno } = require('../lib/startServeru');
+const { zalozitDiagnostiku } = require('../test-helpers/diagnostikaTestu');
 
 const URL_DB = process.env.TEST_PG_URL;
 const preskocit = URL_DB ? false : 'TEST_PG_URL není nastavená - test proti PostgreSQL se přeskakuje';
@@ -17,8 +18,9 @@ test('PostgreSQL opravy kroku 2: vrácení poukazu, výměna, přiřazení, pův
   await admin.connect();
   const schema = 'opravy_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
   await admin.query(`CREATE SCHEMA ${schema}`);
-  const pool = new Pool({ connectionString: URL_DB, options: `-c search_path=${schema}`, max: 15 });
-  const puvodniLog = console.log; console.log = () => {};
+  const pool = new Pool({ connectionString: URL_DB, options: `-c search_path=${schema}`, max: 15, application_name: 'test-opravy' });
+  // server (console.*) se nezahazuje: při neúspěchu se vypíše s posledními voláními API a chybami DB
+  const diag = zalozitDiagnostiku('opravy kroku 2', pool, 'test-opravy');
   const puvodniZamek = process.env.EET_ZAMEK_OD; delete process.env.EET_ZAMEK_OD;
   try {
     await pool.query(`
@@ -45,6 +47,7 @@ test('PostgreSQL opravy kroku 2: vrácení poukazu, výměna, přiřazení, pův
     const zavolat = async (router, metoda, cesta, req = {}) => {
       const res = vytvoritRes();
       await najitHandler(router, metoda, cesta)({ params: {}, query: {}, ip: '10.4.4.' + Math.floor(Math.random() * 250), ...req }, res);
+      diag.volani(metoda, cesta, req, res);
       return res;
     };
     const q = async (sql, p) => (await pool.query(sql, p)).rows;
@@ -57,7 +60,7 @@ test('PostgreSQL opravy kroku 2: vrácení poukazu, výměna, přiřazení, pův
     let res = await zavolat(poukazy, 'post', '/', { body: { klic: 'vr-poukaz-1', hodnota: 1000, platba: 'karta', zakoupeno_kde: 'prodejna' } });
     const pk = res.body;
     let n = await zavolat(poukazy, 'get', '/:id/vraceni', { params: { id: String(pk.id) } });
-    assert.equal(n.body.lze, 0); assert.match(n.body.duvod, /nelze směnit za hotovost/);
+    assert.equal(n.body.lze, 0); assert.match(n.body.duvod, /zapsaný jako koupený na prodejně/); assert.match(n.body.duvod, /individuálně/);
     res = await zavolat(poukazy, 'post', '/:id/vraceni', { params: { id: String(pk.id) }, body: { klic: 'vr-prodejna-1', zpusob: 'karta', odstoupeno_dne: '2026-11-18' } });
     assert.equal(res.statusCode, 409, JSON.stringify(res.body));
     assert.equal((await q("SELECT COUNT(*)::int n FROM platby WHERE typ = 'vraceni'"))[0].n, 0, 'nic se nevrátilo');
@@ -110,7 +113,10 @@ test('PostgreSQL opravy kroku 2: vrácení poukazu, výměna, přiřazení, pův
     const v3 = (await zavolat(evRouter, 'post', '/volna', { body: { klic: 'pr-volna-3', zpusob: 'prevod', castka: 500 } })).body;
     res = await Promise.all([priradit(o3, 'prirazeni-o3a', v2.id, 500), priradit(o3, 'prirazeni-o3b', v3.id, 500)]);
     assert.deepEqual(res.map(r => r.statusCode).sort(), [200, 400], 'objednávka 800 nepřijme 2× 500: ' + JSON.stringify(res.map(r => r.body)));
-    res = await priradit(o3, 'prirazeni-o3c', v3.id, null); // zbytek dluhu
+    // zbytek dluhu z té platby, která v souběhu neuspěla (vítěz souběhu je náhodný – dřív se tu
+    // natvrdo brala v3 a test občas selhal, když souběh vyhrála právě v3)
+    const neuspesna = res[0].statusCode === 200 ? v3 : v2;
+    res = await priradit(o3, 'prirazeni-o3c', neuspesna.id, null); // zbytek dluhu
     assert.equal(res.statusCode, 200, JSON.stringify(res.body));
     assert.deepEqual([res.body.prijato, res.body.objednavka.stav], [800, 'zaplacena']);
     // opakování stejného klíče = jedno přiřazení
@@ -198,8 +204,11 @@ test('PostgreSQL opravy kroku 2: vrácení poukazu, výměna, přiřazení, pův
     // ── kontrola: v rozsahu bez rozdílů ──
     const k = await zavolat(evRouter, 'get', '/kontrola');
     assert.deepEqual(k.body.rozdily, [], JSON.stringify(k.body.rozdily));
+  } catch (chyba) {
+    await diag.vypsat(chyba);
+    throw chyba;
   } finally {
-    console.log = puvodniLog;
+    diag.konec();
     if (puvodniZamek !== undefined) process.env.EET_ZAMEK_OD = puvodniZamek;
     await pool.end();
     await admin.query(`DROP SCHEMA ${schema} CASCADE`);

@@ -7699,7 +7699,9 @@ async function zobrazitPoukazDetail(id, poukazData=null) {
       <div style="font-size:0.8rem;margin-top:6px">Převod, který už je zapsaný jako volná platba, přiřaďte v Účetnictví → Platby a dobírky (nezapočítá se dvakrát).</div>
       <div id="ppMsg"></div></div>`
     : (poukaz.stav === 'aktivni' && poukaz.platba_stav === 'zaplaceno' && poukaz.zakoupeno_kde === 'eshop' && poukaz.druh !== 'dar')
-      ? `<div style="margin-top:8px"><button class="btn btn-outline btn-sm" onclick="vratitPenizePoukazu(${poukaz.id})">↩️ Odstoupení od nákupu (e-shop, 14 dnů)</button><div style="font-size:0.8rem;margin-top:4px">Poukaz nelze směnit za hotovost. Peníze se vracejí jen při zákonném odstoupení od nákupu poukazu přes e-shop.</div><div id="ppMsg"></div></div>` : '';
+      ? `<div style="margin-top:8px"><button class="btn btn-outline btn-sm" onclick="vratitPenizePoukazu(${poukaz.id})">↩️ Odstoupení od nákupu (e-shop, 14 dnů)</button><div style="font-size:0.8rem;margin-top:4px">Poukaz nelze směnit za hotovost. Automaticky se peníze vracejí jen při odstoupení od nákupu poukazu přes e-shop.</div><div id="ppMsg"></div></div>`
+    : (poukaz.platba_stav === 'zaplaceno' && ['aktivni', 'pouzity'].includes(poukaz.stav))
+      ? `<div style="font-size:0.8rem;margin-top:8px">Vrácení peněz za tento poukaz systém automaticky nezpracuje (poukaz je zapsaný jako koupený na prodejně, nebo nejde o odstoupení z e-shopu). Pokud zákazník uplatňuje zákonné právo – například poukaz byl ve skutečnosti sjednaný na dálku – posuďte případ individuálně.</div>` : '';
   setTimeout(() => {
     try {
       JsBarcode('#poukazBarcode', poukaz.ean, {format:'EAN13', width:1.6, height:42, fontSize:12, margin:0, background:'transparent'});

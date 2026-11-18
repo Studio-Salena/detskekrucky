@@ -511,12 +511,12 @@ async function nahledVraceni(client, poukaz, { zamknout = false, prevzatoDne = n
   const ne = duvod => ({ lze: 0, duvod });
   if (poukaz.stav === 'ceka_na_platbu') return ne('Poukaz ještě není zaplacený.');
   if (poukaz.stav === 'zruseny') return ne('Poukaz je zrušený.');
-  if (poukaz.druh === 'dar') return ne('Darovaný poukaz – nic se za něj nezaplatilo, peníze se nevracejí.');
+  if (poukaz.druh === 'dar') return ne('Darovaný poukaz – v evidenci k němu není přijatá platba. Automatické zpracování v systému není dostupné. Pokud zákazník uplatňuje zákonné právo (například odstoupení od smlouvy), posuďte případ individuálně – systém o jeho nároku nerozhoduje.');
   if (poukaz.zakoupeno_kde !== 'eshop') {
-    return ne('Poukaz nelze směnit za hotovost (obchodní podmínky). Peníze se vracejí jen při odstoupení od smlouvy uzavřené na dálku (poukaz koupený přes e-shop).');
+    return ne('Poukaz je zapsaný jako koupený na prodejně. Automaticky jde vrátit peníze jen u poukazu zapsaného jako koupený přes e-shop. Pokud byl poukaz ve skutečnosti sjednaný na dálku (e-mailem, telefonem), může mít zákazník právo na odstoupení od smlouvy – posuďte případ individuálně; systém o jeho nároku nerozhoduje.');
   }
   const info = await platbaZaPoukaz(client, poukaz);
-  if (!info) return ne('Za poukaz není v evidenci zapsaná platba (historický poukaz) – peníze přes tuto funkci vrátit nejde.');
+  if (!info) return ne('Za poukaz není v evidenci zapsaná platba (historický poukaz). Automatické zpracování v systému není dostupné. Pokud zákazník uplatňuje zákonné právo (například odstoupení od smlouvy), posuďte případ individuálně – systém o jeho nároku nerozhoduje.');
   const vraceno = await vracenoZaPoukaz(client, poukaz, info);
   const soulad = await souladPoukazu(client, poukaz, { platba: info.platba, zaplaceno: info.zaplaceno, vraceno, zamknout });
   const zaklad = { zaplaceno: info.zaplaceno, vraceno, hodnota: evidence.kc(poukaz.hodnota), info };
@@ -529,12 +529,12 @@ async function nahledVraceni(client, poukaz, { zamknout = false, prevzatoDne = n
     FROM kredit_pohyby WHERE poukaz_id = $1 AND typ IN ('cerpani', 'storno_cerpani')`, [poukaz.id])).rows[0].s);
   const pouzito = evidence.kc((await client.query('SELECT COALESCE(SUM(castka), 0) AS s FROM poukazy_pouziti WHERE poukaz_id = $1', [poukaz.id])).rows[0].s);
   if (cerpano !== 0 || pouzito !== 0 || evidence.kc(poukaz.zustatek) !== zaklad.hodnota) {
-    return { ...zaklad, lze: 0, duvod: 'Poukaz už byl (i částečně) použitý – vrácení peněz za použitý poukaz systém neprovede. Posuďte jednotlivě (docs/vraceni-poukazu-pravni.md, otevřená otázka).' };
+    return { ...zaklad, lze: 0, duvod: 'Poukaz už byl (i částečně) použitý. Automatické zpracování v systému není dostupné. Pokud zákazník uplatňuje zákonné právo (například odstoupení od smlouvy), posuďte případ individuálně – systém o jeho nároku nerozhoduje.' };
   }
   if (vraceno !== 0) return { ...zaklad, lze: 0, duvod: 'Za poukaz už byly peníze vráceny.' };
   // vrací se skutečně přijatá částka (při slevě méně než nominální hodnota)
   const lze = evidence.kc(info.zaplaceno);
-  if (!(lze > 0)) return { ...zaklad, lze: 0, duvod: 'Za poukaz nebyly přijaty žádné peníze.' };
+  if (!(lze > 0)) return { ...zaklad, lze: 0, duvod: 'Za poukaz nebyly v evidenci přijaty žádné peníze. Automatické zpracování v systému není dostupné. Pokud zákazník uplatňuje zákonné právo (například odstoupení od smlouvy), posuďte případ individuálně – systém o jeho nároku nerozhoduje.' };
   return { ...zaklad, lze, ...lhutaOdstoupeni(poukaz, prevzatoDne), duvod: null };
 }
 
@@ -573,11 +573,11 @@ router.post('/:id/vraceni', vyzadovatAdmina, async (req, res) => {
       if (!JE_DEN(data.odstoupeno_dne)) throw new evidence.ChybaEvidence(400, 'Zadejte den, kdy zákazník od nákupu poukazu odstoupil.');
       if (data.odstoupeno_dne > dnesVPraze()) throw new evidence.ChybaEvidence(400, 'Den odstoupení nemůže být v budoucnu.');
       if (data.odstoupeno_dne > nahled.lhuta_do) {
-        throw new evidence.ChybaEvidence(409, `Lhůta pro odstoupení skončila ${nahled.lhuta_do} (počátek ${nahled.pocatek}${nahled.pouceni_dolozeno ? '' : ', prodloužená o rok – poučení nedoloženo'}) – peníze za poukaz se nevracejí.`);
+        throw new evidence.ChybaEvidence(409, `Podle zapsaných údajů lhůta pro odstoupení uplynula ${nahled.lhuta_do} (počátek ${nahled.pocatek}${nahled.pouceni_dolozeno ? '' : ', prodloužená o rok – poučení nedoloženo'}). Automatické vrácení není dostupné. Pokud zákazník doloží jiný den převzetí, zadejte ho; jiné okolnosti posuďte individuálně – systém o jeho nároku nerozhoduje.`);
       }
       const castka = nahled.lze;
       if (data.castka != null && evidence.kc(data.castka) !== castka) {
-        throw new evidence.ChybaEvidence(400, `Při odstoupení se vrací celá přijatá částka ${castka} Kč – částečné vrácení peněz za poukaz není možné.`);
+        throw new evidence.ChybaEvidence(400, `Automaticky jde vrátit jen celou přijatou částku ${castka} Kč. Jiné řešení posuďte individuálně.`);
       }
       const naDalku = data.zpusob === 'prevod';
       const platebniUdaje = { typ: 'vraceni', castka, zpusob: data.zpusob, okolnosti: naDalku ? 'eshop' : 'prodejna', kontaktni: !naDalku,
