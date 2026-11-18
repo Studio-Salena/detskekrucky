@@ -7,8 +7,9 @@
 // Co dělá:
 //   1. ověří, že cíl je lokální kopie (host localhost, název obsahuje kopie/test/sim)
 //      a že se NErovná DATABASE_URL
-//   2. vypne e-maily a externí služby (Resend, Cloudinary, dopravci, Stripe) - proměnné
-//      se smažou a modul e-mailů i DB pool se podstrčí, žádná síťová operace neproběhne
+//   2. vypne e-maily a externí služby (Resend, Cloudinary, dopravci, Stripe, EET) - proměnné
+//      se smažou, modul e-mailů i DB pool se podstrčí a HTTP(S)/fetch se zablokují
+//      (každý pokus o síť se zapíše a ověření selže); DB jen na lokální kopii
 //   3. udělá snímek finančních dat: součty jako v Účetnictví/uzávěrkách + otisk obsahu
 //      dosavadních sloupců finančních tabulek
 //   4. spustí všechny startovní migrace aplikace (2×, jako dva restarty)
@@ -35,8 +36,16 @@ if (process.env.DATABASE_URL && process.env.DATABASE_URL === url) konec('URL je 
 
 // Žádné externí služby ani e-maily
 for (const k of Object.keys(process.env)) {
-  if (/^(RESEND|CLOUDINARY|ZASILKOVNA|GLS|PPL|STRIPE|SMTP|EMAIL)/.test(k)) delete process.env[k];
+  if (/^(RESEND|CLOUDINARY|ZASILKOVNA|GLS|PPL|STRIPE|SMTP|EMAIL|EET)/.test(k)) delete process.env[k];
 }
+// Žádná síť mimo lokální DB: http/https/fetch jen zapíšou pokus a selžou
+const pokusySit = [];
+for (const modul of ['http', 'https']) {
+  const m = require(modul);
+  const blok = (...a) => { const u = a[0]; pokusySit.push(`${modul}: ${typeof u === 'string' ? u : (u && (u.hostname || u.host)) || '?'}`); throw new Error('Síť je během ověření migrace zablokovaná.'); };
+  m.request = blok; m.get = blok;
+}
+globalThis.fetch = async u => { pokusySit.push('fetch: ' + String(u)); throw new Error('Síť je během ověření migrace zablokovaná.'); };
 process.env.DATABASE_URL = url;
 // interní tajemství (ne externí služba) - bez něj modul přihlašování jen hlásí varování
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'overeni-migrace-' + crypto.randomBytes(8).toString('hex');
@@ -60,7 +69,11 @@ const POVINNE = ['prodejna_prodeje', 'vratky', 'objednavky', 'objednavky_polozky
 const VOLITELNE = ['faktury', 'promo_pouziti', 'poukazove_karty', 'nakupni_faktury'];
 const FINANCNI_TABULKY = [...POVINNE, ...VOLITELNE];
 const POVINNE_PO_MIGRACI = ['platby', 'platby_prirazeni', 'platby_prirazeni_storna', 'kredit_pohyby', 'kredit_vklady', 'kredit_casti',
-  'kredit_vklady_zdroje', 'dobirky', 'dobirky_vyuctovani', 'operace_klice', 'prodejna_klice', 'eet_udalosti'];
+  'kredit_vklady_zdroje', 'dobirky', 'dobirky_vyuctovani', 'operace_klice', 'prodejna_klice', 'eet_udalosti',
+  'eet_udalosti_radky', 'eet_pokusy', 'eet_provoz', 'eet_dohled'];
+// EET (krok 3): migrace jen zakládá tabulky – nic nezapíná, nic zpětně neeviduje
+const EET_PRAZDNE_PO_MIGRACI = ['eet_udalosti', 'eet_udalosti_radky', 'eet_pokusy', 'eet_provoz'];
+const EET_TRIGGERY = ['eet_udalosti_nemenna', 'eet_udalosti_vznik', 'eet_provoz_nemenny', 'eet_pokusy_jednou'];
 const chyby = { chybejici_povinne: [], chybejici_po_migraci: [], chyby_dotazu: [], chyby_migrace: [], rozdily_dat: [] };
 // Dotaz, jehož chyba znamená neúspěch ověření (nesmí se jen vypsat vedle výsledku)
 async function bezpecne(popis, fn, nahrada = null) {
@@ -163,6 +176,16 @@ async function spustitMigrace(kolo) {
     if (await existuje(t)) nove[t] = await bezpecne(`počet ${t}`, async () => Number((await pool.query(`SELECT COUNT(*) n FROM ${t}`)).rows[0].n));
   }
   if (nove.platby > 0 || nove.kredit_vklady > 0) chyby.rozdily_dat.push('migrace vytvořila platby nebo vklady kreditu - historie se nemá doplňovat');
+  const eet = {};
+  for (const t of EET_PRAZDNE_PO_MIGRACI) {
+    if (!(await existuje(t))) continue;
+    eet[t] = await bezpecne(`počet ${t}`, async () => Number((await pool.query(`SELECT COUNT(*) n FROM ${t}`)).rows[0].n));
+    if (eet[t] > 0) chyby.rozdily_dat.push(`migrace zapsala do ${t} ${eet[t]} řádků – EET se nesmí zapnout ani zpětně evidovat`);
+  }
+  const triggery = await bezpecne('triggery EET', async () => (await pool.query(
+    "SELECT tgname FROM pg_trigger WHERE NOT tgisinternal AND tgname = ANY($1::text[]) AND tgrelid IN (SELECT oid FROM pg_class WHERE relnamespace = current_schema()::regnamespace)", [EET_TRIGGERY])).rows.map(r => r.tgname), []);
+  for (const t of EET_TRIGGERY) if (!triggery.includes(t)) chyby.chybejici_po_migraci.push('trigger ' + t);
+  if (pokusySit.length) chyby.rozdily_dat.push(`během ověření se pokusilo o síťové spojení: ${pokusySit.join(', ')}`);
   const historicke = (await existuje('darkove_poukazy'))
     ? await bezpecne('stav poukazů', async () => (await pool.query(`SELECT COALESCE(platba_stav, '-') AS platba_stav, stav, COUNT(*)::int AS pocet FROM darkove_poukazy GROUP BY 1, 2 ORDER BY 1, 2`)).rows, []) : [];
 
@@ -173,7 +196,7 @@ async function spustitMigrace(kolo) {
     povinne_tabulky: POVINNE, volitelne_tabulky: VOLITELNE.map(t => ({ tabulka: t, existuje: !!sloupcePred[t] })),
     migrace: [migrace1, migrace2], odeslane_emaily: odeslane,
     soucty_pred: pred.soucty, soucty_po: po.soucty, soucty_shodne: souctyShodne,
-    nove_tabulky_radky: nove,
+    nove_tabulky_radky: nove, eet_po_migraci: eet, eet_triggery: triggery, pokusy_o_sit: pokusySit,
     kontrola_evidence: {
       poznamka: 'Doklady MIMO ROZSAH nejsou spárované - jen vznikly před evidencí plateb a nekontrolují se.',
       od: k.od, v_rozsahu: k.v_rozsahu, mimo_rozsah: k.mimo_rozsah, ceka_na_platbu: k.ceka_na_platbu, rozdily: k.rozdily
@@ -188,7 +211,8 @@ async function spustitMigrace(kolo) {
     for (const [k2, seznam] of Object.entries(chyby)) for (const c of seznam) console.log(`  ✖ ${popisy[k2]}: ${c}`);
   } else {
     console.log('OVĚŘENÍ PROŠLO');
-    console.log(`  obsah dosavadních finančních sloupců beze změny, účetní součty shodné, e-maily 0`);
+    console.log(`  obsah dosavadních finančních sloupců beze změny, účetní součty shodné, e-maily 0, síťová spojení 0`);
+    console.log(`  EET: tabulky a ochranné triggery založené, žádná událost ani počátek provozu (nic nezapnuto)`);
     console.log(`  mimo rozsah kontroly (starší doklady bez evidence, NEspárované): ${JSON.stringify(k.mimo_rozsah)}`);
   }
   console.log(`Kopie: ${cil.hostname}/${nazevDb}`);

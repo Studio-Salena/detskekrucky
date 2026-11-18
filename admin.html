@@ -3210,6 +3210,21 @@ function popisEetPoUlozeni(eet, coUlozeno) {
   if (eet.some(e => e.stav === 'rozhodnuti')) casti.push('❓ část nákupu (darovaný kredit) čeká na rozhodnutí v Účetnictví → EET');
   return '<div class="info-box">✅ <strong>' + escH(coUlozeno) + ' je uloženo</strong> – nic znovu nezadávejte.' + prostredi + '<br>' + casti.join('<br>') + '</div>';
 }
+// Stav EET a POK u dokladů v přehledech (jen administrace – na zákaznickou účtenku se POK netiskne)
+async function doplnitEetDokladu(typ, ids, idPrvku) {
+  if (!ids.length) return;
+  try {
+    const res = await adminFetch(API + '/eet/doklady?zdroj_typ=' + typ + '&ids=' + ids.join(','));
+    if (!res.ok) return;
+    const podle = {};
+    for (const u of await res.json()) (podle[u.doklad] = podle[u.doklad] || []).push(u);
+    for (const [doklad, seznam] of Object.entries(podle)) {
+      const el = document.getElementById(idPrvku(doklad));
+      if (!el) continue;
+      el.innerHTML = seznam.map(u => 'EET ' + (u.stav === 'potvrzeno' ? 'POK ' + pokText(u.pok, u.pok_test) : escH(EET_STAVY[u.stav] || u.stav)) + (u.typ === 'oprava' ? ' (oprava)' : '')).join('<br>');
+    }
+  } catch (e) { /* stav EET je doplňková informace */ }
+}
 function prepnoutUcelVolnePlatby() {
   const kontaktni = document.getElementById('vpZpusob').value !== 'prevod';
   document.getElementById('vpUcelPole').style.display = kontaktni ? '' : 'none';
@@ -5421,7 +5436,7 @@ async function loadProdejna() {
         <td>${escH(p.zakaznik)||'—'}</td>
         <td>${p.polozky.map(x=>x.typ==='poukaz'?`${escH(x.nazev)} x${escH(x.pocet)}`:`${escH(x.nazev)} vel.${escH(x.velikost)} x${escH(x.pocet)}`).join(', ')}</td>
         <td><strong>${Number(p.celkem).toLocaleString('cs-CZ')} Kč</strong></td>
-        <td>${platbaLabel(p.platba)}</td>
+        <td>${platbaLabel(p.platba)}<div class="eet-doklad" id="eetProdej${p.id}" style="font-size:0.7rem"></div></td>
         <td style="display:flex;gap:4px">
           <button class="btn btn-print btn-sm" onclick="tiskUctenky(${i})">🖨️ Účtenka</button>
           <button class="btn btn-outline btn-sm" onclick="otevritUpravitProdej(${p.id})">✎</button>
@@ -5430,6 +5445,7 @@ async function loadProdejna() {
       </tr>`).join('')}</tbody></table>`;
   }
 
+  doplnitEetDokladu('prodej', prodejnaData.slice(0, 500).map(p => p.id), id => 'eetProdej' + id);
   renderDenniPrehled();
   renderMesicniPrehled();
   renderRocniPrehledProdejna();

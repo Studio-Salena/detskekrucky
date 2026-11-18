@@ -1,24 +1,49 @@
 # Krok 3 – napojení EET 2.0 (Playground)
 
-Stav k 18. 11. 2026: **implementováno a ověřeno jen pro lokální testy a oficiální Playground.
-Produkční odesílání je vypnuté** – konfigurace `EET_PROSTREDI=produkce` se odmítne
-(`lib/eetKonfigurace.js`) a databáze nepřijme událost s jiným prostředím než `playground`/`test`
-(CHECK `eet_udalosti_jen_neprodukce`). Nic není nasazené.
+Stav k 18. 11. 2026: **implementováno a ověřeno pro lokální testy a oficiální Playground; produkční
+konfigurace je připravená, ale výchozím nastavením VYPNUTÁ.** Produkce se zapne jen při úplném a
+výslovném nastavení (EET_PROSTREDI=produkce + EET_PRODUKCE_POVOLENA=ano + EET_PRODUKCE_OD +
+certifikát produkční CA EET) – viz `docs/nasazeni-eet.md`. Nic není nasazené a do produkčního EET
+se nic neposlalo.
 
-## 1. Podklady (verze a zdroje)
+## 1. Podklady (přesné zdroje, verze, otisky)
 
-Staženo 17. 11. 2026 z oficiální dokumentace Finanční správy k EET 2.0 (web https://eet.gov.cz,
-sekce pro vývojáře). Přesná adresa stažení se nezachovala – soubory identifikuje SHA-256.
+Zdrojová stránka: **https://eet.gov.cz/cs/o-eet/dokumenty-k-eet-2-0** (sekce pro vývojáře).
+Znovu staženo **18. 11. 2026 10:46:47 UTC** (curl, HTTPS s ověřením TLS); předtím 17. 11. 2026.
+„Last-Modified“ je hlavička HTTP odpovědi serveru.
 
-| Dokument | Verze | SHA-256 |
-|---|---|---|
-| Formát a struktura údajů o evidované tržbě a popis datového rozhraní | 1.2 (25. 8. 2026) | `c986e856…729b1a1e` (PDF) |
-| Popis položek datové zprávy s příklady jejich vyplnění | 1.0 (5. 10. 2026) | `de09d084…2c3576f` (PDF) |
-| XML schéma `EETXMLSchema.xsd` (namespace `http://fs.gov.cz/eet/schema/v4`) | 4.1 | `83597d08…7c032a` = `test/fixtures/eet/EETXMLSchema.xsd` |
-| WSDL `EETServiceSOAP.wsdl` (SOAPAction `http://fs.gov.cz/eet/OdeslaniTrzby`) | 4.1 | `df149c0b…faeb4` = `test/fixtures/eet/EETServiceSOAP.wsdl` |
-| Neprodukční prostředí (playground) – Přístupové a provozní informace | 1.2 (11. 11. 2026) | `2a5deacd…2708f3e` (PDF, **TLP:AMBER** – v repozitáři jen odkaz, text se nešíří) |
-| Testovací certifikáty `CAEET_Playground_2026_v1.zip` (CZ00000019, CZ683555118, CZ8551015704) | 2026 v1 | `711ca591…1002491` (mimo git) |
-| Certifikáty I.CA pro ověření podpisu odpovědí (`lib/eet-ca/`) | Root CA/RSA 05/2022, Public CA/RSA 06/2022 | otisky v `test/eet-zprava.test.js` (ověřené proti www.ica.cz) |
+| Dokument | Verze | URL | SHA-256 | Last-Modified | Porovnání s použitým |
+|---|---|---|---|---|---|
+| Formát a struktura údajů o evidované tržbě a popis datového rozhraní | 1.2 (25. 8. 2026) | [`EET_popis_rozhrani_v1.2.pdf`](https://eet.gov.cz/assets/cs/cmsmedia/pro-vyvojare/EET_popis_rozhrani_v1.2.pdf) | `c986e85686927e1e153aee0f33090fd6fda80d09b44e564d8b344dde729b1a1e` | Tue, 25 Aug 2026 14:15:30 GMT | shodný s použitým |
+| Popis položek datové zprávy s příklady jejich vyplnění | 1.0 (5. 10. 2026) | [`EET_popis_polozek_datove_zpravy.pdf`](https://eet.gov.cz/assets/cs/cmsmedia/pro-vyvojare/EET_popis_polozek_datove_zpravy.pdf) | `de09d084688e871c639b2813ed30ba77e838667f16ec94604b6a3f4df2c3576f` | Mon, 12 Oct 2026 11:53:36 GMT | shodný s použitým |
+| XML schéma (namespace `http://fs.gov.cz/eet/schema/v4`) | 4.1 | [`EETXMLSchema.xsd`](https://eet.gov.cz/assets/cs/cmsmedia/pro-vyvojare/EETXMLSchema.xsd) | `83597d08520cbfab7e51145df9a765d5ca22e2f9a38644a468d695657c7a032a` | Mon, 22 Jun 2026 12:25:10 GMT | shodný s `test/fixtures/eet/EETXMLSchema.xsd` |
+| WSDL (SOAPAction `http://fs.gov.cz/eet/OdeslaniTrzby`) | 4.1 | [`EETServiceSOAP.wsdl`](https://eet.gov.cz/assets/cs/cmsmedia/pro-vyvojare/EETServiceSOAP.wsdl) | `df149c0bef4ac18c2a6e82116b6eb9bb17d29c055cb0821ac6d3885ec90faeb4` | Mon, 22 Jun 2026 12:25:10 GMT | shodný s `test/fixtures/eet/EETServiceSOAP.wsdl` |
+| Playground – přístupové a provozní informace (CZ, **TLP:AMBER**) | 1.2 (11. 11. 2026) | [`EET_pristupove_provozni_informace_playgr-4.pdf`](https://eet.gov.cz/assets/cs/cmsmedia/pro-vyvojare/EET_pristupove_provozni_informace_playgr-4.pdf) | `2a5deacd6440a6550f0719c595f3638b3a8f7044c741578b84da2e9a42708f3e` | Mon, 16 Nov 2026 14:15:52 GMT | shodný s použitým (dříve uložen jako playground.pdf) |
+| Playground – access and operational information (EN, TLP:AMBER) | 1.2 (11. 11. 2026) | [`EET_pristupove_provozni_informace_playgr-5.pdf`](https://eet.gov.cz/assets/cs/cmsmedia/pro-vyvojare/EET_pristupove_provozni_informace_playgr-5.pdf) | `4331231982ea65e7425db5d402978eee45b3b32bee3588634942665bcc66b297` | Mon, 16 Nov 2026 14:35:16 GMT | nový soubor – anglický překlad téže verze 1.2, obsahově bez rozdílu |
+| Produkce – přístupové a provozní informace (CZ, bez označení TLP) | 1.2 (11. 11. 2026) | [`EET_pristupove_provozni_informace_Produk-4.pdf`](https://eet.gov.cz/assets/cs/cmsmedia/pro-vyvojare/EET_pristupove_provozni_informace_Produk-4.pdf) | `41c0b5e27770acdc355d5454d6ba9348cc4a3e32646f689d94d57d7a6e1aae99` | Mon, 16 Nov 2026 14:02:32 GMT | nový pro krok 3b – zdroj produkční konfigurace |
+| Produkce – access and operational information (EN, TLP:AMBER) | 1.2 (11. 11. 2026) | [`EET_pristupove_provozni_informace_produk-5.pdf`](https://eet.gov.cz/assets/cs/cmsmedia/pro-vyvojare/EET_pristupove_provozni_informace_produk-5.pdf) | `fac294546b96979ad2dbbff5d9da123a6f44f44907edaeb2f6bae607d599aae4` | Mon, 16 Nov 2026 14:06:32 GMT | nový – anglický překlad téže verze 1.2 (stejné URL, podepisující, data) |
+| Testovací certifikáty Playgroundu (CZ00000019, CZ683555118, CZ8551015704) | 2026 v1 | [`CAEET_Playground_2026_v1.zip`](https://eet.gov.cz/assets/cs/cmsmedia/pro-vyvojare/CAEET_Playground_2026_v1.zip) | `711ca591e2e58e906212befab55ea72cbc5d960af49e444765b0428751002491` | Mon, 22 Jun 2026 12:25:10 GMT | shodný s použitým; mimo git (`scripts/eet-playground-certifikaty.js`) |
+| Certifikační politika CA EET | v1 | [`CAEET_certifikacni_politika_v1.pdf`](https://eet.gov.cz/assets/cs/cmsmedia/pro-vyvojare/CAEET_certifikacni_politika_v1.pdf) | `33534831a31007dc727d5b93790ae9541450f3a1c8828b95cd41d4a5d5b458d7` | Mon, 22 Jun 2026 12:25:10 GMT | nový – kontext k produkčním certifikátům |
+| Postupy instalace certifikátu CA EET | v1 | [`CAEET_postupy_instalace_certifikatu_v1.pdf`](https://eet.gov.cz/assets/cs/cmsmedia/pro-vyvojare/CAEET_postupy_instalace_certifikatu_v1.pdf) | `bdd39c4df95bdf8a6bc88682d14c9783a5c6497d13cea50c960a55a3044ad9d5` | Mon, 22 Jun 2026 12:25:10 GMT | nový – kontext k převodu PKCS#12 |
+
+**Výsledek porovnání:** všechny soubory použité v kroku 3 mají při novém stažení **stejný SHA-256** –
+rozdíl není. Nové na webu jsou anglické verze provozních informací (téže verze 1.2, obsahově bez
+rozdílu) a produkční provozní informace, ze kterých vychází produkční konfigurace (kap. 2.1 URL,
+3.1 vydavatel pokladních certifikátů „EETv2 NCA SubCA RSA“, OID politiky PROD 1.2.203.19122063.10.1.102.x.y,
+3.3 podepisující „Spolecne technicke zarizeni spravce dane EET“ vydaný I.CA Public CA/RSA 06/2022,
+4.1 minimální datum tržby 1. 1. 2027, přechodný režim od 1. 11. 2026). Dokumenty označené
+TLP:AMBER se do repozitáře nekopírují, převzaty jsou jen technické hodnoty potřebné pro konfiguraci.
+
+Certifikáty I.CA pro ověření podpisu odpovědí jsou zvlášť pro každé prostředí v `lib/eet-ca/playground/`
+a `lib/eet-ca/produkce/` (Root CA/RSA 05/2022 a Public CA/RSA 06/2022; otisky ověřené proti
+www.ica.cz – test `eet-konfigurace` / `eet-zprava`).
+
+Testovací certifikáty mimo git, reprodukovatelně:
+```powershell
+node scripts/eet-playground-certifikaty.js C:\mimo-git\eet-playground CZ00000019
+```
+(stáhne ZIP z URL výše, ověří SHA-256, převede PKCS#12 → čisté PEM přes `openssl pkcs12 -legacy`
+– soubory jsou šifrované RC2-40, ověří vydavatele a vypíše proměnné pro `scripts/eet-playground.js`).
 
 Klíčová pravidla, ze kterých implementace vychází:
 - popis rozhraní kap. 2.2 (mody, prostředí, tabulka odpovědí), 3.3–3.5 (položky, odpověď, chyby),
@@ -143,9 +168,14 @@ přiřazení. Cíl rozdělení = přiřazeno poukazům + nepřiřazený zbytek p
 
 ## 9. Nastavení (jen server, nikdy git ani logy)
 
+Produkční zapnutí a dohled: `docs/nasazeni-eet.md`. Výchozí stav = vypnuto (bez `EET_PROSTREDI`).
+
 | Proměnná | Význam |
 |---|---|
-| `EET_PROSTREDI` | prázdné = vypnuto; `playground`; `produkce` se v této verzi odmítne |
+| `EET_PROSTREDI` | prázdné = vypnuto (výchozí); `playground`; `produkce` jen s dalšími dvěma proměnnými |
+| `EET_PRODUKCE_POVOLENA` | jen přesně `ano` povolí produkci (jiná hodnota = odmítnuto); u Playgroundu nesmí být |
+| `EET_PRODUKCE_OD` | počátek produkční evidence s časovou zónou; po prvním startu neměnný v DB (`eet_provoz`) |
+| `EET_DOHLED_EMAIL` a další `EET_DOHLED_*` | upozornění mimo admin (`lib/eetDohled.js`); bez příjemce jen log serveru |
 | `EET_EIC` | EIČ (musí sedět s CN certifikátu) |
 | `EET_ID_PROVOZ` | číslo evidenční jednotky z DIS+ |
 | `EET_ID_POKL` | označení pokladního zařízení (1–20 znaků) |
@@ -157,6 +187,8 @@ platnost certifikátu. Pro Playground se použije oficiální testovací identit
 převedený na PEM mimo repozitář).
 
 ## 10. Zbývající podmínky produkčního spuštění
+
+Aktuální seznam: `docs/nasazeni-eet.md` a rozhodnutí `docs/eet-rozhodnuti.md`. Původní seznam z kroku 3:
 
 1. Produkční certifikát poplatníka (DIS+), skutečné číslo evidenční jednotky, označení pokladny;
    uložení klíče na serveru (Render: secret file) a postup jeho obnovy.

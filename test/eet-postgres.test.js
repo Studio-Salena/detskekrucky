@@ -258,7 +258,9 @@ test('PostgreSQL EET: události, částky, neměnnost a fronta odesílání', { 
     // testovací potvrzení nejde uložit jako produkční: POK bez -ff ani bez příznaku test; produkce v DB zakázaná
     await assert.rejects(q("UPDATE eet_udalosti SET stav = 'potvrzeno', pok = 'b3a09b52-7c87-4014-a496-4c7a53cf9125-03', pok_test = true WHERE id = $1", [u1.id]), /označené jako test/);
     await assert.rejects(q("UPDATE eet_udalosti SET stav = 'potvrzeno', pok = 'b3a09b52-7c87-4014-a496-4c7a53cf9125-ff', pok_test = false WHERE id = $1", [u1.id]), /označené jako test/);
-    await assert.rejects(q("INSERT INTO eet_udalosti (klic, zdroj_typ, zdroj_id, prostredi) VALUES ('x-produkce', 'prodej', 1, 'produkce')"), /eet_udalosti_jen_neprodukce/);
+    // produkční událost bez zapsaného počátku produkční evidence databáze nepřijme; neznámé prostředí také ne
+    await assert.rejects(q("INSERT INTO eet_udalosti (klic, zdroj_typ, zdroj_id, prostredi) VALUES ('x-produkce', 'prodej', 1, 'produkce')"), /před počátkem produkční evidence/);
+    await assert.rejects(q("INSERT INTO eet_udalosti (klic, zdroj_typ, zdroj_id, prostredi) VALUES ('x-jine', 'prodej', 1, 'ostre')"), /eet_udalosti_prostredi_check/);
     // rozhodnutí o darovaném kreditu: s odůvodněním, jednou
     res = await zavolat(eetRouter, 'post', '/udalosti/:id/rozhodnuti', { params: { id: String(rozhodnutiId) }, body: { volba: 'neevidovat' } });
     assert.equal(res.statusCode, 400);
@@ -482,11 +484,26 @@ test('PostgreSQL EET: události, částky, neměnnost a fronta odesílání', { 
     assert.deepEqual((await pokusy(vypadek.id)).map(x => x.prvni_zaslani), [true, false]);
     eetFronta.nastavitHlavni(null);
 
+    // ═══ K2b) Souběh s jiným zpracovatelem, který řádek právě zamyká: požadavek nepřestane čekat předčasně ═══
+    const uZamek = await novaUdalost('eet-soubeh-zamek-1');
+    const fs15 = falesnyFs();
+    const fZamek = new Fronta({ db: pool, konfig, transport: fs15.transport, log: tichyLog });
+    const jiny = await pool.connect();
+    await jiny.query('BEGIN');
+    await jiny.query('SELECT 1 FROM eet_udalosti WHERE id = $1 FOR UPDATE', [uZamek.id]); // „jiný zpracovatel“ uprostřed převzetí
+    const ihnedSoubeh = fZamek.odeslatIhned([uZamek.id], { cekatMs: 3000 });
+    await pockat(300);
+    await jiny.query('ROLLBACK'); jiny.release(); // převzetí se nepovedlo – požadavek musí zprávu odeslat sám
+    await ihnedSoubeh;
+    assert.equal(fs15.prijate.filter(p => p.poradCis === uZamek.porad_cis).length, 1);
+    assert.equal((await q('SELECT stav FROM eet_udalosti WHERE id = $1', [uZamek.id]))[0].stav, 'potvrzeno');
+
     // ═══ K3) Kontrola řádků bez události: kontaktní příjem zapsaný mimo běžnou cestu se ukáže k rozhodnutí ═══
-    assert.deepEqual(await udalosti.nepokryteRadky(pool), [], 'běžné operace nic nepokrytého nenechají');
+    assert.deepEqual(await udalosti.nepokryteRadky(pool, 'test'), [], 'běžné operace nic nepokrytého nenechají');
+    assert.deepEqual(await udalosti.nepokryteRadky(pool, 'produkce'), [], 'produkce nezapnutá = nic se nekontroluje ani nedoplňuje');
     const bezUdalosti = (await q("INSERT INTO platby (klic, typ, castka, zpusob, okolnosti, kontaktni, prijato_at, zdroj_typ, zdroj_id) " +
       "VALUES ('eet-bez-udalosti-1', 'prijem', 123, 'hotovost', 'prodejna', true, now(), 'prodej', $1) RETURNING id", [omyl.id]))[0];
-    assert.deepEqual((await udalosti.nepokryteRadky(pool)).map(r => [r.druh, r.id]), [['platba', bezUdalosti.id]]);
+    assert.deepEqual((await udalosti.nepokryteRadky(pool, 'test')).map(r => [r.druh, r.id]), [['platba', bezUdalosti.id]]);
 
     // ═══ L) Přehled pro admin ═══
     await novaUdalost('eet-prehled-1'); // jedna čekající
@@ -514,6 +531,108 @@ test('PostgreSQL EET: události, částky, neměnnost a fronta odesílání', { 
     res = await zavolat(eetRouter, 'get', '/stav');
     assert.equal(res.body.neodeslane.blizi_se, 1);
     assert.ok(res.body.upozorneni.some(t => /končí lhůta 48 h/.test(t)));
+
+    // ═══ M) Oddělení prostředí, identity a počátek produkční evidence ═══
+    const eetFrontaM = require('../lib/eetFronta');
+    const vlozitUdalost = (klic, prostredi, eic = 'CZ00000019') => q(`INSERT INTO eet_udalosti (klic, zdroj_typ, zdroj_id, stav, prostredi, typ, eic, id_provoz, id_pokl, porad_cis,
+        dat_trzby, celk_trzba, lhuta_do, dalsi_pokus_at) VALUES ($1, 'prodej', 1, 'ceka', $2, 'trzba', $3, '11', 'POKL-1', $1, '2026-11-18T10:00:00+01:00', 100, now() + interval '48 hours', now())
+      RETURNING *`, [klic, prostredi, eic]).then(r => r[0]);
+    // čekající událost z Playgroundu a událost jiné pokladny (EIČ): fronta prostředí „test“ je nikdy neodešle
+    const zPlaygroundu = await vlozitUdalost('PG-STARA-1', 'playground');
+    const jinaPokladna = await vlozitUdalost('JINA-EIC-1', 'test', 'CZ683555118');
+    const fs14 = falesnyFs();
+    const fOddel = new Fronta({ db: pool, konfig, transport: fs14.transport, log: tichyLog });
+    await fOddel.zpracovat({ limit: 100 });
+    await fOddel.odeslatIhned([zPlaygroundu.id, jinaPokladna.id], { cekatMs: 50 });
+    assert.equal(fs14.prijate.filter(p => ['PG-STARA-1', 'JINA-EIC-1'].includes(p.poradCis)).length, 0, 'jiné prostředí / identita se neodešle');
+    assert.deepEqual((await q('SELECT stav, pocet_pokusu FROM eet_udalosti WHERE id = ANY($1::int[]) ORDER BY id', [[zPlaygroundu.id, jinaPokladna.id]])).map(r => [r.stav, r.pocet_pokusu]), [['ceka', 0], ['ceka', 0]]);
+    // pojistka v odeslání: i ručně podstrčená událost jiného prostředí se neodešle
+    const r14 = await fOddel.odeslatUdalost(zPlaygroundu, 'cizi-token');
+    assert.equal(r14.vysledek, 'jine_prostredi');
+    assert.equal(fs14.prijate.filter(p => ['PG-STARA-1', 'JINA-EIC-1'].includes(p.poradCis)).length, 0);
+    await assert.rejects(q("UPDATE eet_udalosti SET prostredi = 'test' WHERE id = $1", [zPlaygroundu.id]), /neměnné/, 'událost nejde přesunout do jiného prostředí');
+    res = await zavolat(eetRouter, 'get', '/stav');
+    assert.equal(res.body.jine_prostredi.reduce((a, j) => a + j.n, 0), 2);
+    assert.ok(res.body.upozorneni.some(t => /z prostředí „playground“.*neodešlou/.test(t)));
+    // počátek produkční evidence: zapíše se výslovně, je neměnný a nejde posunout
+    const odProdukce = new Date('2026-11-01T00:00:00+01:00');
+    assert.equal(await udalosti.poznamenatProvoz(pool, { prostredi: 'produkce', produkceOd: odProdukce }), null);
+    assert.equal(await udalosti.poznamenatProvoz(pool, { prostredi: 'produkce', produkceOd: odProdukce }), null, 'opakovaný start se stejným počátkem je v pořádku');
+    assert.match(await udalosti.poznamenatProvoz(pool, { prostredi: 'produkce', produkceOd: new Date('2026-10-01T00:00:00+02:00') }), /nejde měnit/);
+    await assert.rejects(q("UPDATE eet_provoz SET zapnuto_od = '2020-01-01' WHERE prostredi = 'produkce'"), /neměnný/);
+    await assert.rejects(q("DELETE FROM eet_provoz WHERE prostredi = 'produkce'"), /neměnný/);
+    // start fronty s jiným počátkem než v DB = EET zůstane vypnuté (nic se nespustí, nic se neodešle)
+    udalosti.nastavitKonfiguraci({ ...konfig, prostredi: 'produkce', testovaci: false, produkceOd: new Date('2026-11-10T00:00:00+01:00') });
+    assert.equal(await eetFrontaM.spustitHlavni(pool, tichyLog), null);
+    assert.equal(udalosti.stavKonfigurace().konfig, null);
+    assert.match(udalosti.stavKonfigurace().chyba, /nejde měnit/);
+    assert.equal(eetFrontaM.hlavniFronta(), null);
+    udalosti.nastavitKonfiguraci(konfig);
+    // produkční událost: testovací potvrzení (POK -ff nebo příznak test) do ní nejde zapsat
+    const produkcni = await vlozitUdalost('PROD-1', 'produkce');
+    await assert.rejects(q("UPDATE eet_udalosti SET stav = 'potvrzeno', pok = 'b3a09b52-7c87-4014-a496-4c7a53cf9125-ff', pok_test = false WHERE id = $1", [produkcni.id]), /Testovací potvrzení/);
+    await assert.rejects(q("UPDATE eet_udalosti SET stav = 'potvrzeno', pok = 'b3a09b52-7c87-4014-a496-4c7a53cf9125-03', pok_test = true WHERE id = $1", [produkcni.id]), /Testovací potvrzení/);
+    // před počátkem produkční evidence se tržby neevidují (žádná událost, nic zpětně)
+    const predUdalosti = await pocetUdalosti();
+    udalosti.nastavitKonfiguraci({ ...konfig, produkceOd: new Date(Date.now() + 86400e3) });
+    res = await prodat({ klic: 'eet-pred-pocatkem-1', platba: 'hotovost', polozky: [polozka(2, 500)] });
+    assert.equal(res.statusCode, 200);
+    assert.equal(await pocetUdalosti(), predUdalosti, 'tržba před počátkem evidence událost nevytvoří');
+    udalosti.nastavitKonfiguraci(konfig);
+
+    // ═══ N) Dohled mimo administraci: zprávy se jen zachytí (nikoho nekontaktuje) ═══
+    const { Dohled, nacistNastaveni } = require('../lib/eetDohled');
+    assert.deepEqual(nacistNastaveni({}).prijemci, [], 'bez EET_DOHLED_EMAIL nikoho nekontaktuje');
+    assert.deepEqual(nacistNastaveni({ EET_DOHLED_EMAIL: 'a@example.invalid, spatne, b@example.invalid' }).prijemci, ['a@example.invalid', 'b@example.invalid']);
+    const zachycene = [];
+    let selhat = false;
+    const nastaveni = { ...nacistNastaveni({}), prijemci: ['majitelka@example.invalid'] };
+    let ted = new Date(Date.now() + 40 * 3600e3); // čekající události se blíží lhůtě 48 h
+    let certDo = new Date(Date.now() + 10 * 86400e3);
+    let zdroj = () => ({ konfig: { ...konfig, certPlatnyDo: certDo.toUTCString() }, chybaKonfigurace: null, frontaBezi: true });
+    const dohled = new Dohled({ db: pool, nastaveni, log: tichyLog, ted: () => ted, zdroj: () => zdroj(),
+      odeslat: async zprava => { if (selhat) throw new Error('výpadek e-mailu'); zachycene.push(zprava); return { kanal: 'zachyceno' }; } });
+    let v = await dohled.kontrola();
+    assert.equal(zachycene.length, 1);
+    assert.deepEqual(zachycene[0].prijemci, ['majitelka@example.invalid']);
+    for (const klic of ['chyby', 'neodeslane', 'lhuta', 'nepokryte', 'jine_prostredi', 'certifikat']) assert.ok(v.odeslano_upozorneni.includes(klic), klic + ': ' + JSON.stringify(v.nalezy));
+    assert.match(zachycene[0].text, /\[KRITICKÉ\].*chybou odeslání/);
+    assert.match(zachycene[0].text, /Certifikát EET.*platí už jen 8|Certifikát EET.*platí už jen 9/);
+    assert.match(zachycene[0].text, /nic znovu nezadávejte/);
+    assert.match(zachycene[0].predmet, /^⚠️ EET/);
+    // stejný stav znovu = žádná další zpráva; po EET_DOHLED_OPAKOVAT_H připomenutí
+    v = await dohled.kontrola();
+    assert.equal(zachycene.length, 1, 'neopakuje stejné upozornění');
+    ted = new Date(ted.getTime() + 13 * 3600e3);
+    v = await dohled.kontrola();
+    assert.equal(zachycene.length, 2, 'připomenutí po 12 h');
+    // vyřešený problém (nový certifikát) se oznámí jednou
+    certDo = new Date(Date.now() + 300 * 86400e3);
+    v = await dohled.kontrola();
+    assert.deepEqual(v.vyreseno, ['certifikat']);
+    assert.match(zachycene[2].text, /Vyřešeno:[\s\S]*Certifikát/);
+    // výpadek doručení: nic se neoznačí jako odeslané, příští kontrola to pošle
+    certDo = new Date(Date.now() + 5 * 86400e3);
+    selhat = true;
+    await assert.rejects(dohled.kontrola(), /výpadek e-mailu/);
+    selhat = false;
+    v = await dohled.kontrola();
+    assert.ok(v.odeslano_upozorneni.includes('certifikat'));
+    assert.match(zachycene[zachycene.length - 1].text, /KRITICKÉ.*Certifikát/, 'méně než 7 dní = kritické');
+    // odmítnutá konfigurace (EET neběží) a zastavená fronta jsou kritické
+    zdroj = () => ({ konfig: null, chybaKonfigurace: 'Produkční evidence není povolená: chybí výslovné EET_PRODUKCE_POVOLENA=ano.', frontaBezi: false });
+    v = await dohled.kontrola();
+    assert.deepEqual(v.nalezy.map(x => [x.klic, x.zavaznost]), [['konfigurace', 'kriticke']]);
+    zdroj = () => ({ konfig, chybaKonfigurace: null, frontaBezi: false });
+    v = await dohled.kontrola();
+    assert.ok(v.nalezy.some(x => x.klic === 'fronta' && x.zavaznost === 'kriticke'));
+    // bez příjemce: jen záznam v logu, žádný e-mail
+    const logy = [];
+    const jenLog = new Dohled({ db: pool, nastaveni: nacistNastaveni({}), log: { log() {}, error() {}, warn: m => logy.push(m) }, ted: () => ted, zdroj: () => zdroj() });
+    await pool.query('DELETE FROM eet_dohled');
+    v = await jenLog.kontrola();
+    assert.equal(v.kanal, 'log');
+    assert.match(logy[0], /^\[EET dohled\]/);
   } finally {
     for (const f of fronty) await f.zastavit().catch(() => {});
     udalosti.nastavitKonfiguraci(null);

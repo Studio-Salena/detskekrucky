@@ -13,7 +13,8 @@ const ok = t => console.log('✔ ' + t);
   const c = await b.newContext();
   await c.route('**/*', rt => { const u = rt.request().url(); return u.startsWith(BASE) || u.startsWith('about:') || /cdn\.jsdelivr\.net|fonts\.g/.test(u) ? rt.continue() : rt.abort(); });
   const page = await c.newPage();
-  await page.addInitScript(() => { window.open = () => ({ document: { write() {}, close() {} }, focus() {}, close() {}, print() {} }); });
+  // účtenky: místo tisku zachytit HTML (kontrola, že POK na zákaznické účtence není)
+  await page.addInitScript(() => { window.__uctenky = []; window.open = () => { let h = ''; return { document: { write: x => { h += x; }, close: () => { window.__uctenky.push(h); } }, focus() {}, close() {}, print() {} }; }; });
   const odpovediPromptu = [];
   page.on('dialog', d => d.type() === 'prompt' ? d.accept(odpovediPromptu.length ? odpovediPromptu.shift() : '') : d.accept());
   const chyby = []; page.on('pageerror', e => chyby.push(e.message));
@@ -53,6 +54,14 @@ const ok = t => console.log('✔ ' + t);
   let t = await eetZprava();
   assert.match(t, /EET potvrzeno/); assert.match(t, /TEST/); assert.ok(t.includes(u.pok));
   ok('prodej uložen a hned potvrzen v EET; POK je v pokladně označený jako TEST');
+  const uctenka = await page.evaluate(() => window.__uctenky[window.__uctenky.length - 1] || '');
+  assert.ok(uctenka.length > 100, 'účtenka vytištěna');
+  assert.equal(uctenka.includes(u.pok), false, 'POK se na zákaznickou účtenku netiskne');
+  assert.doesNotMatch(uctenka, /POK/);
+  await page.waitForFunction(id => (document.getElementById('eetProdej' + id) || {}).textContent, p.id);
+  const vHistorii = await page.locator('#eetProdej' + p.id).innerText();
+  assert.ok(vHistorii.includes(u.pok) && /TEST/.test(vHistorii), vHistorii);
+  ok('POK je v administraci (historie prodejů, označený TEST), na zákaznické účtence ne');
 
   // 2) výpadek EET: prodej uložený jednou, pokladna říká „uloženo – nic znovu nezadávejte“, EET čeká
   const predVypadkem = await pocetProdeju();

@@ -80,6 +80,10 @@ test('ověřovací skript: neúplná kopie selže, úplná projde', { skip: pres
     assert.deepEqual(r.zprava.kontrola_evidence.v_rozsahu, { prodeje: 0, vratky: 0, poukazy: 0, objednavky: 0 });
     assert.ok(r.zprava.kontrola_evidence.mimo_rozsah.prodeje >= 2, 'starší doklady mimo rozsah, ne spárované');
     assert.deepEqual(r.zprava.odeslane_emaily, []);
+    // EET: tabulky a ochrana založené, nic nezapnuto, nic zpětně evidováno, žádná síť
+    assert.deepEqual(r.zprava.eet_po_migraci, { eet_udalosti: 0, eet_udalosti_radky: 0, eet_pokusy: 0, eet_provoz: 0 });
+    assert.deepEqual([...r.zprava.eet_triggery].sort(), ['eet_pokusy_jednou', 'eet_provoz_nemenny', 'eet_udalosti_nemenna', 'eet_udalosti_vznik']);
+    assert.deepEqual(r.zprava.pokusy_o_sit, []);
     // historický poukaz označený, ne zablokovaný
     const p = (await admin.query(`SELECT stav, platba_stav FROM ${uplne}.darkove_poukazy WHERE kod = 'DK-OV-1'`)).rows[0];
     assert.deepEqual(p, { stav: 'aktivni', platba_stav: 'historicky' });

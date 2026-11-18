@@ -24,7 +24,12 @@ router.get('/stav', async (req, res) => {
         COUNT(*) FILTER (WHERE lhuta_do >= now() AND lhuta_do < now() + interval '${UPOZORNIT_HODIN} hours')::int blizi_se
       FROM eet_udalosti WHERE stav IN ('ceka', 'chyba', 'rozhodnuti')`)).rows[0];
     const posledniPokus = (await pool.query('SELECT zahajeno, dokonceno, vysledek, overeni, kod_chyby, text_chyby, prostredi, transakce_fs FROM eet_pokusy ORDER BY id DESC LIMIT 1')).rows[0] || null;
-    const nepokryte = await udalosti.nepokryteRadky(pool);
+    const nepokryte = konfig ? await udalosti.nepokryteRadky(pool, konfig.prostredi) : [];
+    // neodeslané události jiného prostředí / identity: touto konfigurací se NIKDY neodešlou
+    const jine = konfig ? (await pool.query(`SELECT prostredi, eic, id_provoz, id_pokl, COUNT(*)::int AS n FROM eet_udalosti
+        WHERE stav IN ('ceka', 'chyba', 'rozhodnuti') AND (prostredi IS DISTINCT FROM $1 OR eic IS DISTINCT FROM $2 OR id_provoz IS DISTINCT FROM $3 OR id_pokl IS DISTINCT FROM $4)
+        GROUP BY 1, 2, 3, 4 ORDER BY 1`, [konfig.prostredi, konfig.eic, konfig.idProvoz, konfig.idPokl])).rows : [];
+    const provoz = (await pool.query('SELECT prostredi, zapnuto_od FROM eet_provoz ORDER BY prostredi')).rows;
     const f = fronta.hlavniFronta();
     const upozorneni = [];
     if (chyba) upozorneni.push('Konfigurace EET je odmítnutá: ' + chyba + ' Události nevznikají a nic se neodesílá.');
@@ -34,11 +39,13 @@ router.get('/stav', async (req, res) => {
     if ((pocty.rozhodnuti || 0) > 0) upozorneni.push(`${pocty.rozhodnuti} událostí čeká na rozhodnutí (darovaný nebo nedoložený kredit).`);
     if ((pocty.chyba || 0) > 0) upozorneni.push(`${pocty.chyba} událostí skončilo trvalou chybou – zkontrolujte a odešlete znovu.`);
     if (konfig && !f) upozorneni.push('Fronta odesílání neběží (server ji nespustil).');
+    for (const j of jine) upozorneni.push(`${j.n} neodeslaných událostí z prostředí „${j.prostredi}“ (${j.eic}, jednotka ${j.id_provoz}, pokladna ${j.id_pokl}) – tímto nastavením se neodešlou (žádný přenos testovacích událostí do produkce).`);
     if (nepokryte.length) upozorneni.push(`${nepokryte.length} kontaktních plateb / čerpání kreditu od zapnutí EET je bez události EET – vyžaduje rozhodnutí (nic se nedoplnilo automaticky).`);
     res.json({
       konfigurace: popis(konfig), chyba_konfigurace: chyba, produkce_povolena: false,
       pocty: { ceka: pocty.ceka || 0, potvrzeno: pocty.potvrzeno || 0, chyba: pocty.chyba || 0, rozhodnuti: pocty.rozhodnuti || 0, neevidovano: pocty.neevidovano || 0 },
-      neodeslane, posledni_pokus: posledniPokus, nepokryte, fronta: f ? f.stav() : null, upozorneni
+      neodeslane, posledni_pokus: posledniPokus, nepokryte, jine_prostredi: jine, provoz, fronta: f ? f.stav() : null,
+      dohled: require('../lib/eetDohled').stavHlavniho(), upozorneni
     });
   } catch (err) {
     res.status(500).json({ chyba: err.message });
@@ -58,6 +65,28 @@ router.get('/udalosti', async (req, res) => {
       FROM eet_udalosti u
       WHERE ($1::text IS NULL OR u.stav = $1 OR ($1 = 'neodeslane' AND u.stav IN ('ceka', 'chyba'))) AND ($2::text IS NULL OR u.zdroj_typ = $2) AND ($3::int IS NULL OR u.zdroj_id = $3)
       ORDER BY u.id DESC LIMIT $4`, [stav || null, zdroj_typ || null, zdroj_id ? Number(zdroj_id) : null, limit])).rows;
+    res.json(r);
+  } catch (err) {
+    res.status(500).json({ chyba: err.message });
+  }
+});
+
+// GET /api/eet/doklady?zdroj_typ=prodej&ids=1,2,3 – stav EET a POK k dokladům (přehledy v adminu).
+// POK se ukazuje jen v administraci, na zákaznickou účtenku se zatím netiskne.
+router.get('/doklady', async (req, res) => {
+  try {
+    const typ = String(req.query.zdroj_typ || '');
+    if (!['prodej', 'vratka', 'poukaz', 'objednavka', 'volna'].includes(typ)) return res.status(400).json({ chyba: 'Neplatný typ dokladu.' });
+    const ids = String(req.query.ids || '').split(',').map(Number).filter(n => Number.isInteger(n) && n > 0).slice(0, 500);
+    if (!ids.length) return res.json([]);
+    const sloupce = 'u.id, u.stav, u.typ, u.pok, u.pok_test, u.prostredi, u.celk_trzba, u.porad_cis';
+    const r = (await pool.query(`
+      SELECT u.zdroj_id AS doklad, ${sloupce} FROM eet_udalosti u WHERE u.zdroj_typ = $1 AND u.zdroj_id = ANY($2::int[])
+      UNION SELECT p.zdroj_id, ${sloupce} FROM eet_udalosti_radky r JOIN eet_udalosti u ON u.id = r.udalost_id JOIN platby p ON p.id = r.platba_id
+        WHERE p.zdroj_typ = $1 AND p.zdroj_id = ANY($2::int[])
+      UNION SELECT k.zdroj_id, ${sloupce} FROM eet_udalosti_radky r JOIN eet_udalosti u ON u.id = r.udalost_id JOIN kredit_pohyby k ON k.id = r.kredit_pohyb_id
+        WHERE k.zdroj_typ = $1 AND k.zdroj_id = ANY($2::int[])
+      ORDER BY 1, 2`, [typ, ids])).rows;
     res.json(r);
   } catch (err) {
     res.status(500).json({ chyba: err.message });

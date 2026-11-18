@@ -76,7 +76,7 @@ async function main() {
     const fronta = new Fronta({ db: pool, konfig, log });
     const ov = await fronta.overitSpojeni();
     if (ov.vysledek === 'sit' || ov.vysledek === 'timeout') return neprovedeno('Playground není dostupný: ' + ov.text);
-    selhalo ||= !krok('ověřovací mód (kód 0, bez POK, nic se neeviduje)', ov.ok && ov.kod === 0, { info: `kód ${ov.kod}, transakce ${ov.transakce}`, odpoved: ov });
+    krok('ověřovací mód (kód 0, bez POK, nic se neeviduje)', ov.ok && ov.kod === 0, { info: `kód ${ov.kod}, transakce ${ov.transakce}`, odpoved: ov });
 
     // 1) operace aplikace → události v DB (bez běžící fronty – odešlou se v dalších krocích)
     const pol = (cena, pocet = 1) => ({ produkt_id: 1, nazev: 'Testovací bota', velikost: '24', pocet, cena });
@@ -94,7 +94,7 @@ async function main() {
     const popsat = u => `${u.stav} ${u.celk_trzba}/${u.urceno_cerp_zuct || '-'}/${u.cerp_zuct || '-'}`;
     const ocekavano = ['ceka 1000.00/-/-', 'ceka 1000.00/1000.00/-', 'ceka 1500.00/-/1000.00', 'ceka -1000.00/-/-', 'rozhodnuti 500.00/-/500.00',
       'ceka 500.00/-/-', 'ceka -500.00/-/-', 'ceka 500.00/500.00/-'];
-    selhalo ||= !krok('události vznikly v transakcích operací (prodej, poukaz, doplatek, vratka, darovaný kredit, volná platba + oprava)',
+    krok('události vznikly v transakcích operací (prodej, poukaz, doplatek, vratka, darovaný kredit, volná platba + oprava)',
       prirazeni.statusCode === 200 && JSON.stringify(vsechny.map(popsat)) === JSON.stringify(ocekavano), { info: vsechny.map(popsat).join('; ') });
 
     // 2) ztracená odpověď u první události: FS zprávu dostane, odpověď zahodíme → opakování
@@ -115,21 +115,21 @@ async function main() {
     const pokusy1 = await q('SELECT uuid_zpravy, prvni_zaslani, vysledek, pok, transakce_fs FROM eet_pokusy WHERE udalost_id = $1 ORDER BY id', [prvni.id]);
     const okZtrata = poZtrate.stav === 'potvrzeno' && poZtrate.pok_test === true && /-ff$/.test(poZtrate.pok) && pokusy1.length === 2
       && pokusy1[0].prvni_zaslani === true && pokusy1[1].prvni_zaslani === false && pokusy1[0].uuid_zpravy !== pokusy1[1].uuid_zpravy;
-    selhalo ||= !krok('ztracená odpověď → opakování (nové UUID, prvni_zaslani=false, stejná tržba) → POK (test, -ff)', okZtrata, { info: `POK ${poZtrate.pok}`, pokusy: pokusy1 });
+    krok('ztracená odpověď → opakování (nové UUID, prvni_zaslani=false, stejná tržba) → POK (test, -ff)', okZtrata, { info: `POK ${poZtrate.pok}`, pokusy: pokusy1 });
 
     // 3) ostatní události: první odeslání
     await fronta.zpracovat({ limit: 20 });
     const po = await q('SELECT id, stav, pok, pok_test, varovani, porad_cis, celk_trzba, urceno_cerp_zuct, cerp_zuct, posledni_chyba FROM eet_udalosti ORDER BY id');
     for (const u of po) {
       const pk2 = await q('SELECT prvni_zaslani, vysledek, transakce_fs, kod_chyby, text_chyby FROM eet_pokusy WHERE udalost_id = $1 ORDER BY id', [u.id]);
-      if (u.stav === 'rozhodnuti') { selhalo ||= !krok(`událost ${u.id}: darovaný kredit čeká na rozhodnutí, NEodeslána`, pk2.length === 0, { info: `${u.celk_trzba} Kč` }); continue; }
+      if (u.stav === 'rozhodnuti') { krok(`událost ${u.id}: darovaný kredit čeká na rozhodnutí, NEodeslána`, pk2.length === 0, { info: `${u.celk_trzba} Kč` }); continue; }
       const ok = u.stav === 'potvrzeno' && u.pok_test === true && /-ff$/.test(u.pok);
-      selhalo ||= !krok(`událost ${u.id} (${u.porad_cis}, celk ${u.celk_trzba}, urceno ${u.urceno_cerp_zuct || '-'}, cerp ${u.cerp_zuct || '-'})`, ok,
+      krok(`událost ${u.id} (${u.porad_cis}, celk ${u.celk_trzba}, urceno ${u.urceno_cerp_zuct || '-'}, cerp ${u.cerp_zuct || '-'})`, ok,
         { info: ok ? `POK ${u.pok} (test)` + (u.varovani ? ` varování ${JSON.stringify(u.varovani)}` : '') : u.posledni_chyba, pokusy: pk2 });
     }
     // 4) potvrzené se znovu neodesílají
     const znovu = await fronta.zpracovat({ limit: 20 });
-    selhalo ||= !krok('potvrzené události se znovu neodesílají', znovu.zpracovano === 0);
+    krok('potvrzené události se znovu neodesílají', znovu.zpracovano === 0);
 
     // 5) okamžité odeslání přímo z požadavku pokladny (fronta běží, posluchač NOTIFY souběžně):
     //    odpověď prodeje nese POK z Playgroundu označený jako test, zpráva odešla právě jednou
@@ -142,7 +142,7 @@ async function main() {
     const trvalo = Date.now() - zac;
     const e0 = ihned.body.eet && ihned.body.eet[0];
     const pokusyIhned = e0 ? await q('SELECT prvni_zaslani, vysledek FROM eet_pokusy WHERE udalost_id = $1', [e0.id]) : [];
-    selhalo ||= !krok('okamžité odeslání z požadavku: prodej uložen a odpověď nese POK (test)', ihned.statusCode === 200 && e0 && e0.stav === 'potvrzeno'
+    krok('okamžité odeslání z požadavku: prodej uložen a odpověď nese POK (test)', ihned.statusCode === 200 && e0 && e0.stav === 'potvrzeno'
       && e0.pok_test === true && e0.testovaci === true && pokusyIhned.length === 1 && pokusyIhned[0].prvni_zaslani === true,
     { info: e0 ? `${e0.stav}, POK ${e0.pok}, ${trvalo} ms, pokusů ${pokusyIhned.length}` : JSON.stringify(ihned.body).slice(0, 200) });
   } catch (e) {
@@ -157,6 +157,7 @@ async function main() {
     await admin.query(`DROP SCHEMA ${schema} CASCADE`).catch(() => {});
     await admin.end();
   }
+  selhalo = selhalo || zprava.kroky.some(k => !k.ok); // každý krok se vyhodnotí a zapíše, i po dřívějším selhání
   zprava.vysledek = selhalo ? 'SELHALO' : 'PROŠLO';
   console.log(`\nVýsledek proti Playgroundu: ${zprava.vysledek} (potvrzení z Playgroundu nejsou evidence tržeb)`);
   konec(selhalo ? 1 : 0);

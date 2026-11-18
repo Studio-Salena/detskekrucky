@@ -1,11 +1,13 @@
-# Ověření migrace na kopii produkční databáze (před nasazením kroku 2)
+# Ověření migrace na kopii produkční databáze (před nasazením kroků 2 a 3)
 
 Cíl: obnovitelná záloha produkce a zkušební migrace na izolované kopii. Bez produkčních
 e-mailů a externích operací a s porovnáním účetních součtů před a po.
 
-> **Stav:** postup je připravený a celý vyzkoušený na simulované „staré produkci“ (databáze
-> vytvořená kódem z `7248d04` a naplněná jeho API). **Na skutečné kopii produkce zatím
-> neproveden** – vyžaduje přístup k produkční databázi, který vývojové prostředí nemá.
+> **Stav (18. 11. 2026): NEPROVEDENO na skutečné kopii produkce.** Vývojové prostředí nemá přístup
+> k produkční databázi. Postup je vyzkoušený na simulované „staré produkci“ (krok 2) a skript
+> `scripts/overeni-migrace.js` je pokrytý testem `test/overeni-migrace-postgres.test.js`
+> (včetně kroku 3: tabulky a triggery EET, žádné události, žádný síťový pokus).
+> Co přesně spustit a co předat: oddíl **„Co spustit a co předat“** na konci.
 
 ## 0. Předpoklady
 
@@ -48,8 +50,10 @@ node scripts/overeni-migrace.js "postgres://postgres@localhost:5432/dk_kopie_$da
 
 Co skript dělá:
 - spustí jen proti lokální databázi s „kopie/test/sim“ v názvu a jinou než `DATABASE_URL`,
-- smaže proměnné Resend, Cloudinary, dopravců a Stripe a podstrčí modul e-mailů,
+- smaže proměnné Resend, Cloudinary, dopravců, Stripe a **EET** a podstrčí modul e-mailů,
   takže nic neodejde (počet pokusů o e-mail je ve zprávě a musí být 0),
+- zablokuje HTTP/HTTPS a `fetch`: každý pokus o síťové spojení se zapíše do `pokusy_o_sit`
+  a ověření selže (k databázi se jde přímo přes lokální socket, ne přes HTTP),
 - udělá snímek: otisk obsahu **dosavadních** sloupců finančních tabulek a součty jako
   v Účetnictví a uzávěrkách,
 - spustí všechny startovní migrace aplikace dvakrát (jako dva restarty) a snímek zopakuje,
@@ -77,6 +81,10 @@ Očekávaný výsledek:
   (nejsou zablokované),
 - `kontrola_evidence.v_rozsahu` všude 0 a `mimo_rozsah` = počty dosavadních dokladů,
 - `odeslane_emaily: []`,
+- `eet_po_migraci`: všude 0 (`eet_udalosti`, `eet_udalosti_radky`, `eet_pokusy`, `eet_provoz`).
+  Migrace EET nezapíná a historii zpětně neeviduje,
+- `eet_triggery` obsahuje `eet_udalosti_nemenna`, `eet_udalosti_vznik`, `eet_provoz_nemenny`, `eet_pokusy_jednou`,
+- `pokusy_o_sit: []`,
 - `migrace[].chyby` prázdné. Na úplné kopii produkce tam nesmí být nic. V simulaci se objevily
   jen chyby tabulek, které simulace neměla (`kategorie`, `zakaznici.heslo`).
 
@@ -100,6 +108,37 @@ Zálohu `zaloha-prod-*.dump` nechte do úspěšného nasazení, potom ji bezpeč
    zaplaťte, nebo zrušte.
 5. **Návrat dat** (jen při poškození): obnovit zálohu z bodu 1 do nové databáze a přepnout
    `DATABASE_URL`. Ztratí se tím vše zapsané po záloze, proto jen jako poslední možnost.
+
+## Co spustit a co předat (krok 3, zatím NEPROVEDENO)
+
+Spouští majitelka nebo správce s přístupem k produkční DB, na vlastním počítači s lokálním
+PostgreSQL (≥ verze serveru na Forpsi). Příkazy jednotlivě v PowerShellu, ve složce
+`C:\projekty\detskekrucky`, na větvi s krokem 3 (`git log -1` = commit kroku 3b nebo novější).
+Pokud produkční PostgreSQL na Forpsi nepřijímá spojení zvenku, spusťte `pg_dump` přímo na VPS
+(přes SSH) a soubor `.dump` stáhněte (`scp`).
+
+```powershell
+$datum = Get-Date -Format yyyyMMdd
+$env:PROD_DB_URL = "postgres://…"            # jen pro tuto relaci, nikam neukládat
+pg_dump --format=custom --no-owner --no-privileges --file "zaloha-prod-$datum.dump" $env:PROD_DB_URL
+Remove-Item Env:PROD_DB_URL
+createdb -h localhost -U postgres "dk_kopie_$datum"
+pg_restore -h localhost -U postgres --no-owner --no-privileges --exit-on-error -d "dk_kopie_$datum" "zaloha-prod-$datum.dump"
+Get-ChildItem Env: | Where-Object { $_.Name -match '^(EET|RESEND|CLOUDINARY|ZASILKOVNA|GLS|PPL|STRIPE)' } | ForEach-Object { Remove-Item "Env:$($_.Name)" }
+node scripts/overeni-migrace.js "postgres://postgres@localhost:5432/dk_kopie_$datum" "zprava-$datum.json"
+```
+
+(Předposlední řádek je pojistka navíc. Skript tyto proměnné maže sám a síť blokuje.)
+
+**Předat:**
+1. Celý výstup z terminálu posledního příkazu. První řádek je `OVĚŘENÍ PROŠLO` nebo `OVĚŘENÍ SELHALO`.
+2. Soubor `zprava-$datum.json`. Obsahuje jen počty, součty a názvy tabulek, osobní údaje ne.
+   Přesto ho posílejte jen napřímo.
+3. Výstup `pg_restore --list "zaloha-prod-$datum.dump" | Select-String "TABLE DATA" | Measure-Object`
+   (kontrola úplnosti zálohy).
+
+Záloha `zaloha-prod-*.dump` obsahuje osobní údaje zákazníků. Nepředávat, uložit na šifrovaný disk
+a po nasazení smazat. Kopii po ověření smazat (`dropdb -h localhost -U postgres "dk_kopie_$datum"`).
 
 ## Výsledek simulace (2026-11-17)
 

@@ -699,4 +699,10 @@ async function odeslat_test(komu) {
   });
 }
 
-module.exports = { odeslat_fakturu, odeslat_storno,odeslat_potvrzeni, odeslat_upozorneni_objednavky, odeslat_email_zmena_stavu, odeslat_potvrzeni_rezervace, odeslat_potvrzeni_terminu, odeslat_upozorneni_rezervace, odeslat_potvrzeni_vratky, odeslat_upozorneni_vratky, odeslat_potvrzeni_poradna, odeslat_upozorneni_poradna, odeslat_upozorneni_zadost_poukaz, odeslat_poukaz_zakaznikovi, odeslat_overeni_emailu, odeslat_test, escH };
+// Dohled nad EET (lib/eetDohled.js) – technické upozornění pro majitelku, prostý text
+async function odeslat_dohled_eet({ prijemci, predmet, text }) {
+  return odeslatEmail({ to: prijemci, subject: predmet,
+    html: obalitBrandovanyEmail({ nadpis: 'Evidence tržeb (EET)', obsahHtml: `<pre style="white-space:pre-wrap;font-family:inherit">${escH(text)}</pre>` }) });
+}
+
+module.exports = { odeslat_dohled_eet, odeslat_fakturu, odeslat_storno,odeslat_potvrzeni, odeslat_upozorneni_objednavky, odeslat_email_zmena_stavu, odeslat_potvrzeni_rezervace, odeslat_potvrzeni_terminu, odeslat_upozorneni_rezervace, odeslat_potvrzeni_vratky, odeslat_upozorneni_vratky, odeslat_potvrzeni_poradna, odeslat_upozorneni_poradna, odeslat_upozorneni_zadost_poukaz, odeslat_poukaz_zakaznikovi, odeslat_overeni_emailu, odeslat_test, escH };

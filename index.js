@@ -442,7 +442,9 @@ vsePripraveno().then(vcas => {
   app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
     console.log('Server bezi na http://127.0.0.1:3000');
   });
-  // EET (krok 3): fronta odesílání jen s platnou konfigurací (EET_PROSTREDI=playground);
-  // produkce je v této verzi odmítnutá v lib/eetKonfigurace.js
-  eetFronta.spustitHlavni(require('./db/pool')).catch(e => console.error('EET fronta nejde spustit:', e.message));
+  // EET: fronta odesílání jen s platnou konfigurací (lib/eetKonfigurace.js); produkce jen
+  // s EET_PROSTREDI=produkce + EET_PRODUKCE_POVOLENA=ano + EET_PRODUKCE_OD + produkční certifikát
+  // Bez EET_PROSTREDI se nespustí nic (výchozí stav = vypnuto). Dohled hlásí i odmítnutou konfiguraci.
+  eetFronta.spustitHlavni(require('./db/pool')).catch(e => console.error('EET fronta nejde spustit:', e.message))
+    .finally(() => require('./lib/eetDohled').spustitHlavni(require('./db/pool')).catch(e => console.error('EET dohled nejde spustit:', e.message)));
 });
