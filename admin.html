@@ -3012,18 +3012,33 @@ function vykreslitVyuctovani(seznam) {
     <td>${new Date(v.vyplaceno_at).toLocaleDateString('cs-CZ')}</td><td>${escH(v.dopravce)}</td><td>${v.pocet}</td><td>${kcFmt(v.brutto)}</td><td>${kcFmt(v.poplatek)}</td><td><strong>${kcFmt(v.netto)}</strong></td></tr>`).join('')}</tbody></table>` : '<div class="empty">Zatím žádné vyúčtování</div>';
 }
 // Odstoupení od nákupu poukazu v e-shopu (jediný případ, kdy se za poukaz vracejí peníze):
-// nepoužitý poukaz, celá hodnota, oznámení do 14 dnů od úhrady. Server ověří i soulad záznamů.
+// nepoužitý poukaz, vrací se skutečně zaplacená částka. Lhůtu počítá server od pozdějšího
+// z uzavření smlouvy a převzetí poukazu (doručení kódu e-mailem, jinak zadaný den převzetí).
+// Server ověří i soulad záznamů poukazu a kreditu.
 async function vratitPenizePoukazu(id) {
   try {
-    const nahled = await adminFetch(API + '/poukazy/' + id + '/vraceni').then(r => r.json());
+    const url = API + '/poukazy/' + id + '/vraceni';
+    let nahled = await adminFetch(url).then(r => r.json());
     if (nahled.chyba) { alert(nahled.chyba); return; }
     if (!(nahled.lze > 0)) { alert('Peníze vrátit nejde: ' + (nahled.duvod || 'není co vrátit.')); return; }
+    let prevzato = null;
+    if (nahled.chybi_prevzeti) {
+      prevzato = prompt('Doručení kódu poukazu e-mailem není v systému zapsané.\nKdy zákazník poukaz převzal? Zjistěte podle korespondence (RRRR-MM-DD).', '');
+      if (!prevzato) return;
+      prevzato = prevzato.trim();
+      nahled = await adminFetch(url + '?prevzato_dne=' + encodeURIComponent(prevzato)).then(r => r.json());
+      if (nahled.chyba || !(nahled.lze > 0) || !nahled.lhuta_do) { alert('Peníze vrátit nejde: ' + (nahled.chyba || nahled.duvod || 'neplatný den převzetí.')); return; }
+    }
     const lhuta = new Date(nahled.lhuta_do + 'T12:00:00').toLocaleDateString('cs-CZ');
-    const den = prompt('Odstoupení od nákupu poukazu v e-shopu.\nVrátí se celá hodnota ' + kcFmt(nahled.lze) + ' a poukaz se zruší.\nZákazník musel odstoupit nejpozději ' + lhuta + '.\n\nKdy zákazník odstoupil? (RRRR-MM-DD)', new Date().toLocaleDateString('en-CA'));
+    const sleva = nahled.lze < nahled.hodnota ? ' (hodnota poukazu ' + kcFmt(nahled.hodnota) + ', zaplaceno méně)' : '';
+    const pouceni = nahled.pouceni_dolozeno ? '' : '\nPoučení o odstoupení není doložené – lhůta je proto prodloužená o rok (§ 1829 odst. 4).';
+    const den = prompt('Odstoupení od nákupu poukazu v e-shopu.\nVrátí se zaplacená částka ' + kcFmt(nahled.lze) + sleva + ' a poukaz se zruší.\nZákazník musel odstoupit nejpozději ' + lhuta + '.' + pouceni + '\n\nKdy zákazník odstoupil? (RRRR-MM-DD)', new Date().toLocaleDateString('en-CA'));
     if (!den) return;
-    const zpusob = prompt('Jak se peníze vracejí? (hotovost / karta / qr / prevod)', nahled.zpusob_puvodni || 'prevod');
+    const zpusob = prompt('Jak se peníze vracejí? Zákon předpokládá stejný způsob, jakým zákazník platil. (hotovost / karta / qr / prevod)', nahled.zpusob_puvodni || 'prevod');
     if (!zpusob) return;
-    const { res, data } = await odeslatOperaci('poukaz-vraceni-' + id, API + '/poukazy/' + id + '/vraceni', { zpusob: zpusob.trim().toLowerCase(), castka: nahled.lze, odstoupeno_dne: den.trim() });
+    const telo = { zpusob: zpusob.trim().toLowerCase(), castka: nahled.lze, odstoupeno_dne: den.trim() };
+    if (prevzato) telo.prevzato_dne = prevzato;
+    const { res, data } = await odeslatOperaci('poukaz-vraceni-' + id, url, telo);
     if (!res.ok) { alert(data.chyba || 'Vrácení se nepodařilo zapsat.'); return; }
     alert('✅ Vráceno ' + kcFmt(data.vraceno) + ', poukaz je zrušený.');
     loadPoukazy(); loadProdejna();
@@ -7290,7 +7305,7 @@ function htmlStranyKarty(strana, karta, proTisk) {
   const text = obrazek ? '' : `<div class="dk-zadni">
       <div class="dk-nazev">Dětské krůčky</div><div class="dk-pod">Dárková karta</div>
       <p>Kartou zaplatíte v prodejně i na www.detskekrucky.cz. Zůstatek a platnost najdete na účtence, ověříte je v prodejně.</p>
-      <p>Kartu lze opakovaně nabít. Nelze ji vyměnit za hotovost.</p>
+      <p>Kartu lze opakovaně nabít. Nelze ji směnit za hotovost; zákonná práva spotřebitele tím nejsou dotčena.</p>
       <div class="dk-adresa">Holešovská 752, Hulín<br>www.detskekrucky.cz</div>
     </div>`;
   return `<div class="dk-karta"${pozadi}>${text}${kod}</div>`;
@@ -7684,7 +7699,7 @@ async function zobrazitPoukazDetail(id, poukazData=null) {
       <div style="font-size:0.8rem;margin-top:6px">Převod, který už je zapsaný jako volná platba, přiřaďte v Účetnictví → Platby a dobírky (nezapočítá se dvakrát).</div>
       <div id="ppMsg"></div></div>`
     : (poukaz.stav === 'aktivni' && poukaz.platba_stav === 'zaplaceno' && poukaz.zakoupeno_kde === 'eshop' && poukaz.druh !== 'dar')
-      ? `<div style="margin-top:8px"><button class="btn btn-outline btn-sm" onclick="vratitPenizePoukazu(${poukaz.id})">↩️ Odstoupení od nákupu (e-shop, 14 dnů)</button><div style="font-size:0.8rem;margin-top:4px">Peníze za poukaz se jinak nevracejí – jen při odstoupení od nákupu nepoužitého poukazu v e-shopu.</div><div id="ppMsg"></div></div>` : '';
+      ? `<div style="margin-top:8px"><button class="btn btn-outline btn-sm" onclick="vratitPenizePoukazu(${poukaz.id})">↩️ Odstoupení od nákupu (e-shop, 14 dnů)</button><div style="font-size:0.8rem;margin-top:4px">Poukaz nelze směnit za hotovost. Peníze se vracejí jen při zákonném odstoupení od nákupu poukazu přes e-shop.</div><div id="ppMsg"></div></div>` : '';
   setTimeout(() => {
     try {
       JsBarcode('#poukazBarcode', poukaz.ean, {format:'EAN13', width:1.6, height:42, fontSize:12, margin:0, background:'transparent'});

@@ -21,7 +21,8 @@ const ok = t => console.log('✔ ' + t);
   });
   const page = await c.newPage();
   await page.addInitScript(() => { window.open = () => ({ document: { write() {}, close() {} }, focus() {}, close() {}, print() {} }); });
-  page.on('dialog', d => d.type() === 'prompt' ? d.accept(d.defaultValue()) : d.accept());
+  // dotaz na den převzetí poukazu (doručení e-mailem není zapsané) = dnes, jinak navržená hodnota
+  page.on('dialog', d => d.type() === 'prompt' ? d.accept(/převzal/.test(d.message()) ? new Date().toLocaleDateString('en-CA') : d.defaultValue()) : d.accept());
   const chyby = []; page.on('pageerror', e => chyby.push(e.message));
   await page.goto(BASE + '/admin.html');
   await page.fill('#passwordInput', 'test-heslo-e2e'); await page.evaluate(() => login());

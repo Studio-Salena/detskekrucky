@@ -645,8 +645,14 @@ async function odeslat_upozorneni_zadost_poukaz(zadost) {
   console.log('Upozorneni na zadost o poukaz odeslano majitelce, #', zadost.id);
 }
 
+// Stejná věta jako v obchodních podmínkách (čl. Dárkové poukazy) a ve formuláři žádosti o poukaz
+const VETA_POUKAZ_HOTOVOST = 'Poukaz nelze směnit za hotovost. Tím nejsou dotčena zákonná práva spotřebitele, zejména právo na odstoupení od smlouvy, jsou-li splněny zákonné podmínky.';
+
 // Kód a údaje vydaného dárkového poukazu zákazníkovi - posílá se jen když
 // máme kupujici_email (u přímého prodeje na prodejně bez e-mailu se neposílá nic).
+// U poukazu koupeného přes e-shop (smlouva na dálku) obsahuje i poučení o odstoupení,
+// vzorový formulář a VOP – odeslání tohoto e-mailu je doložené poučení a převzetí
+// (darkove_poukazy.kod_odeslan_at, lhůta odstoupení v routes/poukazy.js).
 async function odeslat_poukaz_zakaznikovi(poukaz) {
   const platnost = new Date(poukaz.platnost_do).toLocaleDateString('cs-CZ');
   const obsahHtml = `
@@ -660,7 +666,9 @@ async function odeslat_poukaz_zakaznikovi(poukaz) {
         <div style="font-size:14px">Platnost do: <strong>${platnost}</strong></div>
       </td></tr>
     </table>
-    <p style="margin:16px 0 0 0;font-size:13px;color:${BARVA_TEXT_TLUMENY}">Kód zadejte při placení na e-shopu do pole "Mám dárkový poukaz", nebo ho nahlaste na prodejně.</p>`;
+    <p style="margin:16px 0 0 0;font-size:13px;color:${BARVA_TEXT_TLUMENY}">Kód zadejte při placení na e-shopu do pole "Mám dárkový poukaz", nebo ho nahlaste na prodejně.</p>
+    <p style="margin:12px 0 0 0;font-size:13px;color:${BARVA_TEXT_TLUMENY}">${escH(VETA_POUKAZ_HOTOVOST)}</p>
+    ${poukaz.zakoupeno_kde === 'eshop' ? pravniCastPotvrzeni() : ''}`;
 
   await odeslatEmail({
     to: poukaz.kupujici_email,

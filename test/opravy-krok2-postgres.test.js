@@ -57,7 +57,7 @@ test('PostgreSQL opravy kroku 2: vrácení poukazu, výměna, přiřazení, pův
     let res = await zavolat(poukazy, 'post', '/', { body: { klic: 'vr-poukaz-1', hodnota: 1000, platba: 'karta', zakoupeno_kde: 'prodejna' } });
     const pk = res.body;
     let n = await zavolat(poukazy, 'get', '/:id/vraceni', { params: { id: String(pk.id) } });
-    assert.equal(n.body.lze, 0); assert.match(n.body.duvod, /nelze vyměnit za hotovost/);
+    assert.equal(n.body.lze, 0); assert.match(n.body.duvod, /nelze směnit za hotovost/);
     res = await zavolat(poukazy, 'post', '/:id/vraceni', { params: { id: String(pk.id) }, body: { klic: 'vr-prodejna-1', zpusob: 'karta', odstoupeno_dne: '2026-11-18' } });
     assert.equal(res.statusCode, 409, JSON.stringify(res.body));
     assert.equal((await q("SELECT COUNT(*)::int n FROM platby WHERE typ = 'vraceni'"))[0].n, 0, 'nic se nevrátilo');

@@ -224,11 +224,11 @@ test('e-mail: plná úhrada poukazem bez QR a platebních údajů, zbytek poukaz
   assert.doesNotMatch(bez, /Na dárkovém poukazu vám zůstává/);
 });
 
-test('VOP: pravidla dárkových poukazů (čerpání po částech, i doprava, zůstatek, ne za hotovost)', () => {
+test('VOP: pravidla dárkových poukazů (čerpání po částech, i doprava, zůstatek, ne za hotovost, zákonná práva nedotčena)', () => {
   const vop = textStranky(VOP_HTML);
   assert.match(vop, /Hodnotu poukazu není nutné vyčerpat najednou/);
   assert.match(vop, /Poukazem lze uhradit zboží, dopravu i příplatek za dobírku/);
-  assert.match(vop, /Poukaz nelze vyměnit za hotovost/);
+  assert.match(vop, /Poukaz nelze směnit za hotovost. Tím nejsou dotčena zákonná práva spotřebitele, zejména právo na odstoupení od smlouvy, jsou-li splněny zákonné podmínky./);
 });
 
 // Krok B1.1 - původní obal ani "nepoužité" nesmí být podmínkou odstoupení;

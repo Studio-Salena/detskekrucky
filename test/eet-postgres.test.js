@@ -157,7 +157,7 @@ test('PostgreSQL EET: události, částky, neměnnost a fronta odesílání', { 
     assert.equal((await udalostiDokladu('poukaz', ep.id)).length, 0, 'čekající poukaz bez platby tržbu netvoří');
     res = await zavolat(poukazy, 'post', '/:id/platba', { params: { id: String(ep.id) }, body: { klic: 'eet-eshop-platba-1', zpusob: 'hotovost' } });
     assert.equal(res.statusCode, 200, JSON.stringify(res.body));
-    res = await zavolat(poukazy, 'post', '/:id/vraceni', { params: { id: String(ep.id) }, body: { klic: 'eet-eshop-vr-1', zpusob: 'hotovost', odstoupeno_dne: require('../lib/poukazPlatnost').dnesVPraze() } });
+    res = await zavolat(poukazy, 'post', '/:id/vraceni', { params: { id: String(ep.id) }, body: { klic: 'eet-eshop-vr-1', zpusob: 'hotovost', odstoupeno_dne: require('../lib/poukazPlatnost').dnesVPraze(), prevzato_dne: require('../lib/poukazPlatnost').dnesVPraze() } });
     assert.equal(res.statusCode, 200, JSON.stringify(res.body));
     assert.deepEqual((await udalostiDokladu('poukaz', ep.id)).map(castky), [['ceka', 500, 500, null], ['ceka', -500, -500, null]]);
     // A11 převod se neeviduje (prodej poukazu převodem, platba objednávky převodem)
