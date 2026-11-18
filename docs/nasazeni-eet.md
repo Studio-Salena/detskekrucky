@@ -12,7 +12,8 @@ PROŠLO** (záloha 18. 11. 2026 12:44 UTC, výsledek níže a v `docs/postup-ove
 
 **V produkci běží `98593ee`** (`origin/main`), tedy verze ještě **před krokem 2**: bez evidence
 plateb, bez atomického prodeje v pokladně a bez EET. Nasazení přinese 9 commitů (kroky 2, 3, 3b).
-Návratová verze je proto `98593ee`.
+**Návrat na `98593ee` po prvním zápisu nové verze se NEPROVÁDÍ** (oddíl A3). Při problému se
+zastaví dotčené operace a opraví se nová verze.
 
 ---
 
@@ -23,7 +24,10 @@ Návratová verze je proto `98593ee`.
 2. Ověření migrace na kopii produkce PROŠLO – **splněno 18. 11. 2026**. Pokud mezi ověřením a
    nasazením přibude nový kód, ověření se opakuje.
 3. Těsně před nasazením nová záloha produkce (`pg_dump`, `docs/postup-overeni-migrace.md`, krok 1).
-   Uložit její SHA-256 a čas.
+   Uložit její SHA-256 a čas. **Tato záloha se po nasazení NEMAŽE**: uchovat ji šifrovaně mimo
+   repozitář a mimo vývojový počítač aspoň na dvou místech, nejméně do další ověřené zálohy po
+   uzavření měsíce. Samotný otisk (SHA-256) databázi neobnoví – jen ověří, že soubor zálohy
+   je ten pravý. Záloha z ověření 18. 11. 2026 posloužila jen k ověření obnovy a je smazaná.
 4. Na Renderu **není** nastavené `EET_PROSTREDI` ani `EET_PRODUKCE_*`.
 5. Nasazení mimo otevírací dobu prodejny. Po nasazení v prodejně Ctrl+F5: staré okno pokladny
    nový server odmítne („obnovte stránku“) a nic nezapíše.
@@ -37,7 +41,7 @@ Návratová verze je proto `98593ee`.
 - Zkušební prodej v pokladně: uloží se a v odpovědi není údaj `eet`.
 - Log Renderu: žádné „EET fronta“ ani „EET dohled“.
 
-### A3. Návrat – co je ověřené a co ne
+### A3. Návrat – proč se neprovádí a co místo něj
 
 Ověřeno 18. 11. 2026 na klonu kopie produkce (migrované kódem `ae46cf3`). Postup:
 1. Nový kód s vypnutým EET zapsal prodej, prodej poukazu, čerpání, doplatek, vratku, poukaz
@@ -54,40 +58,37 @@ Ověřeno 18. 11. 2026 na klonu kopie produkce (migrované kódem `ae46cf3`). Po
 | Prodej / vratka staré verze | ⚠ doklad **bez záznamu v evidenci plateb**; vratku vestavěná Kontrola plateb **nezachytí** |
 | Čerpání poukazu starou verzí | ✖ zůstatek poukazu ≠ kredit v evidenci (300 × 500 Kč) |
 | Smazání účtenky nového kódu starou verzí | ✖ pohyb kreditu zůstane bez dokladu; Kontrola plateb to **nezachytí** |
-| Nový kód po zpětném nasazení nad takovým poukazem | ✖ poukaz je „použitý“ se zůstatkem 0, ale **vrácení peněz za poukaz vyplatilo 200 Kč** podle zbylého kreditu |
+| Nový kód po zpětném nasazení nad takovým poukazem | ✖ poukaz je „použitý“ se zůstatkem 0, ale **vrácení peněz za poukaz vyplatilo 200 Kč** podle zbylého kreditu. **Opraveno**: vrácení peněz je jen odstoupení od nákupu nepoužitého poukazu v e-shopu a před výplatou se ověřuje soulad zůstatku, vkladů, úhrady a dřívějších vrácení (`lib/souladPoukazu.js`, test `test/vraceni-poukazu-postgres.test.js`) |
 | Produkční konfigurace EET ve staré verzi | stará verze kód EET vůbec nemá – `EET_*` ignoruje, události nezakládá, frontu neodesílá |
 
-**Závěr: bezpečný návrat kódu po prvním zápisu nové verze NELZE doložit.** Bezpečný je jen
-návrat, dokud nová verze nic nezapsala, tedy pokud všechny tyto dotazy vrátí 0:
+**Závěr: bezpečný návrat kódu po prvním zápisu nové verze NELZE doložit, proto se
+`98593ee` nad databází, do které nová verze už zapsala, NEPROVOZUJE – ani nouzově.**
+Návrat kódu připadá v úvahu jen tehdy, když nová verze ještě nic nezapsala (např. selže hned
+start), tedy když tento dotaz vrátí 0:
 
 ```sql
 SELECT (SELECT COUNT(*) FROM platby) + (SELECT COUNT(*) FROM kredit_pohyby) + (SELECT COUNT(*) FROM prodejna_klice)
      + (SELECT COUNT(*) FROM darkove_poukazy WHERE stav = 'ceka_na_platbu') AS zapsano_novou_verzi;
 ```
 
-**Postup při problému po nasazení (místo neověřeného rollbacku):**
+**Postup při problému po nasazení (jediný postup po prvním zápisu):**
 1. **Zastavit prodej, kterého se problém týká.** V prodejně přestat používat administraci a
    účtovat na papírové účtenky s číslem, časem, položkami a způsobem platby (EET je vypnuté,
    ruční doklad je přípustný). Do opravy se neprodávají ani neuplatňují dárkové poukazy
    a nevracejí peníze za poukazy. Když se problém týká e-shopu, pozastavit službu na Renderu
    (Suspend) – statický web na GitHub Pages zůstane.
-2. Zjistit rozsah: `node scripts/overeni-migrace.js` na čerstvé kopii (postup v
-   `docs/postup-overeni-migrace.md`) a `scripts/sladeni-po-navratu.sql`.
+2. Zjistit rozsah: 🔎 Kontrola plateb, na čerstvé kopii `node scripts/overeni-migrace.js`
+   (postup v `docs/postup-overeni-migrace.md`) a kontrolní dotazy `scripts/sladeni-po-navratu.sql`
+   (jen čtou; najdou doklady bez evidence a nesoulad poukazů, ať vznikl jakkoli).
 3. **Oprava vpřed:** opravný commit na novou verzi, testy, ověření na kopii, pokyn „nasaď“.
 4. Papírové doklady zadat do opravené verze (běžný prodej / vratka), sklad podle nich zkontrolovat.
 
-**Nouzový návrat na `98593ee`** jen když nová verze vůbec nejde provozovat a oprava vpřed není
-možná. Platí:
-- jen ve fázi A (EET vypnuté) – po zapnutí produkční evidence je návrat na `98593ee` zakázaný,
-- během návratu: žádné mazání účtenek, žádné čerpání ani prodej poukazů, žádné vrácení peněz
-  za poukazy, poukazy „čeká na platbu“ nepřijímat,
-- **před znovunasazením** nové verze zastavit prodej a spustit `scripts/sladeni-po-navratu.sql`.
-  Každý nález vyřešit s účetní:
-  - doklady bez evidence zapsat do seznamu „mimo evidenci“,
-  - u poukazů s nesouladem zůstatku a kreditu do opravy zakázat vrácení peněz a čerpání,
-  - pohyby kreditu ke smazaným účtenkám posoudit jednotlivě.
-  Teprve pak nasadit.
-- Návrat kódu nemaže data. Nové tabulky, platby, kredit, události ani potvrzení zůstávají.
+**Nouzový návrat na `98593ee` se neprovádí.** Tato verze nezná evidenci plateb ani kredit
+poukazů: její prodeje, vratky, čerpání a mazání účtenek by vytvořily doklady bez evidence a
+nesoulad poukazů, který se nedá spolehlivě sladit (ověřeno, viz tabulka). Když nová verze
+nejde provozovat vůbec, zůstává prodejna na papírových dokladech a e-shop pozastavený, dokud
+se nenasadí oprava. Návrat kódu by navíc nic neopravil: data zůstávají (nové tabulky, platby,
+kredit, události ani potvrzení se nemažou).
 
 ### A4. Obnova zálohy databáze
 **Export tabulek EET sám nestačí.** Obnova zálohy vrátí celou databázi do stavu v okamžiku zálohy.

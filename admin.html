@@ -3011,15 +3011,19 @@ function vykreslitVyuctovani(seznam) {
   document.getElementById('vyuctovaniTab').innerHTML = seznam.length ? `<table><thead><tr><th>Vyplaceno</th><th>Dopravce</th><th>Dobírek</th><th>Brutto</th><th>Poplatek</th><th>Netto</th></tr></thead><tbody>${seznam.map(v => `<tr>
     <td>${new Date(v.vyplaceno_at).toLocaleDateString('cs-CZ')}</td><td>${escH(v.dopravce)}</td><td>${v.pocet}</td><td>${kcFmt(v.brutto)}</td><td>${kcFmt(v.poplatek)}</td><td><strong>${kcFmt(v.netto)}</strong></td></tr>`).join('')}</tbody></table>` : '<div class="empty">Zatím žádné vyúčtování</div>';
 }
-// Vrácení peněz za zaplacený poukaz: nejdřív náhled (kolik a proč), pak zápis + zrušení
+// Odstoupení od nákupu poukazu v e-shopu (jediný případ, kdy se za poukaz vracejí peníze):
+// nepoužitý poukaz, celá hodnota, oznámení do 14 dnů od úhrady. Server ověří i soulad záznamů.
 async function vratitPenizePoukazu(id) {
   try {
     const nahled = await adminFetch(API + '/poukazy/' + id + '/vraceni').then(r => r.json());
     if (nahled.chyba) { alert(nahled.chyba); return; }
     if (!(nahled.lze > 0)) { alert('Peníze vrátit nejde: ' + (nahled.duvod || 'není co vrátit.')); return; }
-    const zpusob = prompt('Vrátit ' + kcFmt(nahled.lze) + ' (zaplaceno ' + kcFmt(nahled.zaplaceno) + ', už vráceno ' + kcFmt(nahled.vraceno) + ') a poukaz zrušit?\nZbylý nezaplacený kredit (zůstatek ' + kcFmt(nahled.zustatek) + ') se zruší také.\n\nJak se peníze vracejí? (hotovost / karta / qr / prevod)', nahled.zpusob_puvodni || 'hotovost');
+    const lhuta = new Date(nahled.lhuta_do + 'T12:00:00').toLocaleDateString('cs-CZ');
+    const den = prompt('Odstoupení od nákupu poukazu v e-shopu.\nVrátí se celá hodnota ' + kcFmt(nahled.lze) + ' a poukaz se zruší.\nZákazník musel odstoupit nejpozději ' + lhuta + '.\n\nKdy zákazník odstoupil? (RRRR-MM-DD)', new Date().toLocaleDateString('en-CA'));
+    if (!den) return;
+    const zpusob = prompt('Jak se peníze vracejí? (hotovost / karta / qr / prevod)', nahled.zpusob_puvodni || 'prevod');
     if (!zpusob) return;
-    const { res, data } = await odeslatOperaci('poukaz-vraceni-' + id, API + '/poukazy/' + id + '/vraceni', { zpusob: zpusob.trim().toLowerCase(), castka: nahled.lze });
+    const { res, data } = await odeslatOperaci('poukaz-vraceni-' + id, API + '/poukazy/' + id + '/vraceni', { zpusob: zpusob.trim().toLowerCase(), castka: nahled.lze, odstoupeno_dne: den.trim() });
     if (!res.ok) { alert(data.chyba || 'Vrácení se nepodařilo zapsat.'); return; }
     alert('✅ Vráceno ' + kcFmt(data.vraceno) + ', poukaz je zrušený.');
     loadPoukazy(); loadProdejna();
@@ -7679,8 +7683,8 @@ async function zobrazitPoukazDetail(id, poukazData=null) {
       </div>
       <div style="font-size:0.8rem;margin-top:6px">Převod, který už je zapsaný jako volná platba, přiřaďte v Účetnictví → Platby a dobírky (nezapočítá se dvakrát).</div>
       <div id="ppMsg"></div></div>`
-    : (['aktivni', 'pouzity'].includes(poukaz.stav) && poukaz.platba_stav === 'zaplaceno')
-      ? `<div style="margin-top:8px"><button class="btn btn-outline btn-sm" onclick="vratitPenizePoukazu(${poukaz.id})">↩️ Vrátit peníze a zrušit poukaz</button><div id="ppMsg"></div></div>` : '';
+    : (poukaz.stav === 'aktivni' && poukaz.platba_stav === 'zaplaceno' && poukaz.zakoupeno_kde === 'eshop' && poukaz.druh !== 'dar')
+      ? `<div style="margin-top:8px"><button class="btn btn-outline btn-sm" onclick="vratitPenizePoukazu(${poukaz.id})">↩️ Odstoupení od nákupu (e-shop, 14 dnů)</button><div style="font-size:0.8rem;margin-top:4px">Peníze za poukaz se jinak nevracejí – jen při odstoupení od nákupu nepoužitého poukazu v e-shopu.</div><div id="ppMsg"></div></div>` : '';
   setTimeout(() => {
     try {
       JsBarcode('#poukazBarcode', poukaz.ean, {format:'EAN13', width:1.6, height:42, fontSize:12, margin:0, background:'transparent'});

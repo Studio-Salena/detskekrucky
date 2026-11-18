@@ -150,16 +150,16 @@ test('PostgreSQL EET: události, částky, neměnnost a fronta odesílání', { 
     res = await zavolat(objednavky, 'post', '/:id/platby/vraceni', { params: { id: String(obj.id) }, body: { klic: 'eet-odber-vr-1', zpusob: 'hotovost', castka: 200 } });
     assert.equal(res.statusCode, 200, JSON.stringify(res.body));
     assert.deepEqual((await udalostiDokladu('objednavka', obj.id)).map(castky), [['ceka', 1200, null, null], ['ceka', -200, null, null]]);
-    // A10 poukaz z e-shopu zaplacený u pultu + vrácení peněz za něj (storno nabití: celk −, urceno −)
+    // A10 poukaz z e-shopu zaplacený u pultu + odstoupení od nákupu (vrácení celé hodnoty = storno nabití: celk −, urceno −)
     const epRes = await zavolat(poukazy, 'post', '/', { body: { klic: 'eet-eshop-1', hodnota: 500, zakoupeno_kde: 'eshop' } });
     assert.equal(epRes.statusCode, 200, JSON.stringify(epRes.body));
     const ep = epRes.body;
     assert.equal((await udalostiDokladu('poukaz', ep.id)).length, 0, 'čekající poukaz bez platby tržbu netvoří');
     res = await zavolat(poukazy, 'post', '/:id/platba', { params: { id: String(ep.id) }, body: { klic: 'eet-eshop-platba-1', zpusob: 'hotovost' } });
     assert.equal(res.statusCode, 200, JSON.stringify(res.body));
-    res = await zavolat(poukazy, 'post', '/:id/vraceni', { params: { id: String(ep.id) }, body: { klic: 'eet-eshop-vr-1', zpusob: 'hotovost', castka: 250 } });
+    res = await zavolat(poukazy, 'post', '/:id/vraceni', { params: { id: String(ep.id) }, body: { klic: 'eet-eshop-vr-1', zpusob: 'hotovost', odstoupeno_dne: require('../lib/poukazPlatnost').dnesVPraze() } });
     assert.equal(res.statusCode, 200, JSON.stringify(res.body));
-    assert.deepEqual((await udalostiDokladu('poukaz', ep.id)).map(castky), [['ceka', 500, 500, null], ['ceka', -250, -250, null]]);
+    assert.deepEqual((await udalostiDokladu('poukaz', ep.id)).map(castky), [['ceka', 500, 500, null], ['ceka', -500, -500, null]]);
     // A11 převod se neeviduje (prodej poukazu převodem, platba objednávky převodem)
     const prevodem = (await zavolat(poukazy, 'post', '/', { body: { klic: 'eet-prevod-1', hodnota: 500, platba: 'prevod', zakoupeno_kde: 'prodejna' } })).body;
     assert.equal((await udalostiDokladu('prodej', prevodem.prodej.id)).length, 0);
@@ -205,10 +205,10 @@ test('PostgreSQL EET: události, částky, neměnnost a fronta odesílání', { 
     res = await zavolat(poukazy, 'post', '/:id/platba', { params: { id: String(ep3.id) }, body: { klic: 'eet-prirazeni-volna-1', platba_id: vz.id } });
     assert.equal(res.body.opakovane, true);
     assert.equal((await volnaUdalosti(vz.id)).length, 3);
-    // vrácení části peněz za takto zaplacený poukaz = storno nabití (celk −, urceno − podle evidovaného určení)
-    res = await zavolat(poukazy, 'post', '/:id/vraceni', { params: { id: String(ep3.id) }, body: { klic: 'eet-volna-vraceni-1', zpusob: 'hotovost', castka: 300, zrusit: false } });
-    assert.equal(res.statusCode, 200, JSON.stringify(res.body));
-    assert.deepEqual((await udalostiDokladu('poukaz', ep3.id)).filter(u => u.zdroj_typ === 'poukaz').map(castky), [['ceka', -300, -300, null]]);
+    // částečné vrácení peněz za poukaz neexistuje (jen odstoupení = celá hodnota) – nic se nezapíše
+    res = await zavolat(poukazy, 'post', '/:id/vraceni', { params: { id: String(ep3.id) }, body: { klic: 'eet-volna-vraceni-1', zpusob: 'hotovost', castka: 300, odstoupeno_dne: require('../lib/poukazPlatnost').dnesVPraze() } });
+    assert.equal(res.statusCode, 400, JSON.stringify(res.body));
+    assert.deepEqual((await udalostiDokladu('poukaz', ep3.id)).filter(u => u.zdroj_typ === 'poukaz'), []);
     // čerpání takového poukazu = zaplacený kredit (cerp_zuct)
     res = await prodat({ klic: 'eet-volna-cerpani-1', platba: 'poukaz', poukaz_kod: ep3.kod, polozky: [polozka(2, 500)] });
     assert.equal(res.statusCode, 200, JSON.stringify(res.body));

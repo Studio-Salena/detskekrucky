@@ -9,6 +9,7 @@ const vyzadovatAdmina = require('../middleware/adminAuth');
 const ev = require('../lib/evidencePlateb');
 const eetUdalosti = require('../lib/eetUdalosti');
 const eetFronta = require('../lib/eetFronta');
+const { souladPoukazu } = require('../lib/souladPoukazu');
 
 router.use(vyzadovatAdmina);
 
@@ -263,9 +264,15 @@ async function kontrola(db, od) {
     const oc = PENIZE.includes(v.zpusob_vraceni) ? kc(v.castka) : 0;
     if (kc(v.vraceno) !== oc) rozdily.push({ doklad: `vratka #${v.id}`, co: 'vrácené peníze', doklad_castka: oc, evidence: kc(v.vraceno) });
   }
+  const BLOK = ' (vrácení peněz za poukaz zablokované)';
   for (const d of poukazy) {
-    if (kc(d.kredit) !== kc(d.zustatek)) rozdily.push({ doklad: `poukaz ${d.kod}`, co: 'zůstatek proti pohybům kreditu', doklad_castka: kc(d.zustatek), evidence: kc(d.kredit) });
-    if (kc(d.vklady) !== kc(d.zustatek)) rozdily.push({ doklad: `poukaz ${d.kod}`, co: 'zůstatek proti vkladům kreditu', doklad_castka: kc(d.zustatek), evidence: kc(d.vklady) });
+    if (kc(d.kredit) !== kc(d.zustatek)) rozdily.push({ doklad: `poukaz ${d.kod}`, co: 'zůstatek proti pohybům kreditu' + BLOK, doklad_castka: kc(d.zustatek), evidence: kc(d.kredit) });
+    if (kc(d.vklady) !== kc(d.zustatek)) rozdily.push({ doklad: `poukaz ${d.kod}`, co: 'zůstatek proti vkladům kreditu' + BLOK, doklad_castka: kc(d.zustatek), evidence: kc(d.vklady) });
+    // ostatní podmínky souladu před vrácením peněz (lib/souladPoukazu.js)
+    const s = await souladPoukazu(db, { id: d.id, zustatek: d.zustatek });
+    for (const p of s.problemy.filter(x => x.druh !== 'kredit' && x.druh !== 'vklady')) {
+      rozdily.push({ doklad: `poukaz ${d.kod}`, co: p.text + BLOK, doklad_castka: p.doklad_castka, evidence: p.evidence });
+    }
   }
   for (const o of odbery) {
     const prijato = await ev.prijatoNaObjednavku(db, o.id);

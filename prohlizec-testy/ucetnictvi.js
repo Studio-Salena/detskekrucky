@@ -82,10 +82,10 @@ const ok = t => console.log('✔ ' + t);
   await page.click('#ppBtn'); await page.waitForTimeout(800);
   assert.deepEqual(await q("SELECT stav, platba_stav FROM darkove_poukazy WHERE kod = 'DK-CEKA-0002'"), [{ stav: 'aktivni', platba_stav: 'zaplaceno' }]);
   assert.equal(Number((await q("SELECT COUNT(*) n FROM platby WHERE zdroj_typ = 'poukaz' AND zdroj_id = " + P2))[0].n), 1);
-  assert.match(await page.locator('#poukazPlatbaBox').innerText(), /Vrátit peníze a zrušit poukaz/, 'zaplacený poukaz: místo zápisu platby nabídka vrácení');
+  assert.match(await page.locator('#poukazPlatbaBox').innerText(), /Odstoupení od nákupu/, 'zaplacený e-shopový poukaz: místo zápisu platby nabídka odstoupení');
   ok('detail poukazu: platba zapsaná jednou, poukaz aktivní');
 
-  // 6) vrácení peněz za zaplacený poukaz z detailu (prompt přijme navržený způsob = původní platba)
+  // 6) odstoupení od nákupu e-shopového poukazu z detailu (prompty přijmou navržený den = dnes a způsob = původní platba)
   const puvodni = (await q("SELECT id FROM platby WHERE zdroj_typ = 'poukaz' AND zdroj_id = $1 AND typ = 'prijem'", [P2]))[0];
   await page.evaluate(id => zobrazitPoukazDetail(id), P2);
   await page.waitForTimeout(300);
@@ -94,7 +94,7 @@ const ok = t => console.log('✔ ' + t);
   assert.deepEqual(await q('SELECT stav, zustatek::int FROM darkove_poukazy WHERE id = $1', [P2]), [{ stav: 'zruseny', zustatek: 0 }]);
   assert.deepEqual(await q("SELECT castka::int, vraci_id FROM platby WHERE typ = 'vraceni' AND zdroj_typ = 'poukaz' AND zdroj_id = $1", [P2]), [{ castka: 300, vraci_id: puvodni.id }]);
   assert.equal(Number((await q("SELECT COUNT(*) n FROM platby WHERE zdroj_typ = 'poukaz' AND zdroj_id = $1 AND typ = 'prijem'", [P2]))[0].n), 1, 'původní platba zůstala');
-  ok('vrácení peněz za poukaz: vazba na původní platbu, poukaz zrušený');
+  ok('odstoupení od nákupu poukazu: celá hodnota, vazba na původní platbu, poukaz zrušený');
 
   console.log('Chyby JS na stránce:', chyby.length ? chyby : 'žádné');
   await b.close(); await db.end();

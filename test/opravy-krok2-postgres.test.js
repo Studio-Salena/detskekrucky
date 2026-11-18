@@ -53,46 +53,19 @@ test('PostgreSQL opravy kroku 2: vrácení poukazu, výměna, přiřazení, pův
     const polozka = (produkt, cena, pocet = 1) => ({ produkt_id: produkt, nazev: produkt === 1 ? 'Bota' : 'Sandál', velikost: produkt === 1 ? '24' : '25', pocet, cena });
     const ucet = async () => (await q(`SELECT (SELECT COALESCE(SUM(celkem),0) FROM prodejna_prodeje)::int AS prodejna, (SELECT COALESCE(SUM(castka),0) FROM vratky)::int AS vratky`))[0];
 
-    // ── 1) vrácení zaplaceného poukazu ──
+    // ── 1) peníze za poukaz z prodejny se nevracejí (VOP; odstoupení z e-shopu: test/vraceni-poukazu-postgres.test.js) ──
     let res = await zavolat(poukazy, 'post', '/', { body: { klic: 'vr-poukaz-1', hodnota: 1000, platba: 'karta', zakoupeno_kde: 'prodejna' } });
     const pk = res.body;
-    res = await prodat({ klic: 'vr-cerpani-1', platba: 'poukaz', poukaz_kod: pk.kod, polozky: [polozka(2, 300)] });
-    assert.equal(res.statusCode, 200, JSON.stringify(res.body));
     let n = await zavolat(poukazy, 'get', '/:id/vraceni', { params: { id: String(pk.id) } });
-    assert.deepEqual([n.body.lze, n.body.zaplaceno, n.body.vraceno, n.body.zaplaceny_kredit], [700, 1000, 0, 700], 'vyčerpaný kredit se vrátit nedá');
-    assert.equal((await zavolat(poukazy, 'post', '/:id/vraceni', { params: { id: String(pk.id) }, body: { klic: 'vr-moc-1', zpusob: 'karta', castka: 800 } })).statusCode, 400);
-    const ucetPred = await ucet();
-    const tri = await Promise.all([1, 2, 3].map(() => zavolat(poukazy, 'post', '/:id/vraceni', { params: { id: String(pk.id) }, body: { klic: 'vraceni-ok-1', zpusob: 'karta' } })));
-    assert.ok(tri.every(r => r.statusCode === 200), JSON.stringify(tri.map(r => r.body)));
-    const jiny = await zavolat(poukazy, 'post', '/:id/vraceni', { params: { id: String(pk.id) }, body: { klic: 'vr-znovu-1', zpusob: 'hotovost' } });
-    assert.equal(jiny.statusCode, 409, 'podruhé (jiný klíč) už nic');
-    const poVraceni = (await q('SELECT stav, zustatek FROM darkove_poukazy WHERE id = $1', [pk.id]))[0];
-    assert.deepEqual([poVraceni.stav, Number(poVraceni.zustatek)], ['zruseny', 0]);
-    const puvodniPlatba = (await q("SELECT * FROM platby WHERE zdroj_typ = 'prodej' AND zdroj_id = $1 AND typ = 'prijem'", [pk.prodej.id]))[0];
-    assert.equal(Number(puvodniPlatba.castka), 1000, 'původní platba zachovaná');
-    assert.deepEqual(await q("SELECT typ, castka::int, zdroj_typ, vraci_id FROM platby WHERE typ = 'vraceni' AND vraci_id = $1", [puvodniPlatba.id]),
-      [{ typ: 'vraceni', castka: 700, zdroj_typ: 'vratka', vraci_id: puvodniPlatba.id }]);
-    assert.equal((await q('SELECT COUNT(*)::int n FROM vratky WHERE prodej_id = $1', [pk.prodej.id]))[0].n, 1, 'vratka k účtence prodeje poukazu');
-    assert.deepEqual(await ucet(), { prodejna: ucetPred.prodejna, vratky: ucetPred.vratky + 700 }, 'Účetnictví: tržby sníženy přes vratku');
-    assert.deepEqual((await q("SELECT typ, castka::int FROM kredit_pohyby WHERE poukaz_id = $1 AND typ IN ('vyplaceni', 'zruseni')", [pk.id])), [{ typ: 'vyplaceni', castka: 700 }]);
-    // smíšený kredit: e-shop poukaz zaplacený volnou platbou + připsaný kredit bez vazby → vrátit jde jen zaplacený
-    const volna = (await zavolat(evRouter, 'post', '/volna', { body: { klic: 'vr-volna-1', zpusob: 'prevod', castka: 500 } })).body;
-    const ep = (await zavolat(poukazy, 'post', '/', { body: { klic: 'vr-eshop-1', hodnota: 500, zakoupeno_kde: 'eshop' } })).body;
-    assert.equal((await zavolat(poukazy, 'post', '/:id/platba', { params: { id: String(ep.id) }, body: { klic: 'vr-eshop-plat', platba_id: volna.id } })).statusCode, 200);
-    await prodat({ klic: 'vr-eshop-cerp', platba: 'poukaz', poukaz_kod: ep.kod, polozky: [polozka(2, 200)] });
-    assert.equal((await zavolat(poukazy, 'post', '/:id/pripsat', { params: { id: String(ep.id) }, body: { klic: 'vr-eshop-prip', castka: 100 } })).statusCode, 200);
-    n = await zavolat(poukazy, 'get', '/:id/vraceni', { params: { id: String(ep.id) } });
-    assert.equal(n.body.lze, 300, 'zůstatek 400, z toho zaplaceného 300 (připsaný bez vazby se nevyplácí)');
-    res = await zavolat(poukazy, 'post', '/:id/vraceni', { params: { id: String(ep.id) }, body: { klic: 'vr-eshop-vrat', zpusob: 'prevod' } });
-    assert.equal(res.statusCode, 200, JSON.stringify(res.body));
-    assert.deepEqual((await q("SELECT typ, castka::int FROM kredit_pohyby WHERE poukaz_id = $1 AND typ IN ('vyplaceni', 'zruseni') ORDER BY id", [ep.id])),
-      [{ typ: 'vyplaceni', castka: 300 }, { typ: 'zruseni', castka: 100 }]);
-    assert.deepEqual(await q("SELECT zdroj_typ, vraci_id FROM platby WHERE typ = 'vraceni' AND zdroj_typ = 'poukaz' AND zdroj_id = $1", [ep.id]), [{ zdroj_typ: 'poukaz', vraci_id: volna.id }]);
-    assert.equal((await q('SELECT COUNT(*)::int n FROM platby_prirazeni WHERE poukaz_id = $1', [ep.id]))[0].n, 1, 'přiřazení původní platby zůstává');
+    assert.equal(n.body.lze, 0); assert.match(n.body.duvod, /nelze vyměnit za hotovost/);
+    res = await zavolat(poukazy, 'post', '/:id/vraceni', { params: { id: String(pk.id) }, body: { klic: 'vr-prodejna-1', zpusob: 'karta', odstoupeno_dne: '2026-11-18' } });
+    assert.equal(res.statusCode, 409, JSON.stringify(res.body));
+    assert.equal((await q("SELECT COUNT(*)::int n FROM platby WHERE typ = 'vraceni'"))[0].n, 0, 'nic se nevrátilo');
+    assert.equal((await q('SELECT COUNT(*)::int n FROM vratky WHERE prodej_id = $1', [pk.prodej.id]))[0].n, 0);
     // darovaný poukaz: peníze vrátit nejde
     const dar = (await zavolat(poukazy, 'post', '/', { body: { klic: 'vr-dar-1', hodnota: 500, druh: 'dar', zakoupeno_kde: 'prodejna' } })).body;
     n = await zavolat(poukazy, 'get', '/:id/vraceni', { params: { id: String(dar.id) } });
-    assert.equal(n.body.lze, 0); assert.match(n.body.duvod, /darovaný nebo historický/);
+    assert.equal(n.body.lze, 0); assert.match(n.body.duvod, /[Dd]arovaný/);
 
     // ── 2) výměna: penězi nejvýš peníze z původní účtenky ──
     const pk2 = (await zavolat(poukazy, 'post', '/', { body: { klic: 'vymena-poukaz-1', hodnota: 1000, platba: 'karta', zakoupeno_kde: 'prodejna' } })).body;

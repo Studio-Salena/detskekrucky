@@ -5,7 +5,8 @@ const { pripravit } = require('../lib/startServeru');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const { jeZablokovana: jeZadostZablokovana, zaznamenatZadost } = require('../middleware/poukazyZadostLimiter');
 const { odeslat_upozorneni_zadost_poukaz, odeslat_poukaz_zakaznikovi } = require('./emaily');
-const { poukazPoPlatnosti, datumPlatnosti, chybaProdlouzeni, platnostNovehoPoukazu } = require('../lib/poukazPlatnost');
+const { poukazPoPlatnosti, datumPlatnosti, chybaProdlouzeni, platnostNovehoPoukazu, dnesVPraze } = require('../lib/poukazPlatnost');
+const { souladPoukazu } = require('../lib/souladPoukazu');
 const { najitPoukaz, normalizovatCisloKarty } = require('../lib/poukazKarty');
 const evidence = require('../lib/evidencePlateb');
 const eetUdalosti = require('../lib/eetUdalosti');
@@ -428,49 +429,72 @@ router.post('/:id/platba', vyzadovatAdmina, async (req, res) => {
   }
 });
 
-// ═══ Vrácení peněz za zaplacený poukaz ═══
-// Původní platba zůstává; vrácení se na ni váže (vraci_id). Vrátit jde nejvýš
-// zaplacený kredit, který je ještě na poukazu, a zároveň nejvýš zaplacenou částku
-// minus dřívější vrácení. U poukazu prodaného na prodejně vznikne vratka k jeho
-// účtence (sedí uzávěrky i Účetnictví), u e-shopového jen platba v evidenci.
+// ═══ Vrácení peněz za poukaz – JEN odstoupení od nákupu poukazu v e-shopu ═══
+// Poukaz nelze vyměnit za hotovost (VOP). Jediná výjimka je zákonné odstoupení od
+// smlouvy uzavřené na dálku: poukaz koupený v e-shopu, NEPOUŽITÝ, zákazník odstoupil
+// do 14 dnů od úhrady → vrací se celá zaplacená hodnota a poukaz se zruší. Částečné
+// vrácení ani vrácení poukazu z prodejny neexistuje.
+//
+// Před výplatou se v jedné transakci zamkne poukaz, jeho vklady kreditu a původní
+// platba a ověří se soulad (lib/souladPoukazu.js): zůstatek × pohyby kreditu × vklady
+// × původní úhrada × dřívější vrácení. Při nesouladu se výplata odmítne (nic se
+// neopravuje, nepoužije se „nižší z obou zůstatků“) a problém ukáže Kontrola plateb.
 
-// Platba, kterou byl poukaz zaplacen: účtenka prodeje poukazu, přímá platba, nebo přiřazená volná platba
+const LHUTA_ODSTOUPENI_DNI = 14;
+
+// Platba, kterou byl poukaz zaplacen: přímá platba, nebo přiřazená volná platba
 async function platbaZaPoukaz(client, poukaz) {
   const nestorno = "AND NOT EXISTS (SELECT 1 FROM platby s WHERE s.opravuje_id = p.id)";
-  if (poukaz.vydano_prodej_id) {
-    const pl = (await client.query(`SELECT p.* FROM platby p WHERE p.zdroj_typ = 'prodej' AND p.zdroj_id = $1 AND p.typ = 'prijem' ${nestorno} ORDER BY p.id LIMIT 1`, [poukaz.vydano_prodej_id])).rows[0];
-    if (pl) return { platba: pl, zaplaceno: Number(pl.castka), prodejId: poukaz.vydano_prodej_id };
-  }
   const prima = (await client.query(`SELECT p.* FROM platby p WHERE p.zdroj_typ = 'poukaz' AND p.zdroj_id = $1 AND p.typ = 'prijem' ${nestorno} ORDER BY p.id LIMIT 1`, [poukaz.id])).rows[0];
-  if (prima) return { platba: prima, zaplaceno: Number(prima.castka), prodejId: null };
-  const pr = (await client.query(`SELECT pr.castka AS prirazeno, p.* FROM platby_prirazeni pr JOIN platby p ON p.id = pr.platba_id
+  if (prima) return { platba: prima, zaplaceno: Number(prima.castka), uhrazeno_at: prima.prijato_at };
+  const pr = (await client.query(`SELECT pr.castka AS prirazeno, pr.vytvoreno AS prirazeno_at, p.* FROM platby_prirazeni pr JOIN platby p ON p.id = pr.platba_id
     WHERE pr.poukaz_id = $1 AND NOT EXISTS (SELECT 1 FROM platby_prirazeni_storna st WHERE st.prirazeni_id = pr.id) LIMIT 1`, [poukaz.id])).rows[0];
-  if (pr) return { platba: pr, zaplaceno: Number(pr.prirazeno), prodejId: null };
+  if (pr) return { platba: pr, zaplaceno: Number(pr.prirazeno), uhrazeno_at: pr.prirazeno_at };
   return null;
 }
-async function vracenoZaPoukaz(client, poukaz, info) {
-  const prime = (await client.query(`SELECT COALESCE(SUM(CASE typ WHEN 'vraceni' THEN castka ELSE -castka END), 0) AS s FROM platby
+async function vracenoZaPoukaz(client, poukaz) {
+  const r = (await client.query(`SELECT COALESCE(SUM(CASE typ WHEN 'vraceni' THEN castka ELSE -castka END), 0) AS s FROM platby
     WHERE zdroj_typ = 'poukaz' AND zdroj_id = $1 AND typ IN ('vraceni', 'storno_vraceni')`, [poukaz.id])).rows[0].s;
-  let vratkami = 0;
-  if (info && info.prodejId) {
-    vratkami = (await client.query(`SELECT COALESCE(SUM(CASE p.typ WHEN 'vraceni' THEN p.castka ELSE -p.castka END), 0) AS s FROM platby p JOIN vratky v ON v.id = p.zdroj_id
-      WHERE p.zdroj_typ = 'vratka' AND p.typ IN ('vraceni', 'storno_vraceni') AND v.prodej_id = $1`, [info.prodejId])).rows[0].s;
-  }
-  return evidence.kc(Number(prime) + Number(vratkami));
+  return evidence.kc(Number(r));
 }
-async function nahledVraceni(client, poukaz) {
-  if (poukaz.stav === 'ceka_na_platbu') return { lze: 0, duvod: 'Poukaz ještě není zaplacený.' };
-  if (poukaz.stav === 'zruseny') return { lze: 0, duvod: 'Poukaz je zrušený.' };
+const pridatDny = (den, n) => { const d = new Date(den + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+
+// Náhled: jde poukaz vrátit (odstoupení z e-shopu) a za kolik. zamknout = v transakci POST
+// (řádek poukazu už zamčený) uzamkne i vklady kreditu a původní platbu.
+async function nahledVraceni(client, poukaz, { zamknout = false } = {}) {
+  const ne = duvod => ({ lze: 0, duvod });
+  if (poukaz.stav === 'ceka_na_platbu') return ne('Poukaz ještě není zaplacený.');
+  if (poukaz.stav === 'zruseny') return ne('Poukaz je zrušený.');
+  if (poukaz.druh === 'dar') return ne('Darovaný poukaz – peníze se nevracejí.');
+  if (poukaz.zakoupeno_kde !== 'eshop' || poukaz.vydano_prodej_id || poukaz.karta_id) {
+    return ne('Peníze za poukaz se nevracejí – poukaz nelze vyměnit za hotovost (obchodní podmínky). Výjimkou je jen odstoupení od nákupu poukazu v e-shopu do 14 dnů.');
+  }
   const info = await platbaZaPoukaz(client, poukaz);
-  if (!info) return { lze: 0, duvod: 'Za poukaz není v evidenci zapsaná platba (darovaný nebo historický poukaz) – peníze přes tuto funkci vrátit nejde.' };
-  const vraceno = await vracenoZaPoukaz(client, poukaz, info);
-  const zaplacenyKredit = await kredit.zaplacenyZbytek(client, poukaz.id);
-  const lze = Math.max(0, evidence.kc(Math.min(zaplacenyKredit, info.zaplaceno - vraceno)));
-  return { lze, zaplaceno: info.zaplaceno, vraceno, zaplaceny_kredit: zaplacenyKredit, info,
-    duvod: lze > 0 ? null : (zaplacenyKredit <= 0 ? 'Zaplacený kredit už je vyčerpaný.' : 'Zaplacená částka už byla vrácena.') };
+  if (!info) return ne('Za poukaz není v evidenci zapsaná platba (historický poukaz) – peníze přes tuto funkci vrátit nejde.');
+  const vraceno = await vracenoZaPoukaz(client, poukaz);
+  const soulad = await souladPoukazu(client, poukaz, { platba: info.platba, zaplaceno: info.zaplaceno, vraceno, zamknout });
+  const zaklad = { zaplaceno: info.zaplaceno, vraceno, hodnota: evidence.kc(poukaz.hodnota), info };
+  if (!soulad.ok) {
+    const texty = soulad.problemy.map(p => p.text);
+    return { ...zaklad, lze: 0, nesoulad: texty,
+      duvod: 'Záznamy poukazu spolu nesedí – vrácení peněz je zablokované, dokud se nesoulad nevyřeší (Účetnictví → 🔎 Kontrola plateb): ' + texty.join('; ') + '.' };
+  }
+  const cerpano = evidence.kc((await client.query(`SELECT COALESCE(SUM(CASE typ WHEN 'cerpani' THEN castka ELSE -castka END), 0) AS s
+    FROM kredit_pohyby WHERE poukaz_id = $1 AND typ IN ('cerpani', 'storno_cerpani')`, [poukaz.id])).rows[0].s);
+  const pouzito = evidence.kc((await client.query('SELECT COALESCE(SUM(castka), 0) AS s FROM poukazy_pouziti WHERE poukaz_id = $1', [poukaz.id])).rows[0].s);
+  if (cerpano !== 0 || pouzito !== 0 || evidence.kc(poukaz.zustatek) !== zaklad.hodnota) {
+    return { ...zaklad, lze: 0, duvod: 'Poukaz už byl použitý – od použitého poukazu odstoupit nejde a peníze se nevracejí.' };
+  }
+  if (vraceno !== 0) return { ...zaklad, lze: 0, duvod: 'Za poukaz už byly peníze vráceny.' };
+  if (evidence.kc(info.zaplaceno) !== zaklad.hodnota) {
+    return { ...zaklad, lze: 0, duvod: `Zaplacená částka ${evidence.kc(info.zaplaceno)} Kč nesedí s hodnotou poukazu ${zaklad.hodnota} Kč – řešte s účetní.` };
+  }
+  const zacatek = new Date(Math.max(new Date(info.uhrazeno_at).getTime(), new Date(poukaz.vytvoreno).getTime()));
+  const uhrazeno = dnesVPraze(zacatek);
+  return { ...zaklad, lze: zaklad.hodnota, uhrazeno, lhuta_do: pridatDny(uhrazeno, LHUTA_ODSTOUPENI_DNI), duvod: null };
 }
 
-// GET /api/poukazy/:id/vraceni – kolik peněz jde vrátit a proč
+// GET /api/poukazy/:id/vraceni – jde vrátit (odstoupení z e-shopu), kolik a do kdy
 router.get('/:id/vraceni', vyzadovatAdmina, async (req, res) => {
   try {
     const poukaz = (await pool.query('SELECT * FROM darkove_poukazy WHERE id = $1', [req.params.id])).rows[0];
@@ -482,50 +506,49 @@ router.get('/:id/vraceni', vyzadovatAdmina, async (req, res) => {
   }
 });
 
-// POST /api/poukazy/:id/vraceni { klic, zpusob, castka?, zrusit? (výchozí true) } – vrácení peněz;
-// se zrušením poukazu se v téže transakci zruší i zbylý (nezaplacený) kredit
+// POST /api/poukazy/:id/vraceni { klic, zpusob, odstoupeno_dne: 'RRRR-MM-DD', castka? } – odstoupení od
+// nákupu poukazu v e-shopu: vrácení CELÉ hodnoty a zrušení poukazu
 router.post('/:id/vraceni', vyzadovatAdmina, async (req, res) => {
   const b = req.body || {};
   if (!b.klic) return res.status(400).json({ chyba: 'Chybí identifikátor operace – obnovte stránku administrace.' });
-  const zrusit = b.zrusit !== false;
   const od = new Date();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const data = { id: req.params.id, zpusob: b.zpusob || null, castka: b.castka != null ? Number(b.castka) : null, zrusit };
+    const data = { id: req.params.id, zpusob: b.zpusob || null, castka: b.castka != null ? Number(b.castka) : null, odstoupeno_dne: b.odstoupeno_dne || null };
     const { vysledek, opakovane } = await evidence.jednou(client, 'poukaz-vraceni', b.klic, data, async () => {
       const poukaz = (await client.query('SELECT * FROM darkove_poukazy WHERE id = $1 FOR UPDATE', [req.params.id])).rows[0];
       if (!poukaz) throw new evidence.ChybaEvidence(404, 'Poukaz nenalezen.');
       if (!['hotovost', 'karta', 'qr', 'prevod'].includes(data.zpusob)) throw new evidence.ChybaEvidence(400, 'Vyberte, jak se peníze vracejí.');
-      const nahled = await nahledVraceni(client, poukaz);
+      const nahled = await nahledVraceni(client, poukaz, { zamknout: true });
       if (!(nahled.lze > 0)) throw new evidence.ChybaEvidence(409, nahled.duvod || 'Není co vrátit.');
-      const castka = data.castka != null ? evidence.kc(data.castka) : nahled.lze;
-      if (!(castka > 0)) throw new evidence.ChybaEvidence(400, 'Neplatná částka.');
-      if (castka > nahled.lze) throw new evidence.ChybaEvidence(400, `Vrátit jde nejvýš ${nahled.lze} Kč (zaplaceno ${nahled.zaplaceno} Kč, už vráceno ${nahled.vraceno} Kč, zaplaceného kreditu na poukazu ${nahled.zaplaceny_kredit} Kč).`);
-      const naDalku = data.zpusob === 'prevod';
-      const platebniUdaje = { typ: 'vraceni', castka, zpusob: data.zpusob, okolnosti: naDalku ? 'eshop' : 'prodejna', kontaktni: !naDalku, vraci_id: nahled.info.platba.id };
-      let vratka = null, platba;
-      if (nahled.info.prodejId) {
-        vratka = (await client.query(`INSERT INTO vratky (prodej_id, polozky, castka, duvod, vraceno_na_sklad, zpusob_vraceni)
-          VALUES ($1, '[]', $2, $3, false, $4) RETURNING *`, [nahled.info.prodejId, castka, `Vrácení peněz za poukaz ${poukaz.kod}`, data.zpusob])).rows[0];
-        platba = await evidence.zapsatPlatbu(client, { ...platebniUdaje, klic: `vratka:${vratka.id}:vraceni`, prijato_at: vratka.vytvoreno, zdroj_typ: 'vratka', zdroj_id: vratka.id });
-      } else {
-        platba = await evidence.zapsatPlatbu(client, { ...platebniUdaje, klic: `poukaz-vraceni:${b.klic}`, zdroj_typ: 'poukaz', zdroj_id: poukaz.id });
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data.odstoupeno_dne || ''))) throw new evidence.ChybaEvidence(400, 'Zadejte den, kdy zákazník od nákupu poukazu odstoupil.');
+      if (data.odstoupeno_dne > dnesVPraze()) throw new evidence.ChybaEvidence(400, 'Den odstoupení nemůže být v budoucnu.');
+      if (data.odstoupeno_dne > nahled.lhuta_do) {
+        throw new evidence.ChybaEvidence(409, `Lhůta pro odstoupení skončila ${nahled.lhuta_do} (14 dnů od úhrady ${nahled.uhrazeno}) – peníze za poukaz se nevracejí.`);
       }
+      const castka = nahled.lze;
+      if (data.castka != null && evidence.kc(data.castka) !== castka) {
+        throw new evidence.ChybaEvidence(400, `Při odstoupení se vrací celá hodnota poukazu ${castka} Kč – částečné vrácení peněz za poukaz není možné.`);
+      }
+      const naDalku = data.zpusob === 'prevod';
+      const platba = await evidence.zapsatPlatbu(client, { typ: 'vraceni', castka, zpusob: data.zpusob, okolnosti: naDalku ? 'eshop' : 'prodejna', kontaktni: !naDalku,
+        vraci_id: nahled.info.platba.id, klic: `poukaz-vraceni:${b.klic}`, zdroj_typ: 'poukaz', zdroj_id: poukaz.id,
+        poznamka: `Odstoupení od nákupu poukazu (oznámeno ${data.odstoupeno_dne})` });
       await kredit.vyplatit(client, { poukaz, castka, klic: `poukaz-vraceni:${b.klic}:kredit`, kontaktni: nahled.info.platba.kontaktni,
-        zdroj_typ: vratka ? 'vratka' : 'poukaz', zdroj_id: vratka ? vratka.id : poukaz.id });
-      let novyZustatek = evidence.kc(Number(poukaz.zustatek) - castka);
-      if (zrusit && novyZustatek > 0) { await kredit.zrusitZbytek(client, { poukaz, klic: `poukaz-vraceni:${b.klic}:zruseni` }); novyZustatek = 0; }
-      const upraveny = (await client.query(
-        `UPDATE darkove_poukazy SET zustatek = $2, stav = CASE WHEN $3::boolean OR $2::numeric <= 0 THEN 'zruseny' ELSE stav END WHERE id = $1 RETURNING *`,
-        [poukaz.id, novyZustatek, zrusit])).rows[0];
-      if (upraveny.stav === 'zruseny') await client.query('INSERT INTO poukazy_zmeny (poukaz_id, popis) VALUES ($1, $2)', [poukaz.id, `Vráceno ${castka} Kč (${data.zpusob}), poukaz zrušen`]).catch(() => {});
+        zdroj_typ: 'poukaz', zdroj_id: poukaz.id });
+      // po výplatě celé hodnoty nesmí na poukazu zůstat kredit (soulad je ověřený); kdyby zůstal, nic se neuloží
+      const zbytek = (await kredit.vkladyPoukazu(client, poukaz.id)).reduce((s, v) => s + v.zbyva, 0);
+      if (evidence.kc(zbytek) !== 0) throw new Error('Po vrácení celé hodnoty zůstal na poukazu kredit – operace se neuložila.');
+      const upraveny = (await client.query(`UPDATE darkove_poukazy SET zustatek = 0, stav = 'zruseny' WHERE id = $1 RETURNING *`, [poukaz.id])).rows[0];
+      await client.query('INSERT INTO poukazy_zmeny (poukaz_id, popis) VALUES ($1, $2)',
+        [poukaz.id, `Odstoupení od nákupu v e-shopu (oznámeno ${data.odstoupeno_dne}): vráceno ${castka} Kč (${data.zpusob}), poukaz zrušen`]).catch(() => {});
       // EET: vrácení peněz za evidovaný poukaz u pultu = záporná tržba (storno nabití)
-      await eetUdalosti.zaznamenat(client, { zdroj_typ: vratka ? 'vratka' : 'poukaz', zdroj_id: vratka ? vratka.id : poukaz.id, klic: 'vraceni-' + b.klic });
-      return { poukaz: upraveny, vraceno: castka, platba, vratka };
+      await eetUdalosti.zaznamenat(client, { zdroj_typ: 'poukaz', zdroj_id: poukaz.id, klic: 'vraceni-' + b.klic });
+      return { poukaz: upraveny, vraceno: castka, platba, vratka: null };
     });
     await client.query('COMMIT');
-    const eet = await eetFronta.stavPoUlozeni(pool, vysledek.vratka ? [['vratka', vysledek.vratka.id]] : [['poukaz', vysledek.poukaz.id]], { od });
+    const eet = await eetFronta.stavPoUlozeni(pool, [['poukaz', vysledek.poukaz.id]], { od });
     res.json({ ...vysledek, ...(opakovane ? { opakovane: true } : {}), ...(eet ? { eet } : {}) });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});

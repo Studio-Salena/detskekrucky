@@ -1,6 +1,7 @@
--- Sladění po případném NOUZOVÉM návratu na verzi bez evidence plateb (98593ee nebo starší).
--- Jen čte, bez osobních údajů. Spouštět nad produkční DB (nebo její kopií) PŘED znovunasazením
--- verze s evidencí plateb; každý nález vyřešit s účetní (docs/nasazeni-eet.md, oddíl A3).
+-- Kontrolní dotazy: doklady bez evidence plateb a nesoulad poukazů (jen čte, bez osobních údajů).
+-- Slouží ke zjištění rozsahu problému po nasazení (docs/nasazeni-eet.md, oddíl A3). Provoz
+-- verze 98593ee nad databází po prvním zápisu nové verze NENÍ povolený – dotazy nejsou
+-- „sladěním“, které by takový provoz umožnilo. Každý nález řešit s účetní.
 -- Ověřeno 18. 11. 2026 na kopii produkce: najde prodej, čerpání poukazu, vratku i smazanou
 -- účtenku z období staré verze; bez návratu hlásí jen poukazy čekající na platbu.
 --   psql "$KOPIE_NEBO_PROD_URL" -X -A -F' | ' -f scripts/sladeni-po-navratu.sql

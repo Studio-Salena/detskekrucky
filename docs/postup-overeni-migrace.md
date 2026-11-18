@@ -14,8 +14,8 @@ e-mailů a externích operací a s porovnáním účetních součtů před a po.
 - Lokální PostgreSQL (nebo jiný izolovaný stroj) pro kopii. Kopie **nesmí** být dostupná
   aplikaci na Renderu ani nikomu dalšímu.
 - Produkční URL zadávejte jen do proměnné v aktuální relaci terminálu, nikdy do souboru
-  v repozitáři. Záloha obsahuje osobní údaje zákazníků: ukládejte ji jen na šifrovaný disk
-  a po ověření ji smažte.
+  v repozitáři. Záloha obsahuje osobní údaje zákazníků: ukládejte ji jen na šifrovaný disk.
+  Záloha jen pro ověření se po ověření smaže; **záloha těsně před nasazením se uchovává** (krok 5).
 
 ## 1. Záloha produkce (jen čtení)
 
@@ -29,8 +29,9 @@ pg_restore --list "zaloha-prod-$datum.dump" | Select-String "TABLE DATA" | Measu
 Remove-Item Env:PROD_DB_URL
 ```
 
-`pg_dump` jen čte (jedna konzistentní transakce) a produkci nemění. Zálohu si ponechte jako
-návratový bod pro nasazení (krok 5).
+`pg_dump` jen čte (jedna konzistentní transakce) a produkci nemění. Zapište SHA-256
+(`Get-FileHash -Algorithm SHA256`) a čas. Otisk jen ověřuje soubor – databázi obnoví jen
+samotná záloha.
 
 ## 2. Obnova do izolované kopie
 
@@ -93,16 +94,18 @@ Očekávaný výsledek:
 dropdb -h localhost -U postgres "dk_kopie_$datum"
 ```
 
-Zálohu `zaloha-prod-*.dump` nechte do úspěšného nasazení, potom ji bezpečně smažte.
+Zálohu pořízenou těsně před nasazením **nemažte ani po úspěšném nasazení** (krok 5).
 
 ## 5. Nasazení a návrat
 
-1. Těsně před nasazením nová záloha (krok 1).
+1. Těsně před nasazením nová záloha (krok 1), SHA-256 a čas zapsat. Zálohu uchovat šifrovaně
+   mimo repozitář a mimo vývojový počítač aspoň na dvou místech, nejméně do další ověřené zálohy
+   po uzavření měsíce – i po úspěšném nasazení.
 2. Nasazení (push do `main` → Render). Migrace jsou idempotentní a doklady nemění.
 3. Hned po nasazení: v prodejně obnovit administraci (Ctrl+F5), v Účetnictví spustit
    🔎 Kontrola plateb (v rozsahu 0 rozdílů) a porovnat součty Účetnictví s hodnotami z kroku 3.
-4. **Návrat kódu:** NENÍ bezpečný po prvním zápisu nové verze (ověřeno 18. 11. 2026). Postup
-   „zastavit prodej a opravit vpřed“ i podmínky nouzového návratu jsou v `docs/nasazeni-eet.md`, oddíl A3.
+4. **Návrat kódu na `98593ee` se po prvním zápisu nové verze neprovádí** (ověřeno 18. 11. 2026,
+   `docs/nasazeni-eet.md`, oddíl A3). Při problému zastavit dotčené operace a opravit novou verzi.
 5. **Obnova zálohy** jen při poškození dat a jen podle `docs/nasazeni-eet.md`, oddíl A4. Export
    EET sám nestačí, zachovat a sladit se musí všechny novější operace.
 
@@ -161,8 +164,8 @@ node scripts/overeni-migrace.js "postgres://postgres@localhost:5432/dk_kopie_$da
 3. Výstup `pg_restore --list "zaloha-prod-$datum.dump" | Select-String "TABLE DATA" | Measure-Object`
    (kontrola úplnosti zálohy).
 
-Záloha `zaloha-prod-*.dump` obsahuje osobní údaje zákazníků. Nepředávat, uložit na šifrovaný disk
-a po nasazení smazat. Kopii po ověření smazat (`dropdb -h localhost -U postgres "dk_kopie_$datum"`).
+Záloha `zaloha-prod-*.dump` obsahuje osobní údaje zákazníků. Nepředávat, uložit na šifrovaný disk.
+Ověřovací zálohu po ověření smazat, zálohu před nasazením uchovat (krok 5). Kopii po ověření smazat (`dropdb -h localhost -U postgres "dk_kopie_$datum"`).
 
 ## Výsledek simulace (2026-11-17)
 
