@@ -3,11 +3,10 @@
 Cíl: obnovitelná záloha produkce a zkušební migrace na izolované kopii. Bez produkčních
 e-mailů a externích operací a s porovnáním účetních součtů před a po.
 
-> **Stav (18. 11. 2026): NEPROVEDENO na skutečné kopii produkce.** Vývojové prostředí nemá přístup
-> k produkční databázi. Postup je vyzkoušený na simulované „staré produkci“ (krok 2) a skript
-> `scripts/overeni-migrace.js` je pokrytý testem `test/overeni-migrace-postgres.test.js`
-> (včetně kroku 3: tabulky a triggery EET, žádné události, žádný síťový pokus).
-> Co přesně spustit a co předat: oddíl **„Co spustit a co předat“** na konci.
+> **Stav (18. 11. 2026): PROVEDENO na skutečné kopii produkce – OVĚŘENÍ PROŠLO** (commit `ae46cf3`).
+> Výsledek je v oddílu **„Výsledek na kopii produkce (2026-11-18)“** níže. Před nasazením se ověření
+> opakuje, pokud přibude kód. Postup pro spuštění na jiném počítači je v oddílu
+> „Co spustit a co předat“.
 
 ## 0. Předpoklady
 
@@ -102,14 +101,39 @@ Zálohu `zaloha-prod-*.dump` nechte do úspěšného nasazení, potom ji bezpeč
 2. Nasazení (push do `main` → Render). Migrace jsou idempotentní a doklady nemění.
 3. Hned po nasazení: v prodejně obnovit administraci (Ctrl+F5), v Účetnictví spustit
    🔎 Kontrola plateb (v rozsahu 0 rozdílů) a porovnat součty Účetnictví s hodnotami z kroku 3.
-4. **Návrat kódu:** předchozí verze nové tabulky ignoruje a doklady mají původní tvar.
-   Stačí nasadit předchozí commit. Poukazy, které mezitím čekaly na platbu
-   (`stav = 'ceka_na_platbu'`), by stará verze zobrazila, ale nepoužila. Před návratem je
-   zaplaťte, nebo zrušte.
-5. **Návrat dat** (jen při poškození): obnovit zálohu z bodu 1 do nové databáze a přepnout
-   `DATABASE_URL`. Ztratí se tím vše zapsané po záloze, proto jen jako poslední možnost.
+4. **Návrat kódu:** NENÍ bezpečný po prvním zápisu nové verze (ověřeno 18. 11. 2026). Postup
+   „zastavit prodej a opravit vpřed“ i podmínky nouzového návratu jsou v `docs/nasazeni-eet.md`, oddíl A3.
+5. **Obnova zálohy** jen při poškození dat a jen podle `docs/nasazeni-eet.md`, oddíl A4. Export
+   EET sám nestačí, zachovat a sladit se musí všechny novější operace.
 
-## Co spustit a co předat (krok 3, zatím NEPROVEDENO)
+## Výsledek na kopii produkce (2026-11-18)
+
+- **Záloha:** `pg_dump --format=custom --serializable-deferrable` v relaci jen pro čtení
+  (`default_transaction_read_only=on`). Server PostgreSQL 17.10 (primární). Čas 12:44:52–12:44:55 UTC,
+  318 064 B, **SHA-256 `322aa1dc2219a05667889ee8d5786c51f01a6655c1553791fc5bb66786f45bc2`**.
+  Produkční data se nezměnila.
+- **Totožnost:** 1058 produktů na e-shopu = 1058 ve veřejném API. V produkci běží `98593ee`
+  (před krokem 2 – tabulky evidence plateb a EET neexistovaly).
+- **Obnova:** `pg_restore --exit-on-error` do místní izolované DB (PostgreSQL 18). 38 tabulek,
+  38 položek TABLE DATA, **počty řádků všech 38 tabulek shodné s produkcí**.
+- **Ověření** `node scripts/overeni-migrace.js` z commitu `ae46cf3` (čistý strom): **OVĚŘENÍ PROŠLO**, kód 0.
+  - obsah dosavadních finančních sloupců beze změny (prodeje, vratky, objednávky, poukazy,
+    použití poukazů, sklad, pohyby skladu, faktury, slevové kódy, karty),
+  - **účetní součty shodné:** e-shop 1179, prodejna 382 650 (hotově 128 607 / kartou 136 376 /
+    QR 117 667), vratky 3647 Kč, poukazem 0,
+  - **zůstatky poukazů beze změny:** 6 poukazů, všechny `historicky`, aktivní 5 se zůstatkem
+    3000 Kč, použitý 1, uplatněno 500 Kč,
+  - 0 nových plateb, pohybů kreditu, vkladů a klíčů pokladny. Historie se nedoplnila,
+  - **EET vypnuté:** `eet_udalosti`, `eet_udalosti_radky`, `eet_pokusy`, `eet_provoz` = 0,
+    4 ochranné triggery založené,
+  - e-maily 0, síťová spojení 0 (proměnné e-mailů, dopravců, Cloudinary a EET smazané,
+    HTTP(S)/`fetch` zablokované), chyby migrací 0 (dvě kola),
+  - kontrola evidence: v rozsahu 0. Mimo rozsah (starší doklady, nespárované) 303 prodejů,
+    3 vratky, 6 poukazů.
+- Zpráva JSON (bez osobních údajů) a záloha zůstaly jen v dočasné složce mimo repozitář a byly
+  po ověření smazány. Záloha pro nasazení se dělá znovu těsně před ním.
+
+## Co spustit a co předat (na jiném počítači)
 
 Spouští majitelka nebo správce s přístupem k produkční DB, na vlastním počítači s lokálním
 PostgreSQL (≥ verze serveru na Forpsi). Příkazy jednotlivě v PowerShellu, ve složce
