@@ -5,6 +5,8 @@ const { poukazPoPlatnosti } = require('../lib/poukazPlatnost');
 const { najitPoukaz } = require('../lib/poukazKarty');
 const promo = require('../lib/promo');
 const evidence = require('../lib/evidencePlateb');
+const eetUdalosti = require('../lib/eetUdalosti');
+const eetFronta = require('../lib/eetFronta');
 const kredit = require('../lib/kreditVklady');
 
 // Stavy, u kterých se zákazníkovi posílá informační e-mail o změně stavu
@@ -965,13 +967,15 @@ router.post('/:id/storno-email', vyzadovatAdmina, async (req, res) => {
 // PLATBY OBJEDNÁVKY (lib/evidencePlateb.js)
 // ═══════════════════════════════
 
-async function vTransakciEvidence(res, fn) {
+// poUlozeni(vysledek) běží PO COMMIT (stav EET) a nikdy nevyhazuje – operace je už uložená
+async function vTransakciEvidence(res, fn, poUlozeni = null) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const vysledek = await fn(client);
     await client.query('COMMIT');
-    res.json(vysledek);
+    const navic = poUlozeni ? await poUlozeni(vysledek) : null;
+    res.json(navic ? { ...vysledek, ...navic } : vysledek);
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     if (err instanceof evidence.ChybaEvidence) return res.status(err.status).json({ chyba: err.chyba, ...err.data });
@@ -1015,7 +1019,7 @@ router.get('/:id/platby', vyzadovatAdmina, async (req, res) => {
 // nebo { klic, platba_id, castka? } – přiřazení už zapsané volné platby (bez dokladu).
 // Nevzniká prodej v pokladně a sklad se neodečítá (stalo se při objednání).
 // Po úplném zaplacení se objednávka označí jako zaplacená.
-router.post('/:id/platby', vyzadovatAdmina, (req, res) => vTransakciEvidence(res, async client => {
+router.post('/:id/platby', vyzadovatAdmina, (req, res) => { const od = new Date(); return vTransakciEvidence(res, async client => {
   const id = Number(req.params.id);
   const b = req.body || {};
   if (!b.klic) throw new evidence.ChybaEvidence(400, 'Chybí identifikátor operace – obnovte stránku administrace.');
@@ -1039,6 +1043,8 @@ router.post('/:id/platby', vyzadovatAdmina, (req, res) => vTransakciEvidence(res
       if (castka > volno) throw new evidence.ChybaEvidence(400, `Z platby zbývá k přiřazení jen ${volno} Kč.`);
       zapis = (await client.query('INSERT INTO platby_prirazeni (klic, platba_id, objednavka_id, castka) VALUES ($1,$2,$3,$4) RETURNING *',
         ['prirazeni:' + b.klic, platba.id, id, castka])).rows[0];
+      // EET: tržba vznikla při přijetí; byla-li platba přijata jako „na poukaz“, opraví se rozdělení
+      await eetUdalosti.srovnatVolnou(client, platba.id, 'prirazeni:' + b.klic);
     } else {
       const osobne = o.doprava === 'osobni_odber' && o.platba === 'na_prodejne';
       const povolene = osobne ? ['hotovost', 'karta', 'qr'] : ['prevod'];
@@ -1049,6 +1055,8 @@ router.post('/:id/platby', vyzadovatAdmina, (req, res) => vTransakciEvidence(res
       zapis = await evidence.zapsatPlatbu(client, { klic: 'objednavka-platba:' + b.klic, typ: 'prijem', castka, zpusob: data.zpusob,
         okolnosti: osobne ? 'osobni_odber' : 'eshop', kontaktni: osobne, zdroj_typ: 'objednavka', zdroj_id: id,
         poznamka: data.zpusob === 'hotovost' && data.hotovost_prijato > 0 ? `Přijato ${data.hotovost_prijato} Kč, vráceno ${evidence.kc(data.hotovost_prijato - castka)} Kč` : null });
+      // EET: platba osobního odběru u pultu = tržba (převod se neeviduje)
+      await eetUdalosti.zaznamenat(client, { zdroj_typ: 'objednavka', zdroj_id: id, klic: 'platba-' + b.klic });
     }
     // Úplně zaplacená objednávka → stav zaplacená (jen z nová / vyřizuje se)
     if (castka >= zbyva && ['nova', 'vyrizuje'].includes(o.stav)) {
@@ -1057,10 +1065,13 @@ router.post('/:id/platby', vyzadovatAdmina, (req, res) => vTransakciEvidence(res
     return { zapis, ...(await prehledPlatebObjednavky(client, id)) };
   });
   return opakovane ? { ...vysledek, opakovane: true } : vysledek;
-}));
+}, async () => {
+  const eet = await eetFronta.stavPoUlozeni(pool, [['objednavka', Number(req.params.id)], ...(req.body && req.body.platba_id ? [['volna', Number(req.body.platba_id)]] : [])], { od });
+  return eet ? { eet } : null;
+}); });
 
 // POST /api/objednavky/:id/platby/vraceni { klic, zpusob, castka, duvod? } – vrácení přijatých peněz
-router.post('/:id/platby/vraceni', vyzadovatAdmina, (req, res) => vTransakciEvidence(res, async client => {
+router.post('/:id/platby/vraceni', vyzadovatAdmina, (req, res) => { const od = new Date(); return vTransakciEvidence(res, async client => {
   const id = Number(req.params.id);
   const b = req.body || {};
   if (!b.klic) throw new evidence.ChybaEvidence(400, 'Chybí identifikátor operace – obnovte stránku administrace.');
@@ -1077,10 +1088,14 @@ router.post('/:id/platby/vraceni', vyzadovatAdmina, (req, res) => vTransakciEvid
       okolnosti: naDalku ? 'eshop' : (o.doprava === 'osobni_odber' ? 'osobni_odber' : 'prodejna'), kontaktni: !naDalku,
       zdroj_typ: 'objednavka', zdroj_id: id, vraci_id: puvodni ? puvodni.id : null, poznamka: b.duvod ? String(b.duvod).slice(0, 300) : null });
     await evidence.srovnatStavObjednavky(client, id);
+    await eetUdalosti.zaznamenat(client, { zdroj_typ: 'objednavka', zdroj_id: id, klic: 'vraceni-' + b.klic });
     return { zapis, ...(await prehledPlatebObjednavky(client, id)) };
   });
   return opakovane ? { ...vysledek, opakovane: true } : vysledek;
-}));
+}, async () => {
+  const eet = await eetFronta.stavPoUlozeni(pool, [['objednavka', Number(req.params.id)]], { od });
+  return eet ? { eet } : null;
+}); });
 
 // POST /api/objednavky/:id/dobirka { klic, prijato_at? } – zákazník zaplatil dobírku dopravci.
 // Úhrada zákazníka (příjem) se zapíše JEDNOU tady a zároveň vznikne pohledávka za

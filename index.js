@@ -39,6 +39,8 @@ const vyrobciRoutes = require('./routes/vyrobci');
 const navstevnostRoutes = require('./routes/navstevnost');
 const promoRoutes = require('./routes/promo');
 const evidencePlatebRoutes = require('./routes/evidencePlateb');
+const eetRoutes = require('./routes/eet');
+const eetFronta = require('./lib/eetFronta');
 const vyzadovatAdmina = require('./middleware/adminAuth');
 const { jeZablokovana, zaznamenatNeuspech, resetovat } = require('./middleware/loginLimiter');
 const { jeZablokovana: jeZablokovanaRezervace, zaznamenatRezervaci } = require('./middleware/rezervaceLimiter');
@@ -114,6 +116,7 @@ app.use('/api/vyrobci', vyrobciRoutes);
 app.use('/api/navstevnost', navstevnostRoutes);
 app.use('/api/promo', promoRoutes);
 app.use('/api/evidence-plateb', evidencePlatebRoutes);
+app.use('/api/eet', eetRoutes);
 
 // Texty webu (výchozí hodnoty, přepíšou se z DB)
 let textyWebu = {
@@ -439,4 +442,7 @@ vsePripraveno().then(vcas => {
   app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
     console.log('Server bezi na http://127.0.0.1:3000');
   });
+  // EET (krok 3): fronta odesílání jen s platnou konfigurací (EET_PROSTREDI=playground);
+  // produkce je v této verzi odmítnutá v lib/eetKonfigurace.js
+  eetFronta.spustitHlavni(require('./db/pool')).catch(e => console.error('EET fronta nejde spustit:', e.message));
 });

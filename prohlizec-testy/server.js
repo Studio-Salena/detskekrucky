@@ -34,7 +34,15 @@ async function main() {
   const app = express();
   app.use(express.json());
   app.post('/api/admin-prihlaseni', (req, res) => req.body.heslo === process.env.ADMIN_HESLO ? res.json({ ok: true }) : res.status(403).json({ chyba: 'Špatné heslo' }));
-  for (const [cesta, r] of [['prodejna', 'prodejna'], ['sklad', 'sklad'], ['poukazy', 'poukazy'], ['promo', 'promo'], ['objednavky', 'objednavky'], ['evidence-plateb', 'evidencePlateb']]) {
+  // EET (jen scénář eet): testovací konfigurace a LOKÁLNÍ falešný FS (test-helpers/eetFs.js) – nic po síti
+  let falesny = null;
+  if (process.env.E2E_EET === '1') {
+    const { konfigTest, falesnyFs } = require(path.join(KOREN, 'test-helpers', 'eetFs'));
+    require(path.join(KOREN, 'lib', 'eetUdalosti')).nastavitKonfiguraci(konfigTest());
+    falesny = falesnyFs();
+    app.post('/__e2e/eet-scenare', (req, res) => { falesny.scenare.push(...req.body.scenare); res.json({ ok: true }); });
+  }
+  for (const [cesta, r] of [['prodejna', 'prodejna'], ['sklad', 'sklad'], ['poukazy', 'poukazy'], ['promo', 'promo'], ['objednavky', 'objednavky'], ['evidence-plateb', 'evidencePlateb'], ['eet', 'eet']]) {
     app.use('/api/' + cesta, routa(r));
   }
   app.use('/api', (req, res) => res.status(404).json([]));
@@ -55,6 +63,13 @@ async function main() {
     INSERT INTO darkove_poukazy (kod, ean, hodnota, zustatek, platnost_do, stav, zakoupeno_kde, druh, platba_stav, kupujici_jmeno)
       VALUES ('DK-CEKA-0001', '2100000000301', 500, 500, '2099-12-31', 'ceka_na_platbu', 'eshop', 'prodej', 'ceka', 'Eva Eshop'),
              ('DK-CEKA-0002', '2100000000318', 300, 300, '2099-12-31', 'ceka_na_platbu', 'eshop', 'prodej', 'ceka', 'Ota Eshop')`);
+  if (falesny) {
+    const eetFronta = require(path.join(KOREN, 'lib', 'eetFronta'));
+    const { konfig } = require(path.join(KOREN, 'lib', 'eetUdalosti')).stavKonfigurace();
+    const f = new eetFronta.Fronta({ db: pool, konfig, transport: falesny.transport, log: { log() {}, warn() {}, error() {} }, intervalMs: 3600e3 });
+    await f.spustit();
+    eetFronta.nastavitHlavni(f);
+  }
   app.listen(PORT, () => console.log('PRIPRAVEN ' + PORT));
 }
 main().catch(e => { console.error('CHYBA', e); process.exit(1); });

@@ -7,6 +7,8 @@ const pool = require('../db/pool');
 const { pripravit } = require('../lib/startServeru');
 const vyzadovatAdmina = require('../middleware/adminAuth');
 const ev = require('../lib/evidencePlateb');
+const eetUdalosti = require('../lib/eetUdalosti');
+const eetFronta = require('../lib/eetFronta');
 
 router.use(vyzadovatAdmina);
 
@@ -14,13 +16,15 @@ pripravit(ev.migrovat(pool).then(() => console.log('Evidence plateb OK')).catch(
 
 const kc = ev.kc;
 
-async function vTransakci(res, fn) {
+// poUlozeni(vysledek) běží PO COMMIT (stav EET) a nikdy nevyhazuje – operace je už uložená
+async function vTransakci(res, fn, poUlozeni = null) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const vysledek = await fn(client);
     await client.query('COMMIT');
-    res.json(vysledek);
+    const navic = poUlozeni ? await poUlozeni(vysledek) : null;
+    res.json(navic ? { ...vysledek, ...navic } : vysledek);
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     if (err instanceof ev.ChybaEvidence) return res.status(err.status).json({ chyba: err.chyba, ...err.data });
@@ -48,20 +52,40 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/evidence-plateb/volna { klic, zpusob, castka, prijato_at?, poznamka? } – platba,
+// POST /api/evidence-plateb/volna { klic, zpusob, castka, ucel?, prijato_at?, poznamka? } – platba,
 // která ještě nemá doklad (např. převod, který přišel na účet); přiřadí se později k objednávce
-router.post('/volna', (req, res) => vTransakci(res, async client => {
+// nebo k poukazu z e-shopu.
+// EET: kontaktní platba (hotovost, karta, QR u pultu) je tržba v okamžiku přijetí. Účel se
+// proto zadává HNED: ucel = 'zbozi' (zboží / objednávka) nebo 'poukaz' (nabití dárkového
+// poukazu → urceno_cerp_zuct). Událost vznikne ve stejné transakci, datum tržby = okamžik
+// zápisu (zpětné datum u pultu nejde – zpráva se odesílá nejpozději při přijetí). Když
+// pozdější přiřazení účel změní, vzniknou opravné události (lib/eetUdalosti.srovnatVolnou).
+router.post('/volna', (req, res) => { const od = new Date(); return vTransakci(res, async client => {
   const b = req.body || {};
   if (!b.klic) throw new ev.ChybaEvidence(400, 'Chybí identifikátor operace.');
   if (!['prevod', 'hotovost', 'karta', 'qr'].includes(b.zpusob)) throw new ev.ChybaEvidence(400, 'Neplatný způsob platby.');
   const castka = kc(b.castka);
   if (!(castka > 0) || castka > 1e7) throw new ev.ChybaEvidence(400, 'Neplatná částka.');
-  const { vysledek } = await ev.jednou(client, 'volna', b.klic, { zpusob: b.zpusob, castka, prijato_at: b.prijato_at || null }, async () =>
-    ev.zapsatPlatbu(client, { klic: 'volna:' + b.klic, typ: 'prijem', castka, zpusob: b.zpusob,
-      okolnosti: b.zpusob === 'prevod' ? 'eshop' : 'prodejna', kontaktni: b.zpusob !== 'prevod',
-      prijato_at: b.prijato_at || null, zdroj_typ: 'volna', zdroj_id: null, poznamka: b.poznamka ? String(b.poznamka).slice(0, 300) : null }));
+  const kontaktni = b.zpusob !== 'prevod';
+  const eetZapnute = !!eetUdalosti.aktualniKonfigurace();
+  const ucel = b.ucel == null || b.ucel === '' ? null : String(b.ucel);
+  if (ucel && !['zbozi', 'poukaz'].includes(ucel)) throw new ev.ChybaEvidence(400, 'Účel platby: zboží / objednávka, nebo dárkový poukaz.');
+  if (eetZapnute && kontaktni) {
+    if (!ucel) throw new ev.ChybaEvidence(400, 'Platba u pultu se eviduje v EET hned při přijetí – vyberte, zda je za zboží / objednávku, nebo na dárkový poukaz.');
+    if (b.prijato_at) throw new ev.ChybaEvidence(400, 'Platbu u pultu zapište v okamžiku přijetí (bez zpětného data) – datum a čas tržby se do EET posílá hned.');
+  }
+  const { vysledek } = await ev.jednou(client, 'volna', b.klic, { zpusob: b.zpusob, castka, ucel, prijato_at: b.prijato_at || null }, async () => {
+    const platba = await ev.zapsatPlatbu(client, { klic: 'volna:' + b.klic, typ: 'prijem', castka, zpusob: b.zpusob,
+      okolnosti: kontaktni ? 'prodejna' : 'eshop', kontaktni, urceno_k_cerpani: kontaktni && ucel === 'poukaz' ? castka : null,
+      prijato_at: b.prijato_at || null, zdroj_typ: 'volna', zdroj_id: null, poznamka: b.poznamka ? String(b.poznamka).slice(0, 300) : null });
+    if (kontaktni) await eetUdalosti.zaznamenat(client, { zdroj_typ: 'volna', zdroj_id: platba.id, klic: 'prijeti', platbaIds: [platba.id], volnaPlatbaId: platba.id });
+    return platba;
+  });
   return vysledek;
-}));
+}, async v => {
+  const eet = await eetFronta.stavPoUlozeni(pool, [['volna', v.id]], { od });
+  return eet ? { eet } : null;
+}); });
 
 // POST /api/evidence-plateb/prirazeni/:id/storno { klic, duvod? } – zrušení přiřazení volné
 // platby k objednávce (omyl). Přiřazení zůstane, storno se na něj naváže; platba je zase
@@ -82,6 +106,8 @@ router.post('/prirazeni/:id/storno', (req, res) => vTransakci(res, async client 
     const st = (await client.query('INSERT INTO platby_prirazeni_storna (klic, prirazeni_id, duvod) VALUES ($1,$2,$3) ON CONFLICT (prirazeni_id) DO NOTHING RETURNING *',
       ['prirazeni-storno:' + b.klic, id, b.duvod ? String(b.duvod).slice(0, 300) : null])).rows[0];
     if (!st) throw new ev.ChybaEvidence(409, 'Přiřazení už je zrušené.');
+    // EET: tržba se nemění; byla-li platba přijata „na poukaz“, opraví se rozdělení podle zbylého účelu
+    await eetUdalosti.srovnatVolnou(client, pr.platba_id, 'prirazeni-storno:' + b.klic);
     const stav = o ? await ev.srovnatStavObjednavky(client, o.id) : null;
     return { storno: st, objednavka_id: pr.objednavka_id, stav_objednavky: stav, prijato: o ? await ev.prijatoNaObjednavku(client, o.id) : 0 };
   });

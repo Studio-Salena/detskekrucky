@@ -210,7 +210,7 @@ test('PostgreSQL opravy kroku 2: vrácení poukazu, výměna, přiřazení, pův
     await assert.rejects(q('DELETE FROM prodejna_prodeje WHERE id = $1', [evProdej.id]), /událost EET/);
     await assert.rejects(q("DELETE FROM eet_udalosti WHERE klic = 'eet:prodej:test'"), /nejde smazat/);
     await assert.rejects(q("UPDATE eet_udalosti SET zdroj_id = 0 WHERE klic = 'eet:prodej:test'"), /přesměrovat/);
-    await q("UPDATE eet_udalosti SET stav = 'potvrzena' WHERE klic = 'eet:prodej:test'"); // stav měnit jde
+    await q("UPDATE eet_udalosti SET stav = 'chyba' WHERE klic = 'eet:prodej:test'"); // stav měnit jde (podle povolených přechodů)
     // zpětné datování nepomůže: datum je chráněný sloupec a zámek podle data vzniku
     await assert.rejects(q("UPDATE prodejna_prodeje SET datum = '2020-01-01' WHERE id = $1", [evProdej.id]), /událost EET/);
     // poukaz s událostí: dar ani smazání

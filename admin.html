@@ -572,6 +572,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           <button type="button" class="nav-item" onclick="showPage('reporty',this,'navstevnost')"><span class="nav-text">Návštěvnost</span></button>
           <button type="button" class="nav-item" onclick="showPage('ucetnictvi',this)"><span class="nav-text">Účetnictví</span></button>
           <button type="button" class="nav-item" onclick="showPage('ucetnictvi',this,'faktury')"><span class="nav-text">Nákupní faktury</span></button>
+          <button type="button" class="nav-item" onclick="showPage('ucetnictvi',this,'eet');nacistEet()"><span class="nav-text">EET</span></button>
         </div>
       </div>
 
@@ -933,6 +934,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           <button class="refresh-btn" onclick="loadProdejna()">↻ Obnovit</button>
         </div>
       </div>
+      <div id="prodejnaEetMsg" role="status" aria-live="polite"></div>
       <div class="pohledy" role="tablist" aria-label="Prodejna">
         <button type="button" role="tab" data-cil="historie" onclick="prepnoutPohled('prodejna','historie')">Historie prodejů</button>
         <button type="button" role="tab" data-cil="vratky" onclick="prepnoutPohled('prodejna','vratky')">Vratky</button>
@@ -1097,6 +1099,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <button type="button" role="tab" data-cil="prehled" onclick="prepnoutPohled('ucetnictvi','prehled')">Přehled</button>
         <button type="button" role="tab" data-cil="faktury" onclick="prepnoutPohled('ucetnictvi','faktury')">Nákupní faktury</button>
         <button type="button" role="tab" data-cil="platby" onclick="prepnoutPohled('ucetnictvi','platby');nacistPlatbyADobirky()">Platby a dobírky</button>
+        <button type="button" role="tab" data-cil="eet" onclick="prepnoutPohled('ucetnictvi','eet');nacistEet()">EET</button>
       </div>
       <div data-pohled="prehled">
       <div class="stats-grid" style="grid-template-columns:repeat(6,1fr)">
@@ -1144,9 +1147,10 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
           💡 <strong>Dobírky</strong>: úhradu od zákazníka zapíšete v detailu objednávky (Dobírka vybrána). Tady zapíšete výplatu od dopravce: součet dobírek − poplatek = vyplaceno.</div>
         <div class="section-divider">Volné platby</div>
         <div class="pos-dvojice" style="align-items:end;flex-wrap:wrap">
-          <div class="form-group" style="margin:0"><label for="vpZpusob">Způsob</label><select id="vpZpusob"><option value="prevod">🏦 Převod</option><option value="hotovost">💵 Hotovost</option><option value="karta">💳 Karta</option><option value="qr">📱 QR</option></select></div>
+          <div class="form-group" style="margin:0"><label for="vpZpusob">Způsob</label><select id="vpZpusob" onchange="prepnoutUcelVolnePlatby()"><option value="prevod">🏦 Převod</option><option value="hotovost">💵 Hotovost</option><option value="karta">💳 Karta</option><option value="qr">📱 QR</option></select></div>
+          <div class="form-group" style="margin:0;display:none" id="vpUcelPole"><label for="vpUcel">Za co (EET)</label><select id="vpUcel"><option value="">— vyberte —</option><option value="zbozi">🛍️ Zboží / objednávka</option><option value="poukaz">🎁 Dárkový poukaz</option></select></div>
           <div class="form-group" style="margin:0"><label for="vpCastka">Částka Kč</label><input type="number" id="vpCastka" min="1" step="0.01"></div>
-          <div class="form-group" style="margin:0"><label for="vpDatum">Přijato dne</label><input type="date" id="vpDatum"></div>
+          <div class="form-group" style="margin:0" id="vpDatumPole"><label for="vpDatum">Přijato dne</label><input type="date" id="vpDatum"></div>
           <div class="form-group" style="margin:0"><label for="vpPoznamka">Poznámka (VS, plátce)</label><input type="text" id="vpPoznamka" maxlength="300"></div>
           <button class="btn btn-primary btn-sm" id="vpBtn" onclick="zapsatVolnouPlatbu()">+ Zapsat platbu</button>
         </div>
@@ -1163,6 +1167,40 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <div class="section-divider">Provedená vyúčtování</div>
         <div id="vyuctovaniTab"></div>
         <div id="platbyMsg"></div>
+      </div>
+
+      <!-- EET: události evidence tržeb a jejich odesílání (krok 3 – zatím jen Playground) -->
+      <div data-pohled="eet">
+        <div class="info-box">🧾 <strong>Evidence tržeb (EET)</strong> – každá tržba u pultu (hotovost, karta, QR, čerpání poukazu, vrácení) se po uložení hned odešle.
+          Když EET neodpoví, <strong>prodej je přesto uložený</strong> – nic znovu nezadávejte, zpráva se odešle sama (nejpozději do 48 h od tržby).
+          Darovaný nebo nedoložený kredit se sám neeviduje – čeká na vaše rozhodnutí.</div>
+        <div id="eetProstredi" class="info-box" style="display:none"></div>
+        <div id="eetUpozorneni"></div>
+        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
+          <div class="stat-card"><div class="stat-label">Čeká na odeslání</div><div class="stat-value stat-orange" id="eetPocetCeka">…</div><div class="stat-sub" id="eetNejstarsi"></div></div>
+          <div class="stat-card"><div class="stat-label">Potvrzeno</div><div class="stat-value" id="eetPocetPotvrzeno">…</div><div class="stat-sub" id="eetPotvrzenoSub"></div></div>
+          <div class="stat-card"><div class="stat-label">Chyba</div><div class="stat-value stat-red" id="eetPocetChyba">…</div><div class="stat-sub">trvalá chyba – zkontrolovat</div></div>
+          <div class="stat-card"><div class="stat-label">Vyžaduje rozhodnutí</div><div class="stat-value stat-orange" id="eetPocetRozhodnuti">…</div><div class="stat-sub">darovaný / nedoložený kredit</div></div>
+        </div>
+        <div class="table-wrap">
+          <div class="table-header" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <h3 style="margin-right:auto">Události EET</h3>
+            <div class="filter-pills" id="eetFiltr" style="margin:0">
+              <span class="pill active" data-filtr="neodeslane" onclick="filtrovatEet('neodeslane')">⏳ Neodeslané</span>
+              <span class="pill" data-filtr="rozhodnuti" onclick="filtrovatEet('rozhodnuti')">❓ Vyžaduje rozhodnutí</span>
+              <span class="pill" data-filtr="chyba" onclick="filtrovatEet('chyba')">⚠️ Chyba</span>
+              <span class="pill" data-filtr="potvrzeno" onclick="filtrovatEet('potvrzeno')">✅ Potvrzeno</span>
+              <span class="pill" data-filtr="" onclick="filtrovatEet('')">Vše</span>
+            </div>
+            <button class="btn btn-outline btn-sm no-print" id="eetOveritBtn" onclick="overitSpojeniEet()">🔌 Ověřit spojení</button>
+            <button class="refresh-btn no-print" onclick="nacistEet()" aria-label="Načíst znovu">↻</button>
+          </div>
+          <div id="eetTabulka"><div class="loading">Načítám...</div></div>
+        </div>
+        <div id="eetNepokryte"></div>
+        <div id="eetMsg"></div>
+        <p class="report-pozn">Pořadové číslo, datum a částky tržby se určí při vzniku události a už se nemění – opakované odeslání posílá stejné údaje (nové je jen UUID zprávy).
+          Oprava se dělá novou událostí (záporná tržba). Potvrzení z neprodukčního prostředí (POK končí „-ff“) <strong>není evidencí tržby</strong>.</p>
       </div>
 
       <!-- NÁKUPNÍ FAKTURY: evidence faktur za nakoupené zboží a jejich úhrad -->
@@ -2866,6 +2904,8 @@ async function nacistPlatbyADobirky() {
       adminFetch(API + '/evidence-plateb/dobirky/vyuctovani').then(r => r.json())
     ]);
     dataKUhrade = kUhrade && kUhrade.objednavky ? kUhrade : { objednavky: [], poukazy: [] };
+    try { const st = await (await adminFetch(API + '/eet/stav')).json(); eetZapnuto = !!(st.konfigurace && st.konfigurace.zapnuto); } catch (e) { /* EET stav není nutný */ }
+    prepnoutUcelVolnePlatby();
     vykreslitVolnePlatby(Array.isArray(volne) ? volne : []);
     vykreslitDobirky(Array.isArray(dobirky) ? dobirky : []);
     vykreslitVyuctovani(Array.isArray(vyuct) ? vyuct : []);
@@ -2917,15 +2957,19 @@ async function zapsatVolnouPlatbu() {
   const msg = document.getElementById('platbyMsg'), btn = document.getElementById('vpBtn');
   const castka = Number(document.getElementById('vpCastka').value);
   if (!(castka > 0)) { msg.innerHTML = '<div class="error-msg">Zadejte částku.</div>'; return; }
-  const datum = document.getElementById('vpDatum').value;
+  const zpusob = document.getElementById('vpZpusob').value;
+  const kontaktni = zpusob !== 'prevod';
+  const ucel = kontaktni ? document.getElementById('vpUcel').value : '';
+  const datum = kontaktni && eetZapnuto ? '' : document.getElementById('vpDatum').value;
+  if (kontaktni && eetZapnuto && !ucel) { msg.innerHTML = '<div class="error-msg">Vyberte, za co je platba (eviduje se v EET hned při přijetí).</div>'; return; }
   btn.disabled = true;
   try {
     const { res, data } = await odeslatOperaci('volna-platba', API + '/evidence-plateb/volna', {
-      zpusob: document.getElementById('vpZpusob').value, castka,
+      zpusob, castka, ucel: ucel || null,
       prijato_at: datum ? datum + 'T12:00:00+01:00' : null, poznamka: document.getElementById('vpPoznamka').value.trim() || null });
     if (!res.ok) { msg.innerHTML = `<div class="error-msg">${escH(data.chyba || 'Platbu se nepodařilo zapsat.')}</div>`; return; }
     document.getElementById('vpCastka').value = ''; document.getElementById('vpPoznamka').value = '';
-    msg.innerHTML = '<div class="success-msg">✅ Platba zapsaná – teď ji přiřaďte.</div>';
+    msg.innerHTML = data.eet ? popisEetPoUlozeni(data.eet, 'Platba') + '<div class="success-msg">Teď ji přiřaďte.</div>' : '<div class="success-msg">✅ Platba zapsaná – teď ji přiřaďte.</div>';
     nacistPlatbyADobirky();
   } catch (e) { msg.innerHTML = '<div class="error-msg">Spojení selhalo – klikněte znovu, nezapíše se dvakrát.</div>'; }
   finally { btn.disabled = false; }
@@ -3010,6 +3054,167 @@ async function kontrolaPlateb() {
     alert('⚠️ ' + souhrn + '\n\nRozdíly:\n' + d.rozdily.slice(0, 30).map(r => `• ${r.doklad} – ${r.co}: doklad ${r.doklad_castka} Kč, evidence ${r.evidence} Kč`).join('\n')
       + (d.rozdily.length > 30 ? `\n… a dalších ${d.rozdily.length - 30}` : ''));
   } catch (e) { alert('Chyba spojení.'); }
+}
+
+// ═══ EET (Účetnictví → EET) ═══
+// Přehled událostí evidence tržeb. Uložení prodeje a jeho evidence jsou oddělené:
+// chyba EET nikdy neznamená, že se prodej neuložil, a nevybízí k jeho novému zadání.
+let eetFiltr = 'neodeslane', eetZapnuto = false;
+const EET_STAVY = { ceka: '⏳ čeká na odeslání', potvrzeno: '✅ potvrzeno', chyba: '⚠️ chyba', rozhodnuti: '❓ vyžaduje rozhodnutí', neevidovano: '— neevidováno (rozhodnutí)' };
+const EET_DOKLADY = { prodej: 'účtenka', vratka: 'vratka', poukaz: 'poukaz', objednavka: 'objednávka', volna: 'volná platba' };
+const kcEet = v => v == null ? '–' : Number(v).toLocaleString('cs-CZ', { minimumFractionDigits: 2 }) + ' Kč';
+function stariText(s) {
+  if (s == null) return '';
+  if (s < 90) return 'před chvílí';
+  if (s < 5400) return 'před ' + Math.round(s / 60) + ' min';
+  if (s < 172800) return 'před ' + Math.round(s / 3600) + ' h';
+  return 'před ' + Math.round(s / 86400) + ' dny';
+}
+function pokText(pok, test) {
+  if (!pok) return '–';
+  return test ? escH(pok) + ' <span class="badge badge-nizky" title="Neprodukční prostředí – není evidencí tržby">TEST</span>' : escH(pok);
+}
+async function nacistEet() {
+  const msg = document.getElementById('eetMsg');
+  try {
+    const res = await adminFetch(API + '/eet/stav');
+    const s = await res.json();
+    if (!res.ok) { msg.innerHTML = '<div class="error-msg">' + escH(s.chyba || 'Stav EET nejde načíst.') + '</div>'; return; }
+    eetZapnuto = !!(s.konfigurace && s.konfigurace.zapnuto);
+    const k = s.konfigurace || {};
+    const prostredi = document.getElementById('eetProstredi');
+    prostredi.style.display = '';
+    prostredi.innerHTML = eetZapnuto
+      ? '<strong>Prostředí:</strong> ' + (k.testovaci ? '🧪 Playground (TEST – POK neplatí jako evidence)' : escH(k.prostredi))
+        + ' · EIČ ' + escH(k.eic) + ' · evidenční jednotka ' + escH(k.id_provoz) + ' · pokladna ' + escH(k.id_pokl)
+        + ' · certifikát platí do ' + escH(new Date(k.cert_platny_do).toLocaleDateString('cs-CZ'))
+        + (s.posledni_pokus ? '<br><strong>Poslední pokus:</strong> ' + escH(new Date(s.posledni_pokus.zahajeno).toLocaleString('cs-CZ')) + ' – ' + escH(s.posledni_pokus.vysledek || 'probíhá')
+          + (s.posledni_pokus.overeni ? ' (ověřovací mód)' : '') + (s.posledni_pokus.text_chyby ? ' – ' + escH(s.posledni_pokus.text_chyby) : '') : '')
+        + (s.fronta ? '<br><strong>Odesílání:</strong> ' + (s.fronta.bezi ? 'běží' : 'zastavené') + (s.fronta.posloucha ? ', okamžité' : ', jen po intervalech') + (s.fronta.chyba_behu ? ' – ' + escH(s.fronta.chyba_behu) : '') : '')
+      : '<strong>EET je vypnuté</strong> (nenastavené EET_PROSTREDI) – nic se neeviduje ani neodesílá.' + (s.chyba_konfigurace ? '<br>⚠️ ' + escH(s.chyba_konfigurace) : '');
+    document.getElementById('eetUpozorneni').innerHTML = (s.upozorneni || []).map(t => '<div class="error-msg">⚠️ ' + escH(t) + '</div>').join('');
+    const p = s.pocty || {};
+    document.getElementById('eetPocetCeka').textContent = p.ceka ?? 0;
+    document.getElementById('eetPocetPotvrzeno').textContent = p.potvrzeno ?? 0;
+    document.getElementById('eetPocetChyba').textContent = p.chyba ?? 0;
+    document.getElementById('eetPocetRozhodnuti').textContent = p.rozhodnuti ?? 0;
+    document.getElementById('eetPotvrzenoSub').textContent = eetZapnuto && k.testovaci ? 'testovací potvrzení' : '';
+    const n = s.neodeslane || {};
+    document.getElementById('eetNejstarsi').textContent = n.n ? 'nejstarší ' + stariText(n.stari_nejstarsi_s) + (n.nejblizsi_lhuta ? ', lhůta do ' + new Date(n.nejblizsi_lhuta).toLocaleString('cs-CZ') : '') : '';
+    const nep = s.nepokryte || [];
+    document.getElementById('eetNepokryte').innerHTML = nep.length ? '<div class="table-wrap"><div class="table-header"><h3>❓ Platby bez události EET (vyžaduje rozhodnutí)</h3></div><table><thead><tr><th>Vzniklo</th><th>Řádek</th><th>Doklad</th><th>Částka</th></tr></thead><tbody>'
+      + nep.map(r => '<tr><td>' + escH(new Date(r.vytvoreno).toLocaleString('cs-CZ')) + '</td><td>' + escH(r.druh + ' ' + r.typ + (r.zpusob ? ' (' + r.zpusob + ')' : '')) + '</td><td>' + escH((EET_DOKLADY[r.zdroj_typ] || r.zdroj_typ) + (r.zdroj_id ? ' #' + r.zdroj_id : '')) + '</td><td>' + kcEet(r.castka) + '</td></tr>').join('')
+      + '</tbody></table><p class="report-pozn" style="padding:0 12px 10px">Tyto kontaktní platby vznikly od zapnutí EET, ale žádná událost je nepokrývá. Nic se nedoplnilo automaticky – rozhodněte s účetní, jak je dodatečně evidovat.</p></div>' : '';
+    await nacistUdalostiEet();
+  } catch (e) { msg.innerHTML = '<div class="error-msg">Stav EET nejde načíst (chyba spojení).</div>'; }
+}
+function filtrovatEet(f) {
+  eetFiltr = f;
+  document.querySelectorAll('#eetFiltr .pill').forEach(p => p.classList.toggle('active', p.dataset.filtr === f));
+  nacistUdalostiEet();
+}
+async function nacistUdalostiEet() {
+  const el = document.getElementById('eetTabulka');
+  try {
+    const res = await adminFetch(API + '/eet/udalosti' + (eetFiltr ? '?stav=' + encodeURIComponent(eetFiltr) : ''));
+    const seznam = await res.json();
+    if (!res.ok) { el.innerHTML = '<div class="error-msg">' + escH(seznam.chyba || 'Události nejde načíst.') + '</div>'; return; }
+    if (!seznam.length) { el.innerHTML = '<div class="empty">Žádné události</div>'; return; }
+    el.innerHTML = '<table><thead><tr><th>Tržba</th><th>Doklad</th><th>Pořadové č.</th><th>Celkem</th><th>Určeno k čerpání</th><th>Čerpání</th><th>Stav</th><th>POK</th><th>Pokusy</th><th></th></tr></thead><tbody>'
+      + seznam.map(u => {
+        const lhutaBlizko = ['ceka', 'chyba', 'rozhodnuti'].includes(u.stav) && u.lhuta_do && (new Date(u.lhuta_do) - Date.now()) < 12 * 3600e3;
+        const akce = (['ceka', 'chyba'].includes(u.stav) ? '<button class="btn btn-outline btn-sm" onclick="odeslatEetZnovu(' + u.id + ')">Odeslat</button> ' : '')
+          + (u.stav === 'rozhodnuti' ? '<button class="btn btn-primary btn-sm" onclick="rozhodnoutEet(' + u.id + ')">Rozhodnout</button> ' : '')
+          + '<button class="btn btn-outline btn-sm" onclick="detailEet(' + u.id + ')">Detail</button>';
+        return '<tr id="eetRadek' + u.id + '"><td>' + escH(new Date(u.dat_trzby || u.vytvoreno).toLocaleString('cs-CZ')) + (u.typ === 'oprava' ? ' <span class="badge badge-zruseno">oprava</span>' : '')
+          + (['ceka', 'chyba', 'rozhodnuti'].includes(u.stav) ? '<div style="font-size:0.72rem;color:' + (lhutaBlizko || u.po_lhute ? 'var(--red)' : 'var(--text-light)') + '">' + escH(stariText(u.stari_s)) + (u.po_lhute ? ' · PO LHŮTĚ 48 h' : lhutaBlizko ? ' · lhůta brzy končí' : '') + '</div>' : '') + '</td>'
+          + '<td>' + escH((EET_DOKLADY[u.zdroj_typ] || u.zdroj_typ) + ' #' + u.zdroj_id) + '</td><td>' + escH(u.porad_cis || '') + '</td>'
+          + '<td>' + kcEet(u.celk_trzba) + '</td><td>' + kcEet(u.urceno_cerp_zuct) + '</td><td>' + kcEet(u.cerp_zuct) + '</td>'
+          + '<td>' + escH(EET_STAVY[u.stav] || u.stav) + (u.posledni_chyba && u.stav !== 'potvrzeno' ? '<div style="font-size:0.72rem;color:var(--red)">' + escH(u.posledni_chyba) + '</div>' : '')
+          + (u.rozhodnuti_duvod && u.stav === 'rozhodnuti' ? '<div style="font-size:0.72rem">' + escH(u.rozhodnuti_duvod) + '</div>' : '')
+          + (u.rozhodnuti_poznamka ? '<div style="font-size:0.72rem">Rozhodnutí: ' + escH(u.rozhodnuti_volba) + ' – ' + escH(u.rozhodnuti_poznamka) + '</div>' : '')
+          + (u.varovani ? '<div style="font-size:0.72rem;color:var(--orange)">Varování: ' + escH(u.varovani.map(v => v.kod + ' ' + v.text).join('; ')) + '</div>' : '') + '</td>'
+          + '<td style="font-size:0.72rem">' + pokText(u.pok, u.pok_test) + '</td><td>' + (u.pocet_pokusu || 0) + (u.posledni_pokus_at ? '<div style="font-size:0.72rem">' + escH(new Date(u.posledni_pokus_at).toLocaleString('cs-CZ')) + '</div>' : '') + '</td>'
+          + '<td style="white-space:nowrap">' + akce + '</td></tr>';
+      }).join('') + '</tbody></table>';
+  } catch (e) { el.innerHTML = '<div class="error-msg">Události nejde načíst (chyba spojení).</div>'; }
+}
+async function odeslatEetZnovu(id) {
+  const msg = document.getElementById('eetMsg');
+  try {
+    const res = await adminFetch(API + '/eet/udalosti/' + id + '/odeslat', { method: 'POST' });
+    const d = await res.json().catch(() => ({}));
+    msg.innerHTML = res.ok ? '<div class="success-msg">Událost zařazena k odeslání' + (d.fronta ? '' : ' (fronta ale neběží)') + '.</div>' : '<div class="error-msg">' + escH(d.chyba || 'Nejde odeslat.') + '</div>';
+    setTimeout(nacistEet, 1500);
+  } catch (e) { msg.innerHTML = '<div class="error-msg">Chyba spojení.</div>'; }
+}
+async function rozhodnoutEet(id) {
+  const volba = prompt('Část nákupu byla zaplacena darovaným nebo nedoloženým kreditem. Pravidlo pro EET není doložené.\n\nNapište „evidovat“ (odešle se s uvedenými částkami) nebo „neevidovat“ (zůstane viditelně neevidovaná).\nRozhodnutí je konečné – poraďte se s účetní.');
+  if (volba == null) return;
+  const v = volba.trim().toLowerCase();
+  if (!['evidovat', 'neevidovat'].includes(v)) { alert('Napište přesně „evidovat“ nebo „neevidovat“.'); return; }
+  const poznamka = prompt('Odůvodnění rozhodnutí (kdo a proč rozhodl):');
+  if (poznamka == null) return;
+  const msg = document.getElementById('eetMsg');
+  try {
+    const res = await adminFetch(API + '/eet/udalosti/' + id + '/rozhodnuti', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ volba: v, poznamka }) });
+    const d = await res.json().catch(() => ({}));
+    msg.innerHTML = res.ok ? '<div class="success-msg">Rozhodnutí uloženo.</div>' : '<div class="error-msg">' + escH(d.chyba || 'Rozhodnutí nejde uložit.') + '</div>';
+    nacistEet();
+  } catch (e) { msg.innerHTML = '<div class="error-msg">Chyba spojení.</div>'; }
+}
+async function detailEet(id) {
+  const radek = document.getElementById('eetRadek' + id);
+  const existujici = document.getElementById('eetDetail' + id);
+  if (existujici) { existujici.remove(); return; }
+  try {
+    const res = await adminFetch(API + '/eet/udalosti/' + id);
+    const u = await res.json();
+    if (!res.ok) { alert(u.chyba || 'Detail nejde načíst.'); return; }
+    const tr = document.createElement('tr');
+    tr.id = 'eetDetail' + id;
+    tr.innerHTML = '<td colspan="10" style="background:var(--cream);font-size:0.78rem">'
+      + '<div><strong>Prostředí:</strong> ' + escH(u.prostredi) + ' · <strong>Kód tržby:</strong> <code>' + escH(u.kod_trzby || '') + '</code></div>'
+      + '<div><strong>Pokusy o odeslání:</strong></div><table><thead><tr><th>Zahájeno</th><th>UUID zprávy</th><th>První zaslání</th><th>Výsledek</th><th>POK / chyba</th><th>Transakce FS</th></tr></thead><tbody>'
+      + (u.pokusy.length ? u.pokusy.map(p => '<tr><td>' + escH(new Date(p.zahajeno).toLocaleString('cs-CZ')) + '</td><td><code>' + escH(p.uuid_zpravy) + '</code></td><td>' + (p.prvni_zaslani ? 'ano' : 'ne (opakované)') + '</td><td>'
+        + escH(p.vysledek || 'probíhá') + '</td><td>' + (p.pok ? pokText(p.pok, u.prostredi !== 'produkce') : escH((p.kod_chyby != null ? p.kod_chyby + ' ' : '') + (p.text_chyby || ''))) + '</td><td>' + escH(p.transakce_fs || '') + '</td></tr>').join('')
+        : '<tr><td colspan="6">Zatím žádný pokus.</td></tr>')
+      + '</tbody></table><div><strong>Pokryté řádky evidence:</strong> ' + (u.radky.length ? u.radky.map(r => r.platba_id ? 'platba #' + r.platba_id + ' (' + escH(r.platba_typ) + ' ' + kcEet(r.platba_castka) + ', ' + escH(r.zpusob) + ')' : 'kredit #' + r.kredit_pohyb_id + ' (' + escH(r.kredit_typ) + ' ' + kcEet(r.kredit_castka) + ')').join(', ') : '— (opravná událost)') + '</div></td>';
+    radek.after(tr);
+  } catch (e) { alert('Chyba spojení.'); }
+}
+async function overitSpojeniEet() {
+  const msg = document.getElementById('eetMsg'), btn = document.getElementById('eetOveritBtn');
+  btn.disabled = true;
+  try {
+    const res = await adminFetch(API + '/eet/overit-spojeni', { method: 'POST' });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) msg.innerHTML = '<div class="error-msg">' + escH(d.chyba || 'Ověření nejde spustit.') + '</div>';
+    else msg.innerHTML = d.ok ? '<div class="success-msg">🔌 Spojení funguje (ověřovací mód, kód 0). Nic se tím neevidovalo.</div>'
+      : '<div class="error-msg">Ověření spojení selhalo: ' + escH(d.vysledek + (d.kod != null ? ' ' + d.kod : '') + ' – ' + (d.text || '')) + '</div>';
+    nacistEet();
+  } catch (e) { msg.innerHTML = '<div class="error-msg">Chyba spojení se serverem.</div>'; }
+  finally { btn.disabled = false; }
+}
+// Stav EET po uložení operace – vždy až PO potvrzení, že je operace uložená.
+function popisEetPoUlozeni(eet, coUlozeno) {
+  if (!Array.isArray(eet) || !eet.length) return '';
+  const test = eet.some(e => e.testovaci);
+  const prostredi = test ? ' (Playground – TEST, není evidencí tržby)' : '';
+  if (eet.every(e => e.stav === 'potvrzeno')) {
+    return '<div class="success-msg">✅ ' + escH(coUlozeno) + ' uloženo. EET potvrzeno' + prostredi + ': ' + eet.map(e => pokText(e.pok, e.pok_test)).join(', ') + '</div>';
+  }
+  const casti = [];
+  if (eet.some(e => e.stav === 'ceka' || e.stav === 'nezjisteno')) casti.push('⏳ EET zatím nepotvrzeno – zpráva se odešle automaticky' + (eet.find(e => e.chyba) ? ' (' + escH(eet.find(e => e.chyba).chyba) + ')' : ''));
+  if (eet.some(e => e.stav === 'chyba')) casti.push('⚠️ chyba evidence v EET – řeší se v Účetnictví → EET');
+  if (eet.some(e => e.stav === 'rozhodnuti')) casti.push('❓ část nákupu (darovaný kredit) čeká na rozhodnutí v Účetnictví → EET');
+  return '<div class="info-box">✅ <strong>' + escH(coUlozeno) + ' je uloženo</strong> – nic znovu nezadávejte.' + prostredi + '<br>' + casti.join('<br>') + '</div>';
+}
+function prepnoutUcelVolnePlatby() {
+  const kontaktni = document.getElementById('vpZpusob').value !== 'prevod';
+  document.getElementById('vpUcelPole').style.display = kontaktni ? '' : 'none';
+  // se zapnutým EET se platba u pultu eviduje v okamžiku přijetí – bez zpětného data
+  document.getElementById('vpDatumPole').style.display = kontaktni && eetZapnuto ? 'none' : '';
 }
 
 // ═══ Identifikátor operace proti opakování (vratka, výměna, poukaz, platba) ═══
@@ -6116,6 +6321,8 @@ async function odeslatProdej(prodej) {
   }
   smazatNedokoncenyProdej();
   klicProdeje = null;
+  // stav EET je oddělený od uložení: prodej je uložený, ať EET odpoví jakkoli
+  document.getElementById('prodejnaEetMsg').innerHTML = popisEetPoUlozeni(ulozenyProdej.eet, 'Prodej (účtenka #' + ulozenyProdej.id + ')');
 
   // Vytisknout účtenku
   tiskUctenkyData(ulozenyProdej, ulozenyProdej.id);

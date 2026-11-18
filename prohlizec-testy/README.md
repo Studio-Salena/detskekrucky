@@ -31,3 +31,4 @@ Každý test dostane vlastní server a schéma `e2e_…`, které se po testu sma
 | `odber.js` | osobní odběr: bez platby nejde Zaplaceno; platba po ztracené odpovědi zapsaná jednou, bez prodeje v pokladně |
 | `ucetnictvi.js` | Účetnictví → Platby a dobírky: volná platba, přiřazení k objednávce (ztracená odpověď), k poukazu jen celou hodnotou, vyúčtování dobírky; detail poukazu: zápis platby a **vrácení peněz** s vazbou na původní platbu |
 | `stary-admin.js` | staré okno administrace (z `98593ee`) proti novému serveru: odečet skladu i prodej odmítnuté, v databázi se nic nezmění |
+| `eet.js` | EET se zapnutou testovací konfigurací a **lokálním** falešným FS (nic po síti): prodej hned potvrzený (POK označený TEST), výpadek EET = prodej uložen jednou a pokladna nevybízí k novému zadání, darovaný kredit „vyžaduje rozhodnutí“, Účetnictví → EET (počty, stáří, detail pokusů, ruční odeslání, rozhodnutí), volná hotovost s povinným účelem |

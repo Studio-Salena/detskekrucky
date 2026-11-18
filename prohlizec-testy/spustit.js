@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Spustí prohlížečové testy hlavních scénářů pokladny a evidence plateb (README.md).
-//   TEST_PG_URL=postgres://uzivatel@localhost:5432/dk_test node prohlizec-testy/spustit.js [pokladna odber ucetnictvi stary-admin]
+//   TEST_PG_URL=postgres://uzivatel@localhost:5432/dk_test node prohlizec-testy/spustit.js [pokladna odber ucetnictvi stary-admin eet]
 // Každý test dostane vlastní testovací server a vlastní dočasné schéma (po testu se smaže).
 'use strict';
 const path = require('node:path');
@@ -16,7 +16,7 @@ const cil = new URL(URL_DB);
 if (!['localhost', '127.0.0.1', '::1', '[::1]'].includes(cil.hostname)) stop('TEST_PG_URL musí být lokální databáze.');
 if (!/test|e2e/i.test(cil.pathname)) stop('Název databáze v TEST_PG_URL musí obsahovat „test“ nebo „e2e“.');
 
-const VSECHNY = ['pokladna', 'odber', 'ucetnictvi', 'stary-admin'];
+const VSECHNY = ['pokladna', 'odber', 'ucetnictvi', 'stary-admin', 'eet'];
 const vybrane = process.argv.slice(2).length ? process.argv.slice(2) : VSECHNY;
 const { Client } = require(path.join(KOREN, 'node_modules', 'pg'));
 
@@ -46,7 +46,7 @@ function spustitProces(soubor, env, cekatNa) {
     if (!VSECHNY.includes(nazev)) stop('Neznámý test: ' + nazev);
     const schema = `e2e_${nazev.replace(/-/g, '_')}_${Date.now()}`;
     await admin.query(`CREATE SCHEMA ${schema}`);
-    const env = { E2E_SCHEMA: schema, PORT: String(++port), STARY_ADMIN: nazev === 'stary-admin' ? staryAdmin() : '' };
+    const env = { E2E_SCHEMA: schema, PORT: String(++port), STARY_ADMIN: nazev === 'stary-admin' ? staryAdmin() : '', E2E_EET: nazev === 'eet' ? '1' : '' };
     const server = await spustitProces(path.join(__dirname, 'server.js'), env, 'PRIPRAVEN');
     if (server.kod != null) { vysledky.push([nazev, 'server nenaběhl']); console.error(server.vystup); continue; }
     console.log(`\n== ${nazev}`);

@@ -139,7 +139,7 @@ function obsluhaEvidence(stav, s, params = []) {
       .reduce((a, r) => a + (['prijem', 'storno_vraceni'].includes(r.typ) ? 1 : -1) * Number(r.castka), 0);
     return { rows: [{ vlastni: soucet, s: soucet }] };
   }
-  if (s.startsWith('SELECT 1 FROM eet_udalosti WHERE zdroj_typ')) return { rows: (e.eet_udalosti || []).filter(u => u.zdroj_typ === params[0] && Number(u.zdroj_id) === Number(params[1])).slice(0, 1) };
+  if (s.startsWith('SELECT 1 FROM eet_udalosti WHERE zdroj_typ') || s.startsWith('SELECT 1 WHERE EXISTS (SELECT 1 FROM eet_udalosti WHERE zdroj_typ')) return { rows: (e.eet_udalosti || []).filter(u => u.zdroj_typ === params[0] && Number(u.zdroj_id) === Number(params[1])).slice(0, 1) };
   if (s.startsWith('SELECT pr.platba, pr.celkem,')) {
     const pr = (stav.prodejnaProdeje || stav.prodeje || []).find(x => Number(x.id) === Number(params[0]));
     if (!pr) return { rows: [] };

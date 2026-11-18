@@ -10,3 +10,11 @@ Claude outputs/
 scripts/zprava-overeni-migrace.json
 zprava-*.json
 *.dump
+
+# EET – certifikáty a klíče poplatníka patří jen na server (nikdy do gitu ani logů);
+# testovací klíče v test/fixtures/eet jsou vygenerované jen pro lokální testy
+*.p12
+*.pfx
+eet-certy/
+*-klic.pem
+!test/fixtures/eet/test-*-klic.pem

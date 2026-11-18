@@ -8,6 +8,8 @@ const vymena = require('../lib/vymena');
 const prodejPokladna = require('../lib/prodejPokladna');
 const evidence = require('../lib/evidencePlateb');
 const eetZamek = require('../lib/eetZamek');
+const eetUdalosti = require('../lib/eetUdalosti');
+const eetFronta = require('../lib/eetFronta');
 
 // Jak byly peníze z vratky vráceny (hotově se odečítá z hotovosti v uzávěrce)
 const ZPUSOBY_VRACENI = vymena.PLATBY;
@@ -158,12 +160,17 @@ router.post('/promo/overit', async (req, res) => {
 router.post('/', async (req, res) => {
   const vstup = prodejPokladna.pripravitProdej(req.body);
   if (vstup.chyba) return res.status(vstup.status).json({ chyba: vstup.chyba });
+  const od = new Date();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const { prodej, opakovane } = await prodejPokladna.ulozitProdej(client, vstup);
     await client.query('COMMIT');
-    res.json(opakovane ? { ...prodej, opakovane: true } : prodej);
+    // Prodej je uložený. Teď hned první odeslání do EET (nejvýš mezní doba odezvy);
+    // jeho výsledek je oddělený – chyba EET se pokladně jen oznámí a nikdy nevede
+    // k novému zadání prodeje (událost čeká ve frontě a odešle se sama).
+    const eet = await eetFronta.stavPoUlozeni(pool, [['prodej', prodej.id]], { od });
+    res.json({ ...prodej, ...(opakovane ? { opakovane: true } : {}), ...(eet ? { eet } : {}) });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     if (err instanceof prodejPokladna.ChybaProdeje) return res.status(err.status).json({ chyba: err.chyba, ...err.data });
@@ -368,6 +375,7 @@ async function overitVracenePolozky(client, { prodej_id, objednavka_id, polozky 
 router.post('/vratky', async (req, res) => {
   const { prodej_id, objednavka_id, polozky, castka, duvod, vratit_na_sklad } = req.body;
   const zpusobVraceni = req.body.zpusob_vraceni || null;
+  const od = new Date();
   if (!Array.isArray(polozky) || !polozky.length) {
     return res.status(400).json({ chyba: 'Chybí vracené položky.' });
   }
@@ -418,6 +426,7 @@ router.post('/vratky', async (req, res) => {
       [prodej_id || null, objednavka_id || null, JSON.stringify(polozky), castka, duvod || null, vratit_na_sklad !== false, zpusobVraceni]
     );
     await zapsatVraceniPenez(client, vratka.rows[0], { prodejId: prodej_id, objednavkaId: objednavka_id });
+    await eetUdalosti.zaznamenat(client, { zdroj_typ: 'vratka', zdroj_id: vratka.rows[0].id, klic: 'vratka' });
 
     // Pokud se má zboží vrátit zpět na sklad, naskladníme ho
     if (vratit_na_sklad !== false) {
@@ -438,7 +447,8 @@ router.post('/vratky', async (req, res) => {
     });
 
     await client.query('COMMIT');
-    res.json(opakovane ? { ...vysledek, opakovane: true } : vysledek);
+    const eet = await eetFronta.stavPoUlozeni(pool, [['vratka', vysledek.id]], { od });
+    res.json({ ...vysledek, ...(opakovane ? { opakovane: true } : {}), ...(eet ? { eet } : {}) });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     if (err instanceof evidence.ChybaEvidence) return res.status(err.status).json({ chyba: err.chyba });
@@ -509,6 +519,7 @@ router.post('/vymeny', async (req, res) => {
   const prodejId = Number(b.prodej_id);
   const v = vymena.pripravitVymenu({ prodej_id: prodejId, vracene: b.vracene, nove: b.nove, zapocet: b.zapocet, platba: b.platba });
   if (v.chyba) return res.status(400).json({ chyba: v.chyba });
+  const od = new Date();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -571,11 +582,15 @@ router.post('/vymeny', async (req, res) => {
         okolnosti: naDalku ? 'eshop' : 'prodejna', kontaktni: !naDalku, prijato_at: prodej.datum, zdroj_typ: 'prodej', zdroj_id: prodej.id });
     }
     await zapsatVraceniPenez(client, vratka, { prodejId });
+    // jedna operace = jedna zpráva: doplatek (+) nebo vrácený rozdíl (−), zápočet se neeviduje
+    await eetUdalosti.zaznamenat(client, { zdroj_typ: v.doplatek > 0 ? 'prodej' : 'vratka', zdroj_id: v.doplatek > 0 ? prodej.id : vratka.id,
+      klic: 'vymena', zdroje: [['prodej', prodej.id], ['vratka', vratka.id]] });
     return { prodej, vratka };
     });
 
     await client.query('COMMIT');
-    res.json(opakovane ? { ...vysledek, opakovane: true } : vysledek);
+    const eet = await eetFronta.stavPoUlozeni(pool, [['prodej', vysledek.prodej.id], ['vratka', vysledek.vratka.id]], { od });
+    res.json({ ...vysledek, ...(opakovane ? { opakovane: true } : {}), ...(eet ? { eet } : {}) });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     if (err instanceof evidence.ChybaEvidence) return res.status(err.status).json({ chyba: err.chyba });
