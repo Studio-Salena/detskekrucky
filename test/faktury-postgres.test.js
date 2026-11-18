@@ -61,7 +61,7 @@ test('migrace: zachová existující objednávky i číslování, nic zpětně n
     assert.equal(JSON.stringify((await db.pool.query('SELECT * FROM objednavky ORDER BY id')).rows), pred);
     assert.equal(await db.pocitadlo(), 4);
     assert.equal((await db.pool.query('SELECT COUNT(*)::int AS n FROM faktury')).rows[0].n, 0, 'historické faktury se zpětně nevytvářejí');
-    const triggery = (await db.pool.query("SELECT tgname FROM pg_trigger WHERE tgname IN ('faktury_nemenne', 'objednavky_faktura_nemenna') ORDER BY tgname")).rows.map(r => r.tgname);
+    const triggery = (await db.pool.query("SELECT tgname FROM pg_trigger WHERE tgname IN ('faktury_nemenne', 'objednavky_faktura_nemenna') AND tgrelid IN (SELECT oid FROM pg_class WHERE relnamespace = current_schema()::regnamespace) ORDER BY tgname")).rows.map(r => r.tgname);
     assert.deepEqual(triggery, ['faktury_nemenne', 'objednavky_faktura_nemenna']);
   } finally { await db.uklid(); }
 });
@@ -141,16 +141,16 @@ test('historická faktura: vrátí se jako historická, nic se neuloží ani nep
 });
 
 // --- Etapa 2.2 ---
-const pocetTriggeru = async pool => (await pool.query("SELECT tgname, tgenabled FROM pg_trigger WHERE tgname IN ('faktury_nemenne', 'objednavky_faktura_nemenna') AND NOT tgisinternal ORDER BY tgname")).rows;
+const pocetTriggeru = async pool => (await pool.query("SELECT tgname, tgenabled FROM pg_trigger WHERE tgname IN ('faktury_nemenne', 'objednavky_faktura_nemenna') AND NOT tgisinternal AND tgrelid IN (SELECT oid FROM pg_class WHERE relnamespace = current_schema()::regnamespace) ORDER BY tgname")).rows;
 
 test('S4: opakovaná i souběžná migrace triggery neruší ani nezdvojí, ochrana funguje; vypnutý trigger znovu zapne', { skip: preskocit }, async () => {
   const db = await pripravitSchema();
   try {
     await migrovatFaktury(db.pool);
-    const oidPred = (await db.pool.query("SELECT oid FROM pg_trigger WHERE tgname = 'faktury_nemenne'")).rows[0].oid;
+    const oidPred = (await db.pool.query("SELECT oid FROM pg_trigger WHERE tgname = 'faktury_nemenne' AND tgrelid IN (SELECT oid FROM pg_class WHERE relnamespace = current_schema()::regnamespace)")).rows[0].oid;
     await Promise.all([migrovatFaktury(db.pool), migrovatFaktury(db.pool), migrovatFaktury(db.pool)]);
     assert.deepEqual(await pocetTriggeru(db.pool), [{ tgname: 'faktury_nemenne', tgenabled: 'O' }, { tgname: 'objednavky_faktura_nemenna', tgenabled: 'O' }]);
-    assert.equal((await db.pool.query("SELECT oid FROM pg_trigger WHERE tgname = 'faktury_nemenne'")).rows[0].oid, oidPred, 'existující trigger se nezrušil a nevytvořil znovu');
+    assert.equal((await db.pool.query("SELECT oid FROM pg_trigger WHERE tgname = 'faktury_nemenne' AND tgrelid IN (SELECT oid FROM pg_class WHERE relnamespace = current_schema()::regnamespace)")).rows[0].oid, oidPred, 'existující trigger se nezrušil a nevytvořil znovu');
 
     const id = await db.novaObjednavka();
     const v = await vystavitFakturu(db.pool, id, { ted: TED });
