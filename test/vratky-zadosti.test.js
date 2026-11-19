@@ -462,7 +462,7 @@ test('§ 1830a: otevritOdstoupeni předvyplní číslo (jen číslice) a e-mail 
   const fs = require('node:fs');
   const path = require('node:path');
   const vm = require('node:vm');
-  const eshop = fs.readFileSync(path.join(__dirname, '..', 'eshop.html'), 'utf8');
+  const eshop = fs.readFileSync(path.join(__dirname, '..', 'eshop.html'), 'utf8').replace(/\r\n/g, '\n'); // nezávisle na koncích řádků (Windows checkout)
   const start = eshop.indexOf('function otevritOdstoupeni(');
   const kod = eshop.slice(start, eshop.indexOf('\n}\n', start) + 2);
   const spustit = (cislo, uzivatel) => {
