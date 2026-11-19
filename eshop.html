@@ -319,6 +319,14 @@ footer.paticka .footer-copy{text-align:center;border-top:1px solid rgba(255,255,
 @media(max-width:400px){.katalog .products-grid{grid-template-columns:1fr}}
 .product-card{background:#fff;border-radius:24px;overflow:hidden;border:2px solid var(--tan-light);transition:all 0.3s;cursor:pointer;position:relative}
 .product-card:hover{transform:translateY(-6px);box-shadow:0 16px 48px rgba(139,69,19,0.2);border-color:var(--tan);background:linear-gradient(180deg,#fff,#fffaf5)}
+/* Odkaz v názvu boty je roztažený přes celou kartu; tlačítko „+“ leží nad ním */
+.karta-odkaz{color:inherit;text-decoration:none}
+.karta-odkaz::after{content:"";position:absolute;inset:0;z-index:1}
+.product-card .add-btn{position:relative;z-index:2}
+@supports selector(:has(a)){
+  .karta-odkaz:focus-visible{outline:none}
+  .product-card:has(.karta-odkaz:focus-visible){outline:3px solid var(--brown-dark);outline-offset:2px}
+}
 .product-img{height:220px;display:flex;align-items:center;justify-content:center;font-size:4rem;position:relative}
 .product-img-toddler{background:linear-gradient(135deg,#fff0e6,#fde8d0)}
 .product-img-boys{background:linear-gradient(135deg,#e8f4fd,#d6eaf8)}
@@ -2382,14 +2390,18 @@ function kartaProduktuHtml(p, stav) {
     return `<span${trida ? ` class="${trida}"` : ''} title="${v.vyprodano ? 'Není skladem' : 'Skladem'}">${escHtml(textVelikosti(p, v.velikost))}</span>`;
   }).join('') + (velikosti.length > MAX ? `<span>+${velikosti.length - MAX}</span>` : '');
   const skladem = p.velikosti.some(jeSkladem);
-  return `<div class="product-card" data-klic="${escAttr(p.klic)}" onclick="openDetail(this.dataset.klic)">
+  // Celá karta je klikací přes odkaz v názvu (roztažený přes kartu v CSS, .karta-odkaz::after):
+  // skutečný href na detail boty, Tab + Enter, prostřední klik / Ctrl otevře novou kartu.
+  // Tlačítko „+“ je mimo odkaz (žádné vnořené ovládací prvky).
+  const odkaz = 'eshop.html' + (p.slug ? '?produkt=' + encodeURIComponent(p.slug) : '');
+  return `<div class="product-card" data-klic="${escAttr(p.klic)}">
       <div class="product-img">
         ${obrazekProduktuHtml(p, "100%")}
       </div>
       ${stitkyKartyHtml(p)}
       <div class="product-info">
         <div class="product-brand">${escHtml(p.znacka)}</div>
-        <div class="product-name">${escHtml(p.nazev)}</div>
+        <div class="product-name"><a class="karta-odkaz" href="${escAttr(odkaz)}" onclick="return kliknutiNaKartu(event, this)">${escHtml(p.nazev)}</a></div>
         <div class="karta-sklad${skladem ? '' : ' dodavatel'}">${skladem ? '&#9679; Skladem' : '&#128666; U dodavatele (7–14 dní)'}</div>
         <div class="karta-velikosti" aria-label="Velikosti">${chipy}</div>
         <div class="product-footer">
@@ -2397,10 +2409,21 @@ function kartaProduktuHtml(p, stav) {
             <span class="product-price">${cenaText}</span>
             ${p.cena_puvodni ? `<span class="product-price-old">${p.cena_puvodni} Kč</span>` : ''}
           </div>
-          <button class="add-btn" title="Vybrat velikost" aria-label="Vybrat velikost" onclick="event.stopPropagation();openDetail(this.closest('.product-card').dataset.klic)">+</button>
+          <button class="add-btn" title="Vybrat velikost" aria-label="${escAttr('Vybrat velikost – ' + (p.nazev || ''))}" onclick="event.stopPropagation();openDetail(this.closest('.product-card').dataset.klic)">+</button>
         </div>
       </div>
     </div>`;
+}
+
+// Běžný klik na kartu otevře detail bez načtení stránky (adresu ?produkt= nastaví openDetail).
+// Ctrl/Cmd/Shift/Alt nebo jiné tlačítko myši nechá prohlížeč otevřít odkaz normálně.
+function kliknutiNaKartu(e, odkaz) {
+  if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return true;
+  const karta = odkaz.closest('.product-card');
+  if (!karta) return true;
+  e.preventDefault();
+  openDetail(karta.dataset.klic);
+  return false;
 }
 
 function drobeckyHtml(polozky) {

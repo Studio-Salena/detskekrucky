@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dětské krůčky – Barefoot obuv pro děti | Hulín</title>
-<meta name="description" content="Barefoot obuv pro děti v kamenné prodejně v Hulíně i e-shopu. Kvalitní zdravá dětská obuv, poradíme s výběrem správné velikosti. Dětské krůčky – Monika Škarpichová.">
+<title>Dětská obuv Hulín – barefoot boty pro děti | Dětské krůčky</title>
+<meta name="description" content="Prodejna dětské obuvi v Hulíně, Holešovská 752. Celoroční a zimní botičky, holínky, papuče i capáčky. Poradíme s velikostí, botičky si můžete vyzkoušet.">
 <meta name="keywords" content="barefoot obuv děti, dětská obuv Hulín, zdravá dětská obuv, dětské krůčky, barefoot boty">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="https://www.detskekrucky.cz/">
@@ -39,6 +39,15 @@
     "postalCode": "768 24",
     "addressCountry": "CZ"
   },
+  "openingHoursSpecification": [
+    { "@type": "OpeningHoursSpecification", "dayOfWeek": ["Monday", "Thursday"], "opens": "09:00", "closes": "11:30" },
+    { "@type": "OpeningHoursSpecification", "dayOfWeek": ["Monday", "Thursday"], "opens": "13:00", "closes": "16:30" },
+    { "@type": "OpeningHoursSpecification", "dayOfWeek": "Tuesday", "opens": "09:00", "closes": "11:30" },
+    { "@type": "OpeningHoursSpecification", "dayOfWeek": "Tuesday", "opens": "15:00", "closes": "16:30" },
+    { "@type": "OpeningHoursSpecification", "dayOfWeek": ["Wednesday", "Friday"], "opens": "09:00", "closes": "11:30" },
+    { "@type": "OpeningHoursSpecification", "dayOfWeek": ["Wednesday", "Friday"], "opens": "13:00", "closes": "15:00" },
+    { "@type": "OpeningHoursSpecification", "dayOfWeek": "Saturday", "opens": "09:00", "closes": "11:00" }
+  ],
   "sameAs": [
     "https://www.facebook.com/profile.php?id=61590668721811",
     "https://www.instagram.com/detske_krucky"
@@ -188,13 +197,23 @@
     position: relative;
     z-index: 2;
   }
-  .hero-text h1 {
+  .hero-text .hero-znacka {
     font-family: 'Dancing Script', cursive;
     font-size: 3.8rem;
     color: var(--brown);
     line-height: 1.05;
-    margin-bottom: 18px;
+    margin-bottom: 10px;
     animation: fadeUp 0.8s ease both;
+  }
+  /* SEO nadpis stránky pod logem (logo „Dětské krůčky“ zůstává velkým písmem značky) */
+  .hero-text .hero-nadpis {
+    font-family: 'Nunito', sans-serif;
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: var(--brown-dark);
+    line-height: 1.3;
+    margin: 0 0 14px;
+    text-wrap: balance;
   }
   .hero-text p {
     font-size: 1.05rem;
@@ -375,6 +394,19 @@
     cursor: pointer;
   }
   .col-card:hover { transform: translateY(-6px); box-shadow: 0 16px 40px rgba(107,76,53,0.13); }
+  a.col-card { display: block; color: inherit; text-decoration: none; }
+  a.col-card:focus-visible { outline: 3px solid var(--brown-dark); outline-offset: 3px; }
+  .col-odkaz { display: inline-block; margin-top: 10px; font-size: 0.85rem; font-weight: 700; color: var(--brown); }
+
+  /* ── O PRODEJNĚ ── */
+  .o-prodejne { background: var(--warm-white); }
+  .o-prodejne-text { max-width: 760px; }
+  .o-prodejne-text p { color: var(--text-light); line-height: 1.75; margin-bottom: 14px; }
+  .o-prodejne-text strong { color: var(--text); }
+  .o-prodejne-text p a { color: var(--brown); font-weight: 700; }
+  .o-prodejne-text .section-title { margin-bottom: 22px; }
+  .o-prodejne-odkazy { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+  .o-prodejne-odkazy .btn-outline { margin-left: 0; }
   .col-img {
     height: 200px;
     display: flex;
@@ -1050,7 +1082,7 @@
 
     .hero-inner { grid-template-columns: 1fr; text-align: center; padding: 40px 24px; gap: 32px; }
     .hero-circle { width: 260px; height: 260px; margin: 0 auto; }
-    .hero-text h1 { font-size: 2.4rem; }
+    .hero-text .hero-znacka { font-size: 2.4rem; }
 
     .philosophy-grid { grid-template-columns: 1fr 1fr; gap: 20px; }
     .collections-grid { grid-template-columns: 1fr 1fr; gap: 20px; }
@@ -1089,7 +1121,7 @@
     /* Hero */
     .hero { padding: 32px 0 24px; }
     .hero-inner { padding: 0 16px; gap: 24px; }
-    .hero-text h1 { font-size: 2rem; }
+    .hero-text .hero-znacka { font-size: 2rem; }
     .hero-text p { font-size: 0.9rem; }
     .hero-circle { width: 220px; height: 220px; }
     .hero-badges { flex-wrap: wrap; justify-content: center; }
@@ -1156,7 +1188,7 @@
 
   /* ── MALÝ MOBIL (max 380px) ── */
   @media (max-width: 380px) {
-    .hero-text h1 { font-size: 1.7rem; }
+    .hero-text .hero-znacka { font-size: 1.7rem; }
     nav a { font-size: 0.68rem; padding: 5px 8px; }
     .hero-circle { width: 180px; height: 180px; }
   }
@@ -1279,7 +1311,7 @@
   }
 
   /* Fun hero headline */
-  .hero-text h1 {
+  .hero-text .hero-znacka {
     background: linear-gradient(135deg, #AE6965, #A58B71, #7A816C);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -1670,7 +1702,8 @@
   <div class="hero-inner">
     <div class="hero-text">
       <p class="section-label">🌱 Přirozený pohyb od prvního krůčku</p>
-      <h1>Dětské<br>krůčky</h1>
+      <div class="hero-znacka">Dětské<br>krůčky</div>
+      <h1 class="hero-nadpis">Dětská obuv a barefoot boty v Hulíně</h1>
       <p>Barefoot obuv navržená s láskou pro nejmenší dobrodruhy. Nechte nožičky dýchat, cítit a růst přirozeně – jako by chodily naboso.</p>
       <a href="#kolekce" class="btn-primary">Prohlédnout kolekce</a>
       <a href="#o-nas" class="btn-outline">Proč Barefoot</a>
@@ -1721,6 +1754,22 @@
     <div class="section-divider"></div>
     <div class="collections-grid" id="collectionsGrid">
       <div class="empty" style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text-light)">Načítám kategorie...</div>
+    </div>
+  </div>
+</section>
+
+<!-- O PRODEJNĚ -->
+<section class="o-prodejne" id="o-prodejne">
+  <div class="container">
+    <div class="o-prodejne-text">
+      <div><p class="section-label">Kamenná prodejna</p></div>
+      <h2 class="section-title">Prodejna dětské obuvi v Hulíně</h2>
+      <p>Najdete nás na adrese <strong>Holešovská 752, Hulín</strong>. Vybíráme s vámi botičky pro děti od prvních krůčků – celoroční botičky, zimní obuv, holínky, papuče, pantofle i capáčky. Nabízíme mimo jiné značky Froddo, Protetika, Jonap, Superfit, Beda a Pegres.</p>
+      <p>Poradíme s výběrem velikosti podle délky nožičky a botičky si u nás můžete v klidu vyzkoušet, termín si můžete předem zamluvit. Objednávku z e-shopu si na prodejně vyzvednete osobně a koupíte tu i dárkový poukaz. Otevírací dobu najdete <a href="#prodejna">v kontaktech</a>, v neděli přijímáme návštěvy po domluvě.</p>
+      <div class="o-prodejne-odkazy">
+        <a href="#rezervace" class="btn-primary">Zamluvit termín</a>
+        <a href="eshop.html" class="btn-outline">Prohlédnout e-shop</a>
+      </div>
     </div>
   </div>
 </section>
@@ -2083,15 +2132,17 @@ async function newsletterOdeslat(e) {
         </p>
         <div class="opening-hours" style="margin-top:16px;">
           <h4>🕐 Otevírací doba</h4>
+          <!-- Výchozí hodnoty pro vyhledávače a pomalé načtení = admin Nastavení → Otevírací doba (stav 19. 11. 2026).
+               Skript je po načtení přepíše aktuálními z API. Při změně v adminu upravit i tady, v plovoucím boxu
+               (#oh-table) a v JSON-LD v hlavičce – shodu hlídá test/oteviraci-doba-web.test.js. -->
           <table id="oteviraci-tabulka">
-            <tr><td>Pondělí</td><td>—</td></tr>
-            <tr><td>Úterý</td><td>—</td></tr>
-            <tr><td>Středa</td><td>—</td></tr>
-            <tr><td>Čtvrtek</td><td>—</td></tr>
-            <tr><td>Pátek</td><td>—</td></tr>
-            <tr><td>Sobota</td><td>Zavřeno</td></tr>
-            <tr><td>Neděle</td><td>Zavřeno</td></tr>
-          </table>
+            <tr><td>Pondělí</td><td>9:00 - 11:30; 13:00 - 16:30</td></tr>
+            <tr><td>Úterý</td><td>9:00 - 11:30; 15:00 - 16:30</td></tr>
+            <tr><td>Středa</td><td>9:00 - 11:30; 13:00 - 15:00</td></tr>
+            <tr><td>Čtvrtek</td><td>9:00 - 11:30; 13:00 - 16:30</td></tr>
+            <tr><td>Pátek</td><td>9:00 - 11:30; 13:00 - 15:00</td></tr>
+            <tr><td>Sobota</td><td>9:00 - 11:00</td></tr>
+            <tr><td>Neděle</td><td>dle rezervací</td></tr>
           </table>
         </div>
       </div>
@@ -2173,13 +2224,13 @@ async function newsletterOdeslat(e) {
     })();
   </script>
   <table id="oh-table" style="border-collapse:collapse;">
-    <tr id="oh-0"><td style="padding:3px 10px 3px 0; font-weight:700; color:var(--brown-dark);">Pondělí</td><td style="color:var(--text-light);">—</td></tr>
-    <tr id="oh-1"><td style="padding:3px 10px 3px 0; font-weight:700; color:var(--brown-dark);">Úterý</td><td style="color:var(--text-light);">—</td></tr>
-    <tr id="oh-2"><td style="padding:3px 10px 3px 0; font-weight:700; color:var(--brown-dark);">Středa</td><td style="color:var(--text-light);">—</td></tr>
-    <tr id="oh-3"><td style="padding:3px 10px 3px 0; font-weight:700; color:var(--brown-dark);">Čtvrtek</td><td style="color:var(--text-light);">—</td></tr>
-    <tr id="oh-4"><td style="padding:3px 10px 3px 0; font-weight:700; color:var(--brown-dark);">Pátek</td><td style="color:var(--text-light);">—</td></tr>
-    <tr id="oh-5"><td style="padding:3px 10px 3px 0; font-weight:700; color:var(--brown-dark);">Sobota</td><td style="color:var(--text-light);">Zavřeno</td></tr>
-    <tr id="oh-6"><td style="padding:3px 10px 3px 0; font-weight:700; color:var(--brown-dark);">Neděle</td><td style="color:var(--text-light);">Zavřeno</td></tr>
+    <tr id="oh-0"><td style="padding:3px 10px 3px 0; font-weight:700; color:var(--brown-dark);">Pondělí</td><td style="color:var(--text-light);">9:00 - 11:30; 13:00 - 16:30</td></tr>
+    <tr id="oh-1"><td style="padding:3px 10px 3px 0; font-weight:700; color:var(--brown-dark);">Úterý</td><td style="color:var(--text-light);">9:00 - 11:30; 15:00 - 16:30</td></tr>
+    <tr id="oh-2"><td style="padding:3px 10px 3px 0; font-weight:700; color:var(--brown-dark);">Středa</td><td style="color:var(--text-light);">9:00 - 11:30; 13:00 - 15:00</td></tr>
+    <tr id="oh-3"><td style="padding:3px 10px 3px 0; font-weight:700; color:var(--brown-dark);">Čtvrtek</td><td style="color:var(--text-light);">9:00 - 11:30; 13:00 - 16:30</td></tr>
+    <tr id="oh-4"><td style="padding:3px 10px 3px 0; font-weight:700; color:var(--brown-dark);">Pátek</td><td style="color:var(--text-light);">9:00 - 11:30; 13:00 - 15:00</td></tr>
+    <tr id="oh-5"><td style="padding:3px 10px 3px 0; font-weight:700; color:var(--brown-dark);">Sobota</td><td style="color:var(--text-light);">9:00 - 11:00</td></tr>
+    <tr id="oh-6"><td style="padding:3px 10px 3px 0; font-weight:700; color:var(--brown-dark);">Neděle</td><td style="color:var(--text-light);">dle rezervací</td></tr>
   </table>
 </div>
 
@@ -2377,11 +2428,7 @@ document.querySelectorAll('nav a').forEach(a => {
 
 <script>
 (function() {
-  const days = ['Neděle','Pondělí','Úterý','Středa','Čtvrtek','Pátek','Sobota'];
-  const hours = ['Zavřeno','—','—','—','—','—','Zavřeno'];
   const today = new Date().getDay(); // 0=Sun, 1=Mon...
-  const dayName = days[today];
-  const dayHours = hours[today];
 
   // Hide all rows, show only today
   const table = document.getElementById('oh-table');
@@ -2533,15 +2580,17 @@ document.querySelectorAll('nav a').forEach(a => {
         grid.innerHTML = '';
         return;
       }
-      const barvy = ['sage', 'tan', 'blue', ''];
-      grid.innerHTML = data.map((k, i) => `
-        <div class="col-card reveal visible">
+      const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+      // Dlaždice = skutečný odkaz na kategorii v e-shopu (eshop.html?kategorie=slug), ať ho najde i vyhledávač
+      grid.innerHTML = data.filter(k => k && k.slug).map(k => `
+        <a class="col-card reveal visible" href="eshop.html?kategorie=${encodeURIComponent(k.slug)}">
           <div class="col-body">
-            <h3>${k.nazev}</h3>
-            ${k.popis ? `<p>${k.popis}</p>` : ''}
-            ${k.znacky ? `<p style="font-size:0.85rem;color:var(--text-light);margin-top:6px">Značky: ${k.znacky}</p>` : ''}
+            <h3>${esc(k.nazev)}</h3>
+            ${k.popis ? `<p>${esc(k.popis)}</p>` : ''}
+            ${k.znacky ? `<p style="font-size:0.85rem;color:var(--text-light);margin-top:6px">Značky: ${esc(k.znacky)}</p>` : ''}
+            <span class="col-odkaz" aria-hidden="true">Prohlédnout &rarr;</span>
           </div>
-        </div>
+        </a>
       `).join('');
     } catch (e) {
       grid.innerHTML = '';
