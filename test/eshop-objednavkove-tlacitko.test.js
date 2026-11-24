@@ -32,7 +32,7 @@ test('finální tlačítko objednávky má text podle § 1826a a stále volá od
 test('JS po chybě/úspěchu vrací tlačítku stejný text a starý text se nikde nevrací', () => {
   const funkce = vytahnoutFunkci('odeslatObjednavku');
   const obnoveni = funkce.match(/btn\.textContent = '[^']*';/g).filter(s => !/Odesílám|Hotovo/.test(s));
-  assert.equal(obnoveni.length, 3);
+  assert.equal(obnoveni.length, 4); // chyba sítě, chyba serveru, změna ceny/dostupnosti (409), úspěch
   obnoveni.forEach(s => assert.equal(s, `btn.textContent = '${TEXT}';`));
   assert.equal(ESHOP_HTML.includes('Odeslat objednávku'), false);
 });

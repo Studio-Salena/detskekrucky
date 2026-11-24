@@ -167,7 +167,7 @@ test('B1 test 6 + 7: objednávka dál projde a potvrzení dostane údaje této o
       jmeno: 'Jana Nováková', email: 'jana@example.com', telefon: '777 123 456',
       ulice: 'Hlavní 1', mesto: 'Hulín', psc: '768 24',
       doprava: 'osobni_odber', platba: 'prevod', poznamka: '',
-      polozky: [{ produkt_id: 1, velikost: 24, pocet: 1, cena: 1 }]
+      polozky: [{ produkt_id: 1, velikost: 24, pocet: 1, cena: 500 }]
     }
   }, res);
 
@@ -194,7 +194,7 @@ test('poukaz: platí i dopravu, zbytek zůstává na poukazu a jde do potvrzení
   const body = {
     jmeno: 'Jana Nováková', email: 'jana@example.com', telefon: '777 123 456',
     ulice: 'Hlavní 1', mesto: 'Hulín', psc: '768 24', doprava: 'zasilkovna', poznamka: '',
-    polozky: [{ produkt_id: 1, velikost: 24, pocet: 1, cena: 1 }], poukaz_kod: 'dk1000'
+    polozky: [{ produkt_id: 1, velikost: 24, pocet: 1, cena: 500 }], poukaz_kod: 'dk1000'
   };
   const dobirka = vytvoritRes();
   await handler({ ip: '10.0.0.42', body: { ...body, platba: 'dobirka' } }, dobirka);

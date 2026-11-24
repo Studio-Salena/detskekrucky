@@ -243,13 +243,25 @@ router.post('/', async (req, res) => {
   // odečíst víc, než sklad má - FOR UPDATE řeší souběh MEZI požadavky, ne
   // duplicitu UVNITŘ jednoho požadavku.
   const agregovanaMapa = new Map(); // "produkt_id_velikost" -> agregovaná položka
+  // Cena a dostupnost, které zákazník v košíku viděl (e-shop je posílá) - porovnají se
+  // s databází pod zámkem níž. Nesouhlasí-li, objednávka se nezaloží (409) a e-shop
+  // košík aktualizuje. Bez údaje (starší klient) se nic neporovnává, cena je vždy z DB.
+  const videnaCena = p => (typeof p.cena === 'number' && Number.isFinite(p.cena) ? p.cena : null);
+  const videnaDostupnost = p => (p.dostupnost === 'skladem' || p.dostupnost === 'dodavatel' ? p.dostupnost : null);
   for (const p of polozky) {
     const klic = `${p.produkt_id}_${p.velikost}`;
     const existujici = agregovanaMapa.get(klic);
     if (existujici) {
       existujici.pocet += p.pocet;
+      // stejné zboží ve dvou řádcích s různou viděnou cenou = porovnat obě
+      if (videnaCena(p) !== null) existujici.videneCeny.push(videnaCena(p));
+      if (videnaDostupnost(p)) existujici.videneDostupnosti.push(videnaDostupnost(p));
     } else {
-      agregovanaMapa.set(klic, { produkt_id: p.produkt_id, velikost: p.velikost, pocet: p.pocet });
+      agregovanaMapa.set(klic, {
+        produkt_id: p.produkt_id, velikost: p.velikost, pocet: p.pocet,
+        videneCeny: videnaCena(p) !== null ? [videnaCena(p)] : [],
+        videneDostupnosti: videnaDostupnost(p) ? [videnaDostupnost(p)] : []
+      });
     }
   }
   const polozkyAgregovane = [...agregovanaMapa.values()];
@@ -337,6 +349,7 @@ router.post('/', async (req, res) => {
     let celkem = 0;
     let zakladPromo = 0; // zboží, které není ve slevě - jen z něj se počítá slevový kód
     const dostupnostMap = new Map(); // "produkt_id_velikost" -> 'skladem' | 'dodavatel'
+    const zmeny = []; // cena nebo dostupnost se liší od toho, co zákazník viděl v košíku
     const cenaMap = new Map(); // "produkt_id_velikost" -> aktuální cena z DB (autoritativní, klientovi se nevěří)
     const nazevMap = new Map(); // "produkt_id_velikost" -> název produktu (pro e-maily s potvrzením)
     // Zamyká se v pevném pořadí (produkt_id, velikost), ne v pořadí, v jakém
@@ -368,11 +381,27 @@ router.post('/', async (req, res) => {
       }
       const klic = `${p.produkt_id}_${p.velikost}`;
       const cenaSkutecna = Number(radek.cena);
+      const dostupnostSkutecna = jeUDodavatele ? 'dodavatel' : 'skladem';
+      const jinaCena = p.videneCeny.some(c => Math.abs(c - cenaSkutecna) > 0.005);
+      const jinaDostupnost = p.videneDostupnosti.some(d => d !== dostupnostSkutecna);
+      if (jinaCena || jinaDostupnost) {
+        zmeny.push({ produkt_id: p.produkt_id, velikost: p.velikost, nazev: radek.nazev, cena: cenaSkutecna, dostupnost: dostupnostSkutecna,
+          videna_cena: p.videneCeny.length ? p.videneCeny[0] : null, videna_dostupnost: p.videneDostupnosti[0] || null });
+      }
       dostupnostMap.set(klic, radek.dostupnost);
       cenaMap.set(klic, cenaSkutecna);
       nazevMap.set(klic, radek.nazev);
       celkem += cenaSkutecna * p.pocet;
       if (radek.cena_pred_slevou == null) zakladPromo += cenaSkutecna * p.pocet;
+    }
+
+    if (zmeny.length) {
+      // Nic se nezaložilo ani neodečetlo - zákazník musí potvrdit novou cenu / dodací lhůtu
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        chyba: 'U některého zboží se mezitím změnila cena nebo dostupnost. Košík jsme aktualizovali – zkontrolujte ho prosím a objednávku odešlete znovu.',
+        zmeny
+      });
     }
 
     const mezisoucet = celkem;

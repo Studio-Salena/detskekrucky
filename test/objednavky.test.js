@@ -36,23 +36,69 @@ function objednavkovyPozadavek(prepis = {}) {
   };
 }
 
+// Každé volání z jiné adresy - limit objednávek na IP by jinak zastavil pozdější testy (429)
+let posledniIp = 0;
 async function zavolatHandler(handler, body) {
-  const req = { body, ip: '127.0.0.1' };
+  const req = { body, ip: '10.30.' + Math.floor(++posledniIp / 250) + '.' + (posledniIp % 250 + 1) };
   const res = vytvoritRes();
   await handler(req, res);
   return res;
 }
 
-test('cena z requestu (1 Kč) se ignoruje - použije se cena z DB', async () => {
+test('podvržená cena z requestu (1 Kč) neprojde - 409, nic se nezaloží ani neodečte, odpověď nese cenu z DB', async () => {
   const stav = zakladniStav();
   const handler = pripravitHandler(stav);
   const res = await zavolatHandler(handler, objednavkovyPozadavek({
     polozky: [{ produkt_id: 1, velikost: 24, pocet: 1, cena: 1 }]
   }));
 
+  assert.equal(res.statusCode, 409);
+  assert.equal(stav.objednavky.length, 0);
+  assert.equal(stav.objednavkyPolozky.length, 0);
+  assert.equal(stav.sklad.find(r => r.produkt_id === 1).pocet_kusu, 3); // sklad nedotčen
+  assert.deepEqual(res.body.zmeny.map(z => [z.produkt_id, z.velikost, z.cena, z.videna_cena]), [[1, 24, 500, 1]]);
+});
+
+test('cena, kterou zákaznice viděla, sedí s DB - objednávka projde za cenu z DB', async () => {
+  const stav = zakladniStav();
+  const handler = pripravitHandler(stav);
+  const res = await zavolatHandler(handler, objednavkovyPozadavek({
+    polozky: [{ produkt_id: 1, velikost: 24, pocet: 1, cena: 500, dostupnost: 'skladem' }]
+  }));
   assert.equal(res.statusCode, 200);
-  assert.equal(res.body.celkem, 500); // ne 1 Kč
+  assert.equal(res.body.celkem, 500);
   assert.equal(stav.objednavkyPolozky[0].cena, 500);
+});
+
+test('změna ceny v adminu mezi přidáním do košíku a objednáním - 409 se novou cenou, po potvrzení projde', async () => {
+  const stav = zakladniStav();
+  const handler = pripravitHandler(stav);
+  stav.sklad.find(r => r.produkt_id === 1).cena = 450; // majitelka zlevnila
+  const prvni = await zavolatHandler(handler, objednavkovyPozadavek({ polozky: [{ produkt_id: 1, velikost: 24, pocet: 1, cena: 500 }] }));
+  assert.equal(prvni.statusCode, 409);
+  assert.equal(prvni.body.zmeny[0].cena, 450);
+  assert.equal(stav.objednavky.length, 0);
+  const druha = await zavolatHandler(handler, objednavkovyPozadavek({ polozky: [{ produkt_id: 1, velikost: 24, pocet: 1, cena: 450 }] }));
+  assert.equal(druha.statusCode, 200);
+  assert.equal(druha.body.celkem, 450);
+});
+
+test('změna dostupnosti (skladem -> u dodavatele) mezi košíkem a objednáním - 409 s novou dodací lhůtou', async () => {
+  const stav = zakladniStav();
+  const handler = pripravitHandler(stav);
+  Object.assign(stav.sklad.find(r => r.produkt_id === 1), { dostupnost: 'dodavatel', pocet_kusu: 0 });
+  const res = await zavolatHandler(handler, objednavkovyPozadavek({ polozky: [{ produkt_id: 1, velikost: 24, pocet: 1, cena: 500, dostupnost: 'skladem' }] }));
+  assert.equal(res.statusCode, 409);
+  assert.equal(res.body.zmeny[0].dostupnost, 'dodavatel');
+  assert.equal(stav.objednavky.length, 0);
+});
+
+test('položka bez ceny (starší klient) se neporovnává - projde za cenu z DB', async () => {
+  const stav = zakladniStav();
+  const handler = pripravitHandler(stav);
+  const res = await zavolatHandler(handler, objednavkovyPozadavek({ polozky: [{ produkt_id: 1, velikost: 24, pocet: 1 }] }));
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.celkem, 500);
 });
 
 test('záporný počet je odmítnut', async () => {
@@ -131,13 +177,13 @@ test('více produktů v jedné objednávce - každá položka se oceňuje zvlá�
   const handler = pripravitHandler(stav);
   const res = await zavolatHandler(handler, objednavkovyPozadavek({
     polozky: [
-      { produkt_id: 1, velikost: 24, pocet: 2, cena: 1 },   // reálně 500 Kč/ks
-      { produkt_id: 2, velikost: 25, pocet: 1, cena: 999999 } // reálně 700 Kč/ks
+      { produkt_id: 1, velikost: 24, pocet: 2, cena: 500 },
+      { produkt_id: 2, velikost: 25, pocet: 1, cena: 700 }
     ]
   }));
 
   assert.equal(res.statusCode, 200);
-  assert.equal(res.body.celkem, 2 * 500 + 1 * 700); // 1700, ne podvržené ceny
+  assert.equal(res.body.celkem, 2 * 500 + 1 * 700); // 1700, každá položka z DB
   assert.equal(stav.sklad.find(r => r.produkt_id === 1).pocet_kusu, 1);
   assert.equal(stav.sklad.find(r => r.produkt_id === 2).pocet_kusu, 4);
   assert.equal(stav.objednavkyPolozky.length, 2);
@@ -166,8 +212,8 @@ test('duplicitní SKU v requestu (2+3, sklad má 5) se agreguje na jeden řádek
   const handler = pripravitHandler(stav);
   const res = await zavolatHandler(handler, objednavkovyPozadavek({
     polozky: [
-      { produkt_id: 1, velikost: 24, pocet: 2, cena: 1 },       // podvržená cena, ignoruje se
-      { produkt_id: 1, velikost: 24, pocet: 3, cena: 999999 }   // podvržená cena, ignoruje se
+      { produkt_id: 1, velikost: 24, pocet: 2, cena: 500 },
+      { produkt_id: 1, velikost: 24, pocet: 3, cena: 500 }
     ]
   }));
 
@@ -290,4 +336,16 @@ test('platba na prodejně jen při osobním odběru (majitelka 2026-10-07)', asy
     assert.match(res.body.chyba, /jen při osobním odběru/);
     assert.equal(stav.objednavky.length, 0);
   }
+});
+
+test('stejné SKU ve dvou řádcích s různou viděnou cenou (podvržená jedna z nich) - 409, nic se nezaloží', async () => {
+  const stav = pocatecniStav();
+  stav.sklad.push({ produkt_id: 1, velikost: 24, pocet_kusu: 5, dostupnost: 'skladem', cena: 500 });
+  const handler = pripravitHandler(stav);
+  const res = await zavolatHandler(handler, objednavkovyPozadavek({
+    polozky: [{ produkt_id: 1, velikost: 24, pocet: 2, cena: 500 }, { produkt_id: 1, velikost: 24, pocet: 3, cena: 1 }]
+  }));
+  assert.equal(res.statusCode, 409);
+  assert.equal(stav.objednavky.length, 0);
+  assert.equal(stav.sklad.find(r => r.produkt_id === 1).pocet_kusu, 5);
 });

@@ -95,7 +95,7 @@ async function eshopObjednat(stav) {
   const res = vytvoritRes();
   await najitHandler(router, 'post', '/')({ ip: '10.9.9.' + Math.floor(Math.random() * 200), body: {
     jmeno: 'Jana Nováková', email: 'jana@example.com', telefon: '777 123 456', ulice: 'Hlavní 1', mesto: 'Hulín', psc: '768 24',
-    doprava: 'osobni_odber', platba: 'na_prodejne', poznamka: '', polozky: [{ produkt_id: 1, velikost: 24, pocet: 1, cena: 1 }], poukaz_kod: 'DK-AAAA-BBBB'
+    doprava: 'osobni_odber', platba: 'na_prodejne', poznamka: '', polozky: [{ produkt_id: 1, velikost: 24, pocet: 1, cena: 500 }], poukaz_kod: 'DK-AAAA-BBBB'
   } }, res);
   return res;
 }

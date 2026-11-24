@@ -3190,7 +3190,7 @@ function addToCart(produkt, velikost) {
     if (max != null && existujici.pocet >= max) { showToast(hlaskaMaxKusu(max)); return; }
     existujici.pocet++;
   } else {
-    kosik.push({key, id: velData.produkt_id, nazev: produkt.nazev, znacka: produkt.znacka, emoji: produkt.emoji, foto: fotoProduktu(produkt), velikost, cena: velData.cena, pocet: 1, max});
+    kosik.push({key, id: velData.produkt_id, nazev: produkt.nazev, znacka: produkt.znacka, emoji: produkt.emoji, foto: fotoProduktu(produkt), velikost, cena: velData.cena, dostupnost: velData.dostupnost === 'dodavatel' ? 'dodavatel' : 'skladem', pocet: 1, max});
   }
   ulozitKosik();
   zobrazitPridano(produkt, velData);
@@ -3255,6 +3255,7 @@ function fotoProduktu(p) {
 // uložené nemají, a zásoba se mezitím mohla změnit).
 function aktualizovatKosikPodleSkladu() {
   let zmena = false;
+  const hlasky = [];
   kosik.forEach(item => {
     for (const p of vsechnyProdukty) {
       const v = p.velikosti.find(v => v.produkt_id === item.id && String(v.velikost) === String(item.velikost));
@@ -3262,11 +3263,35 @@ function aktualizovatKosikPodleSkladu() {
       item.max = maxKusuVelikosti(v);
       item.foto = fotoProduktu(p);
       if (item.max != null && item.max > 0 && item.pocet > item.max) item.pocet = item.max;
+      // Cena a dostupnost z aktuálních dat - zákaznice musí před objednáním vidět to,
+      // co server opravdu účtuje (server stejně porovná a při rozdílu objednávku nezaloží)
+      hlasky.push(...dorovnatPolozkuKosiku(item, { cena: v.cena, dostupnost: v.dostupnost === 'dodavatel' ? 'dodavatel' : 'skladem' }));
       zmena = true;
       break;
     }
   });
   if (zmena) ulozitKosik();
+  if (hlasky.length) showToast(hlasky.join(' '));
+}
+
+// Dorovná cenu a dostupnost položky košíku; vrátí hlášky o změně (pro zákaznici)
+function dorovnatPolozkuKosiku(item, aktualni) {
+  const hlasky = [];
+  const nazev = `${item.nazev} (${popisVelikostiKosiku(item)})`;
+  if (aktualni.cena != null && Number(item.cena) !== Number(aktualni.cena)) {
+    hlasky.push(`${nazev}: cena se změnila z ${item.cena} Kč na ${aktualni.cena} Kč.`);
+    item.cena = Number(aktualni.cena);
+  }
+  if (aktualni.dostupnost && item.dostupnost && item.dostupnost !== aktualni.dostupnost) {
+    hlasky.push(`${nazev}: ${aktualni.dostupnost === 'dodavatel' ? 'už není skladem, dodáme od dodavatele do 7–14 dnů' : 'je teď skladem'}.`);
+  }
+  if (aktualni.dostupnost) item.dostupnost = aktualni.dostupnost;
+  return hlasky;
+}
+
+function popisVelikostiKosiku(item) {
+  const p = vsechnyProdukty.find(x => x.velikosti.some(v => v.produkt_id === item.id));
+  return p ? popisVelikosti(p, item.velikost) : 'vel. ' + item.velikost;
 }
 
 function ikonaPolozkyKosiku(item) {
@@ -4032,7 +4057,8 @@ async function odeslatObjednavku() {
       body: JSON.stringify({
         jmeno, email, telefon, ulice, mesto, psc,
         doprava, platba, celkem: total, webova_stranka,
-        polozky: kosik.map(i => ({produkt_id: i.id, velikost: i.velikost, pocet: i.pocet, cena: i.cena})),
+        // cena a dostupnost, které zákaznice vidí - server je porovná s aktuálním stavem
+        polozky: kosik.map(i => ({produkt_id: i.id, velikost: i.velikost, pocet: i.pocet, cena: i.cena, dostupnost: i.dostupnost})),
         poukaz_kod: uplatnenyPoukaz ? uplatnenyPoukaz.kod : null,
         promo_kod: uplatnenaPromo ? uplatnenaPromo.kod : null,
         vydejni_misto_id: jeVydejniMistoGls(doprava) && glsVydejniMisto ? glsVydejniMisto.id
@@ -4066,6 +4092,18 @@ async function odeslatObjednavku() {
         msg.textContent = vysledek.chyba ? 'Účet se nepodařilo vytvořit: ' + vysledek.chyba : vysledek.zprava;
         document.getElementById('potvrzeniUcet').appendChild(msg);
       }
+    } else if (res.status === 409 && Array.isArray(data.zmeny)) {
+      // Cena nebo dostupnost se mezitím změnila: nic se nezaložilo. Košík převezme
+      // aktuální hodnoty ze serveru a zákaznice je před novým odesláním uvidí.
+      const hlasky = [];
+      data.zmeny.forEach(z => {
+        const item = kosik.find(i => i.id === z.produkt_id && String(i.velikost) === String(z.velikost));
+        if (item) hlasky.push(...dorovnatPolozkuKosiku(item, { cena: z.cena, dostupnost: z.dostupnost }));
+      });
+      ulozitKosik();
+      zobrazitChybuCheckoutu(`<div class="msg msg-error">${escHtml(data.chyba)}${hlasky.length ? '<br>' + hlasky.map(escHtml).join('<br>') : ''}</div>`);
+      btn.disabled = false;
+      btn.textContent = 'Objednávka zavazující k platbě';
     } else {
       zobrazitChybuCheckoutu(`<div class="msg msg-error">${escHtml(data.chyba || 'Chyba serveru. Zkuste to prosím znovu.')}</div>`);
       btn.disabled = false;
