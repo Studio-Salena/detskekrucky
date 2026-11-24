@@ -372,3 +372,40 @@ test('workflow: hodinový plán, nasazení jen při změně, katalog z veřejné
   assert.doesNotMatch(wf, /secrets\./);
   assert.match(wf, /permissions:\n\s+contents: read\n\s+pages: write\n\s+id-token: write/); // bez zápisu do repozitáře
 });
+
+test('workflow: opakování nasazení jen když první pokus nasazení nevytvořil, nejvýš jednou, jinak viditelná chyba', () => {
+  const wf = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'static.yml'), 'utf8').replace(/\r\n/g, '\n');
+  assert.match(wf, /id: deployment\n(\s+#.*\n)*\s+continue-on-error: true\n\s+uses: actions\/deploy-pages@v5/);
+  assert.match(wf, /- name: Check failed deploy before retry\n(\s+#.*\n)*\s+if: steps\.sestaveni\.outputs\.nasadit == 'true' && steps\.deployment\.outcome == 'failure'\n\s+id: po_chybe\n\s+env:\n\s+PAGE_URL: \$\{\{ steps\.deployment\.outputs\.page_url \}\}/);
+  // opakování jen s výstupem kontroly, bez continue-on-error: když selže i podruhé, běh skončí chybou
+  assert.match(wf, /- name: Deploy to GitHub Pages \(retry\)\n(\s+#.*\n)*\s+if: steps\.po_chybe\.outputs\.opakovat == 'true'\n\s+id: deployment_opakovani\n\s+uses: actions\/deploy-pages@v5\s*$/);
+  assert.equal((wf.match(/uses: actions\/deploy-pages@v5/g) || []).length, 2, 'nejvýš jeden další pokus');
+  assert.equal((wf.match(/continue-on-error: true/g) || []).length, 1, 'chybu smí potlačit jen první pokus');
+  assert.match(wf, /url: \$\{\{ steps\.deployment\.outputs\.page_url \|\| steps\.deployment_opakovani\.outputs\.page_url \}\}/);
+});
+
+test('workflow: kontrola po chybě – s page_url (nasazení vzniklo) běh selže bez opakování, bez page_url počká a povolí jeden pokus', () => {
+  const { spawnSync } = require('node:child_process');
+  const bash = spawnSync('bash', ['--version']);
+  if (bash.error || bash.status !== 0) return; // bez bash (jen Windows bez Git Bash) se přeskočí
+  const y = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'static.yml'), 'utf8').replace(/\r\n/g, '\n');
+  const m = y.match(/id: po_chybe\n[\s\S]*?run: \|\n((?: {10}.*\n)+)/);
+  assert.ok(m, 'skript kontroly nenalezen');
+  const skript = m[1].split('\n').map(r => r.slice(10)).join('\n').replace('sleep 30', 'sleep 0');
+  const obal = fs.mkdtempSync(path.join(os.tmpdir(), 'dk-po-chybe-'));
+  try {
+    const spustit = pageUrl => {
+      const out = path.join(obal, 'out-' + (pageUrl ? 'url' : 'bez'));
+      fs.writeFileSync(out, '');
+      const r = spawnSync('bash', ['-c', skript], { env: { ...process.env, PAGE_URL: pageUrl, GITHUB_OUTPUT: out }, encoding: 'utf8' });
+      return { kod: r.status, vystup: r.stdout + r.stderr, output: fs.readFileSync(out, 'utf8') };
+    };
+    const vzniklo = spustit('https://www.detskekrucky.cz/');
+    assert.equal(vzniklo.kod, 1);
+    assert.match(vzniklo.vystup, /::error::Nasazení bylo vytvořeno a selhalo/);
+    assert.equal(vzniklo.output, '');
+    const nevzniklo = spustit('');
+    assert.equal(nevzniklo.kod, 0, nevzniklo.vystup);
+    assert.equal(nevzniklo.output, 'opakovat=true\n');
+  } finally { fs.rmSync(obal, { recursive: true, force: true }); }
+});

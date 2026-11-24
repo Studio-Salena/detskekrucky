@@ -60,7 +60,7 @@ jobs:
   deploy:
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.deployment_opakovani.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -101,4 +101,29 @@ jobs:
       - name: Deploy to GitHub Pages
         if: steps.sestaveni.outputs.nasadit == 'true'
         id: deployment
+        # 24. 11. 2026 tento krok jednou selhal hláškou „No artifacts named github-pages“, i když
+        # artefakt v běhu existoval (nahraný ve stejné sekundě). Příčina není prokázaná; hláška sama
+        # doporučuje opakovat. Proto jeden další pokus po krátké pauze - web mezitím zůstává.
+        continue-on-error: true
+        uses: actions/deploy-pages@v5
+      - name: Check failed deploy before retry
+        # deploy-pages@v5 nastaví page_url hned po vytvoření nasazení (src/index.js). Bez page_url
+        # nasazení nevzniklo (chyba při hledání artefaktu nebo při vytváření) -> jeden další pokus.
+        # S page_url nasazení vzniklo a selhalo (akce ho při chybě sama ruší) -> NEopakovat, chyba běhu.
+        if: steps.sestaveni.outputs.nasadit == 'true' && steps.deployment.outcome == 'failure'
+        id: po_chybe
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          if [ -n "$PAGE_URL" ]; then
+            echo "::error::Nasazení bylo vytvořeno a selhalo - opakování se neprovádí, web zůstává na poslední verzi."
+            exit 1
+          fi
+          echo "První pokus nasazení nevytvořil (bez page_url). Za 30 s jeden další pokus."
+          sleep 30
+          echo "opakovat=true" >> "$GITHUB_OUTPUT"
+      - name: Deploy to GitHub Pages (retry)
+        # Nejvýš jeden další pokus; bez continue-on-error - když selže, běh skončí chybou
+        if: steps.po_chybe.outputs.opakovat == 'true'
+        id: deployment_opakovani
         uses: actions/deploy-pages@v5

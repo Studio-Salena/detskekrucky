@@ -107,6 +107,7 @@ Sestavení generuje `/kategorie/<slug>/` a `/produkt/<slug>/` z veřejného expo
   neúplný export, úbytek modelů v nabídce o víc než 20 % nebo kategorií o víc než 2 proti
   minulému nasazení) = běh skončí chybou a **na webu zůstane poslední nasazená verze**. Úmyslný
   velký úbytek (hromadné stažení zboží) se nasadí ručním během se zaškrtnutým „Povolit velký úbytek“.
+- **Selhání kroku nasazení:** když `deploy-pages` nasazení vůbec nevytvoří (bez `page_url`, např. chyba „No artifacts named github-pages“ z 24. 11. 2026, příčina neprokázaná), workflow po 30 s zkusí nasadit ještě jednou. Když nasazení vzniklo a selhalo, opakování se neprovede. Druhé selhání i tento případ = viditelná chyba běhu, web zůstává na poslední verzi.
 - **Push v době výpadku Renderu** se nenasadí hned. Nasadí ho první úspěšný hodinový běh,
   protože ten sestavuje aktuální `main`. Pro rychlejší nasazení stačí po obnovení API spustit
   workflow ručně.
