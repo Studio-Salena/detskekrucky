@@ -5,8 +5,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-for (const soubor of ['admin.html', 'eshop.html', 'index.html']) {
+for (const soubor of ['admin.html', 'eshop.html', 'index.html', 'stromecek/index.html']) {
   test(`${soubor}: všechny vložené skripty jsou syntakticky v pořádku`, () => {
+    // Chybějící </script> slije dva skripty do jednoho a prohlížeč nespustí ani jeden
+    // (stromeček do 24. 11. 2026: nefungovalo kopírování kódu) - kompilace níž to odhalí,
+    // protože druhé <script> je pak uvnitř kódu.
     const html = fs.readFileSync(path.join(__dirname, '..', soubor), 'utf8');
     const bloky = [...html.matchAll(/<script(?![^>]*\bsrc=)([^>]*)>([\s\S]*?)<\/script>/g)];
     // strukturovaná data pro vyhledávače (JSON-LD) nejsou JavaScript - musí to být platný JSON
