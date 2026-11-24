@@ -85,3 +85,64 @@ Jinak by se `deploy/zalohy/` dostaly na web starým workflow. Explicitně, bez `
    (kontrola by sestavení zastavila). Pak smazat `_site`.
 8. Push na pokyn „nasaď“, mimo otevírací dobu: `git push origin main`. Je to fast-forward, protože
    `main` obsahuje `origin/main`. Render se znovu restartuje. Ověření jako v bodě 4 nasazení.
+
+## Stránky katalogu (SEO krok 2)
+
+Sestavení generuje `/kategorie/<slug>/` a `/produkt/<slug>/` z veřejného exportu
+`GET /api/katalog/export` (`routes/katalog.js`, pravidla v `lib/katalogExport.js`, generátor
+`scripts/web/katalog.js`). Export vrací jen veřejné údaje: žádné počty kusů, EAN ani klíče
+úložiště. Sestavení nepotřebuje žádný tajný údaj.
+
+- **Aktualizace:** workflow běží každou hodinu (`cron: '23 * * * *'`) a ručně (Run workflow).
+  Nepushuje do repozitáře a nerestartuje backend. Nasadí jen tehdy, když se obsah webu změnil
+  (otisk v `/katalog-verze.json`). Změna ceny, skladu nebo kategorie v adminu se tak na stránky
+  dostane nejpozději do hodiny.
+- **Stránka produktu po načtení** si dočte aktuální stav (`GET /api/katalog/model/<slug>`)
+  a ukáže ho. Nákup probíhá v `eshop.html` z aktuálních dat. Server při objednávce porovná cenu
+  a dostupnost, které zákazník viděl. Když se liší, objednávku nezaloží (409) a e-shop košík
+  aktualizuje.
+- **Dostupnost** se řídí stejnými pravidly jako e-shop: skladem = `InStock`; jen „u dodavatele“
+  (objednat jde, dodání 7–14 dní, server objednávku přijme) = `BackOrder`; nic = `OutOfStock`.
+- **Selhání:** výpadek API, neplatná odpověď nebo neúspěšná kontrola (neplatná adresa,
+  neúplný export, úbytek modelů v nabídce o víc než 20 % nebo kategorií o víc než 2 proti
+  minulému nasazení) = běh skončí chybou a **na webu zůstane poslední nasazená verze**. Úmyslný
+  velký úbytek (hromadné stažení zboží) se nasadí ručním během se zaškrtnutým „Povolit velký úbytek“.
+- **Push v době výpadku Renderu** se nenasadí hned. Nasadí ho první úspěšný hodinový běh,
+  protože ten sestavuje aktuální `main`. Pro rychlejší nasazení stačí po obnovení API spustit
+  workflow ručně.
+- **První nasazení:** backend s `/api/katalog/export` a workflow, které ho volá, jdou stejným
+  pushem. Render nasazuje několik minut, takže první běh Pages může skončit „HTTP 404“ (web
+  zůstane beze změny). Po „Live“ na Renderu spustit workflow ručně.
+- **Plánované běhy** GitHub ve veřejném repozitáři po 60 dnech bez commitu vypne. Pak je potřeba
+  je v Actions znovu zapnout. Stáří posledního sestavení je v `/katalog-verze.json` (`sestaveno`).
+
+### Staré adresy produktů a kategorií
+
+| Situace | Adresa `/produkt/<slug>/` | Ve vyhledávání |
+| --- | --- | --- |
+| V nabídce (skladem nebo u dodavatele) | plná stránka, nákup | ano (po zapnutí indexování) |
+| Vyprodaný, Monča ho nestáhla | stránka zůstává: „Momentálně vyprodáno“, bez nákupu, dotaz e-mailem, odkaz na kategorii, `OutOfStock` | ano, s pravdivým stavem |
+| Stažený z e-shopu (`na_eshopu` vypnuté u všech velikostí) | stránka se při dalším sestavení odstraní → **HTTP 404**. Stránka 404 nabídne „Najít podobné boty“ (hledání podle slov z adresy) | vypadne |
+| Odstraněný z databáze | jako stažený: 404 s nabídkou hledání | vypadne |
+| Sloučený do jiného modelu | přesměrování na cílový model (okamžitý `meta refresh` + canonical, tabulka `modely_presmerovani`) | nahradí ho cílový model |
+| Znovu zveřejněný | stejná adresa se vrátí (slug modelu se nemění) | znovu ano |
+| Kategorie odstraněná | 404 s odkazem na e-shop | vypadne |
+
+Staré adresy se **nepřesměrovávají hromadně na úvod e-shopu**. Skutečná 404 je pro vyhledávače
+čistší než „soft 404“. Staré odkazy `eshop.html?produkt=…` a `?kategorie=…` fungují dál.
+
+### Adresa kategorie
+
+Slug kategorie je po založení zamčený. Přejmenování v adminu adresu nemění a server slug při
+úpravě nikdy nepřepíše. Změna adresy je samostatný zásah, ne běžná úprava:
+
+1. Přidat přesměrování ze staré adresy (stránka `/kategorie/<stary>/` s `meta refresh`, obdobně
+   jako u modelů) a ve filtrech e-shopu převádět `?kategorie=<stary>`.
+2. Ve stejné transakci změnit `kategorie.slug`, `modely.kategorie` a `produkty.kategorie`.
+3. Nasadit a ověřit, že stará adresa vede na novou.
+
+### Zkušební provoz a zapnutí
+
+Zatím `INDEXOVAT = false` (`scripts/web/katalog.js`). Stránky mají `noindex`, nejsou v sitemap
+a web na ně neodkazuje. Zapnutí je samostatný commit: `INDEXOVAT = true`, odkazy z karet e-shopu
+a dlaždic na úvodu a canonical v e-shopu. Pak v Search Console znovu odeslat sitemap.

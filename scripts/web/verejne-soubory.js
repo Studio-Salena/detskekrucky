@@ -54,6 +54,14 @@ const OVEROVACI_VZORY = [
   /^seznam-wmt-[A-Za-z0-9_-]+\.txt$/
 ];
 
+// Stránky, které sestavení samo vygeneruje z exportu katalogu (scripts/web/katalog.js).
+// Jen tyhle tvary - nic jiného generátor zapsat nesmí.
+const GENEROVANE_VZORY = [
+  /^kategorie\/[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\/index\.html$/,
+  /^produkt\/[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\/index\.html$/,
+  /^katalog-verze\.json$/
+];
+
 // Pojistka navíc: tyhle cesty nesmí být ve výsledném balíčku nikdy, ani omylem
 // dopsané do seznamu výše. Kontroluje se každá cesta v balíčku.
 const ZAKAZANE_VZORY = [
@@ -83,4 +91,4 @@ const NE_ODKAZY = {
   }
 };
 
-module.exports = { SOUBORY, OVEROVACI_VZORY, ZAKAZANE_VZORY, ZAKAZANY_OBSAH, NE_ODKAZY };
+module.exports = { SOUBORY, OVEROVACI_VZORY, GENEROVANE_VZORY, ZAKAZANE_VZORY, ZAKAZANY_OBSAH, NE_ODKAZY };

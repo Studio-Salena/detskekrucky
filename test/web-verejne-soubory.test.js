@@ -166,13 +166,12 @@ test('návrat: vstup obsah_z jde jen do checkout ref, nikdy do shellu; běžné 
   assert.match(wf, /if: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.obsah_z != '' \}\}/);
 });
 
-test('návrat: obsah ze staršího zdroje projde dnešním seznamem a kontrolami, nic navíc se nepublikuje', () => {
+test('návrat: obsah ze staršího zdroje projde dnešním seznamem a kontrolami, nic navíc se nepublikuje', async () => {
   const { main } = require('../scripts/web/sestavit-web');
   const zdroj = fs.mkdtempSync(path.join(os.tmpdir(), 'dk-obsah-'));
   const obal = fs.mkdtempSync(path.join(os.tmpdir(), 'dk-web-'));
   const vystup = path.join(obal, '_site');
-  const log = console.log, err = console.error;
-  const potichu = fn => { console.log = () => {}; console.error = () => {}; try { return fn(); } finally { console.log = log; console.error = err; } };
+  const potichu = argv => main(argv, { log: () => {}, chyba: () => {}, env: {} });
   try {
     for (const s of SOUBORY) {
       fs.mkdirSync(path.dirname(path.join(zdroj, s)), { recursive: true });
@@ -182,13 +181,13 @@ test('návrat: obsah ze staršího zdroje projde dnešním seznamem a kontrolami
     fs.appendFileSync(path.join(zdroj, '404.html'), '\n<!-- STARSI-OBSAH -->\n');
     zapsat(zdroj, 'lib/tajne.js', '// server');
     zapsat(zdroj, 'CLAUDE.md', '# poznámky');
-    assert.equal(potichu(() => main([vystup, '--zdroj', zdroj])), 0);
+    assert.equal(await potichu([vystup, '--zdroj', zdroj]), 0);
     assert.match(fs.readFileSync(path.join(vystup, '404.html'), 'utf8'), /STARSI-OBSAH/);
     assert.ok(!fs.existsSync(path.join(vystup, 'lib')));
     assert.ok(!fs.existsSync(path.join(vystup, 'CLAUDE.md')));
     // starší obsah s rozbitým odkazem se nenasadí
     fs.appendFileSync(path.join(zdroj, '404.html'), '<img src="/smazany-obrazek.png">');
-    assert.equal(potichu(() => main([vystup, '--zdroj', zdroj])), 1);
+    assert.equal(await potichu([vystup, '--zdroj', zdroj]), 1);
   } finally { uklid(zdroj); uklid(obal); }
 });
 

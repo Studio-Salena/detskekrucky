@@ -28,13 +28,27 @@ a:focus-visible{outline:3px solid var(--brown-dark);outline-offset:3px}
 <main>
   <img src="/logo.jpg" alt="Dětské krůčky">
   <h1>Jejda, tady botička není &#128099;</h1>
-  <p>Tuhle stránku jsme nenašli. Možná se změnila adresa, nebo v odkazu chybí písmenko.</p>
+  <p id="text404">Tuhle stránku jsme nenašli. Možná se změnila adresa, nebo v odkazu chybí písmenko.</p>
   <div class="tlacitka">
-    <a class="btn hlavni" href="/eshop.html">Prohlédnout boty</a>
+    <a class="btn hlavni" id="hledat404" href="/eshop.html">Prohlédnout boty</a>
     <a class="btn vedlejsi" href="/">Na úvodní stránku</a>
   </div>
   <p style="font-size:0.85rem">Potřebujete poradit? Volejte <a href="tel:773517733" style="color:var(--brown)">773 517 733</a> nebo pište na <a href="mailto:info@detskekrucky.cz" style="color:var(--brown)">info@detskekrucky.cz</a>.</p>
 </main>
+<script>
+// Stará adresa staženého nebo odstraněného produktu či kategorie (SEO krok 2):
+// stav zůstává 404 (žádné přesměrování na úvod), jen se nabídne hledání podobných bot.
+(function () {
+  var m = /^\/(produkt|kategorie)\/([a-z0-9-]{1,120})\/?$/.exec(location.pathname);
+  if (!m) return;
+  var slova = m[2].replace(/-+/g, ' ').trim();
+  document.getElementById('text404').textContent = m[1] === 'produkt'
+    ? 'Tuhle botičku už v nabídce nemáme. Zkuste podobné – vyhledali jsme je podle názvu.'
+    : 'Tuhle kategorii už v e-shopu nemáme. Podívejte se na celou nabídku.';
+  var odkaz = document.getElementById('hledat404');
+  if (m[1] === 'produkt') { odkaz.href = '/eshop.html?hledat=' + encodeURIComponent(slova); odkaz.textContent = 'Najít podobné boty'; }
+})();
+</script>
 <script src="/navstevnost.js" defer></script>
 </body>
 </html>

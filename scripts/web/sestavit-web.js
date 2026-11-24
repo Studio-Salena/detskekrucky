@@ -23,7 +23,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { execFileSync } = require('node:child_process');
-const { SOUBORY, OVEROVACI_VZORY, ZAKAZANE_VZORY, ZAKAZANY_OBSAH, NE_ODKAZY } = require('./verejne-soubory');
+const { SOUBORY, OVEROVACI_VZORY, GENEROVANE_VZORY, ZAKAZANE_VZORY, ZAKAZANY_OBSAH, NE_ODKAZY } = require('./verejne-soubory');
+const katalog = require('./katalog');
 
 const KOREN = path.resolve(__dirname, '..', '..');
 const DOMENA = /https?:\/\/(?:www\.)?detskekrucky\.cz(\/[^\s'"`<>)\\]*)?/g;
@@ -151,7 +152,7 @@ function zkontrolovat(vystup, { koren = KOREN, povolene = povoleneSoubory(koren)
 
   // 2. jen povolené cesty, nic zakázaného
   for (const soubor of vBalicku) {
-    if (!povoleneMnozina.has(soubor)) chyby.push(`V balíčku je soubor mimo seznam: ${soubor}`);
+    if (!povoleneMnozina.has(soubor) && !GENEROVANE_VZORY.some(v => v.test(soubor))) chyby.push(`V balíčku je soubor mimo seznam: ${soubor}`);
     for (const { vzor, duvod } of ZAKAZANE_VZORY) {
       if (vzor.test(soubor)) chyby.push(`Zakázaný obsah v balíčku: ${soubor} (${duvod})`);
     }
@@ -234,53 +235,125 @@ function souhrn(vystup, soubory) {
   return { radky, celkem };
 }
 
-function parametry(argv) {
-  const vysledek = { prepsat: false, zdroj: KOREN, vystup: path.join(KOREN, '_site') };
+function parametry(argv, env = process.env) {
+  const vysledek = {
+    prepsat: false, zdroj: KOREN, vystup: path.join(KOREN, '_site'),
+    katalog: null, predchozi: null, minModelu: 50,
+    // V GitHub Actions z prostředí: hodinový běh nasazuje jen při změně, ruční běh smí povolit velký pokles
+    jenPriZmene: env.JEN_PRI_ZMENE === 'true',
+    povolitPokles: env.POVOLIT_POKLES === 'true'
+  };
   const volne = [];
+  const hodnota = (i, nazev) => {
+    const h = argv[i];
+    if (!h || h.startsWith('--')) throw new Error(`${nazev} potřebuje hodnotu.`);
+    return h;
+  };
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--prepsat') vysledek.prepsat = true;
-    else if (argv[i] === '--zdroj') {
-      const hodnota = argv[++i];
-      if (!hodnota || hodnota.startsWith('--')) throw new Error('--zdroj potřebuje adresář.');
-      vysledek.zdroj = path.resolve(hodnota);
-    } else if (argv[i].startsWith('--')) throw new Error(`Neznámý parametr ${argv[i]}.`);
-    else volne.push(argv[i]);
+    const a = argv[i];
+    if (a === '--prepsat') vysledek.prepsat = true;
+    else if (a === '--zdroj') vysledek.zdroj = path.resolve(hodnota(++i, '--zdroj'));
+    else if (a === '--katalog') vysledek.katalog = hodnota(++i, '--katalog');
+    else if (a === '--predchozi') vysledek.predchozi = hodnota(++i, '--predchozi');
+    else if (a === '--min-modelu') vysledek.minModelu = Number(hodnota(++i, '--min-modelu'));
+    else if (a === '--jen-pri-zmene') vysledek.jenPriZmene = true;
+    else if (a === '--povolit-pokles') vysledek.povolitPokles = true;
+    else if (a.startsWith('--')) throw new Error(`Neznámý parametr ${a}.`);
+    else volne.push(a);
   }
   if (volne.length > 1) throw new Error('Zadejte nejvýš jeden výstupní adresář.');
   if (volne.length) vysledek.vystup = volne[0];
   if (!fs.existsSync(vysledek.zdroj) || !fs.statSync(vysledek.zdroj).isDirectory()) {
     throw new Error(`Zdroj obsahu ${vysledek.zdroj} neexistuje.`);
   }
+  if (!Number.isInteger(vysledek.minModelu) || vysledek.minModelu < 0) throw new Error('--min-modelu musí být celé číslo.');
   return vysledek;
 }
 
-function main(argv) {
-  let vystup, zdroj;
+// Otisk celého webu (bez manifestu) - hodinový běh beze změny nic nenasazuje
+function otiskWebu(vystup) {
+  const h = crypto.createHash('sha256');
+  for (const s of vsechnySoubory(vystup)) {
+    if (s === 'katalog-verze.json') continue;
+    h.update(s + '\0' + crypto.createHash('sha256').update(fs.readFileSync(path.join(vystup, s))).digest('hex') + '\n');
+  }
+  return h.digest('hex');
+}
+
+function zapsatVystupActions(nasadit, env = process.env) {
+  if (env.GITHUB_OUTPUT) fs.appendFileSync(env.GITHUB_OUTPUT, `nasadit=${nasadit ? 'true' : 'false'}\n`);
+}
+
+async function main(argv, { env = process.env, log = console.log, chyba = console.error, nacitani = {} } = {}) {
+  let p, vystup;
   try {
-    const p = parametry(argv);
-    zdroj = p.zdroj;
-    vystup = pripravitVystup(p.vystup, { prepsat: p.prepsat, zdroj });
+    p = parametry(argv, env);
+    vystup = pripravitVystup(p.vystup, { prepsat: p.prepsat, zdroj: p.zdroj });
   } catch (e) {
-    console.error(`✖ ${e.message}`);
+    chyba(`✖ ${e.message}`);
     return 1;
   }
-  const chybySestaveni = sestavit({ koren: zdroj, vystup });
+  const zdroj = p.zdroj;
+  const vse = sestavit({ koren: zdroj, vystup });
+  let infoKatalogu = null;
+
+  if (p.katalog && !vse.length) {
+    // Katalog: načíst, zkontrolovat a teprve pak generovat. Chyba = nic se nenasadí.
+    try {
+      const [data, predchozi] = await Promise.all([
+        katalog.nacistExport(p.katalog, { log, ...nacitani }),
+        katalog.nacistPredchozi(p.predchozi)
+      ]);
+      const kontrola = katalog.overitExport(data, predchozi, { minModelu: p.minModelu, povolitPokles: p.povolitPokles });
+      for (const v of kontrola.varovani) log(`  ⚠ ${v}`);
+      if (kontrola.chyby.length) vse.push(...kontrola.chyby.map(c => `Katalog: ${c}`));
+      else {
+        const statickySitemap = fs.readFileSync(path.join(zdroj, 'sitemap.xml'), 'utf8');
+        const vysledek = katalog.generovat(data, vystup, { indexovat: katalog.INDEXOVAT, predchozi, statickySitemap });
+        const manifest = {
+          verze_formatu: katalog.VERZE_FORMATU,
+          sestaveno: new Date().toISOString(),
+          export_vygenerovano: data.vygenerovano || null,
+          indexovat: katalog.INDEXOVAT,
+          otisk: otiskWebu(vystup),
+          pocty: vysledek.pocty,
+          stranky: vysledek.stranky
+        };
+        fs.writeFileSync(path.join(vystup, 'katalog-verze.json'), JSON.stringify(manifest, null, 1) + '\n');
+        infoKatalogu = { manifest, predchozi };
+      }
+    } catch (e) {
+      vse.push(`Katalog: ${e.message}`);
+    }
+  }
+
   const { chyby, soubory, pocetOdkazu } = zkontrolovat(vystup, { koren: zdroj });
-  const vse = [...chybySestaveni, ...chyby];
-  const { radky, celkem } = souhrn(vystup, soubory);
-  console.log(`Balíček pro GitHub Pages: ${vystup}`);
-  if (zdroj !== KOREN) console.log(`Obsah ze zdroje: ${zdroj} (seznam a kontroly z ${KOREN})`);
-  console.log(radky.join('\n'));
-  console.log(`Souborů: ${soubory.length}, celkem ${(celkem / 1024 / 1024).toFixed(2)} MB, zkontrolovaných místních odkazů: ${pocetOdkazu}`);
+  vse.push(...chyby);
+  const staticke = soubory.filter(s => !GENEROVANE_VZORY.some(v => v.test(s)));
+  const { radky, celkem } = souhrn(vystup, staticke);
+  log(`Balíček pro GitHub Pages: ${vystup}`);
+  if (zdroj !== KOREN) log(`Obsah ze zdroje: ${zdroj} (seznam a kontroly z ${KOREN})`);
+  log(radky.join('\n'));
+  if (infoKatalogu) {
+    const c = infoKatalogu.manifest.pocty;
+    log(`  + vygenerováno: ${c.kategorie} kategorií, ${c.modely} produktů (${c.modely_v_nabidce} v nabídce, ${c.vyprodane} vyprodaných), ${c.presmerovani} přesměrování, katalog-verze.json${infoKatalogu.manifest.indexovat ? '' : ' – zkušební provoz: noindex, mimo sitemap'}`);
+  }
+  log(`Souborů: ${soubory.length}, statické ${(celkem / 1024 / 1024).toFixed(2)} MB, zkontrolovaných místních odkazů: ${pocetOdkazu}`);
   if (vse.length) {
-    console.error(`\n✖ SESTAVENÍ ZASTAVENO – ${vse.length} chyb:`);
-    for (const c of vse) console.error(`  - ${c}`);
+    chyba(`\n✖ SESTAVENÍ ZASTAVENO – ${vse.length} chyb (na webu zůstává poslední nasazená verze):`);
+    for (const c of vse) chyba(`  - ${c}`);
     return 1;
   }
-  console.log('✔ Kontroly prošly: jen povolené soubory, nic zakázaného, všechny místní odkazy existují.');
+  let nasadit = true;
+  if (p.jenPriZmene && infoKatalogu && infoKatalogu.predchozi && infoKatalogu.predchozi.otisk === infoKatalogu.manifest.otisk) {
+    nasadit = false;
+    log('= Obsah webu se od minulého nasazení nezměnil – nic se nenasazuje.');
+  }
+  zapsatVystupActions(nasadit, env);
+  log('✔ Kontroly prošly: jen povolené soubory, nic zakázaného, všechny místní odkazy existují.');
   return 0;
 }
 
-if (require.main === module) process.exitCode = main(process.argv.slice(2));
+if (require.main === module) main(process.argv.slice(2)).then(kod => { process.exitCode = kod; }, e => { console.error(e); process.exitCode = 1; });
 
-module.exports = { sestavit, zkontrolovat, povoleneSoubory, odkazyVTextu, prevestOdkaz, pripravitVystup, parametry, main };
+module.exports = { sestavit, zkontrolovat, povoleneSoubory, odkazyVTextu, prevestOdkaz, pripravitVystup, parametry, otiskWebu, main };
