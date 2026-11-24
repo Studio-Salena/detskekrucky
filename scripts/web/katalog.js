@@ -215,7 +215,7 @@ h1{font-size:1.9rem;line-height:1.2;margin:0 0 8px}
 .poznamka{font-size:.88rem;color:var(--text-light);margin-top:10px}
 dl.vlastnosti{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:18px 0}dl.vlastnosti dt{color:var(--text-light)}dl.vlastnosti dd{margin:0;font-weight:700}
 .oddil{margin-top:28px}.oddil h2{font-family:'Dancing Script',cursive;font-size:1.7rem;margin:0 0 8px;color:var(--brown-dark)}
-.mrizka{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px}
+.mrizka{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}@media(min-width:760px){.mrizka{grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px}}
 .karta{background:#fff;border:1px solid var(--tan-light);border-radius:18px;padding:12px;text-decoration:none;color:var(--text);display:flex;flex-direction:column;gap:4px}
 .karta img{aspect-ratio:4/3;object-fit:contain;width:100%}.karta .nazev{font-weight:800}.karta .stav{font-size:.85rem;font-weight:700}
 .karta .stav.skladem{color:var(--sage-dark)}.karta .stav.dodavatel{color:var(--modra)}.karta .stav.vyprodano{color:var(--brown-dark)}
@@ -321,7 +321,9 @@ function skriptDocteni(slug, kategorie) {
   function kc(c) { return Number(c).toLocaleString('cs-CZ').replace(/\\u00a0/g, ' ') + ' Kč'; }
   function velText(v) { if (!MESICE) return String(v); var n = Number(v); return n > 0 && n % 6 === 0 ? (n - 6) + '–' + n + ' měsíců' : n + ' ' + (n >= 2 && n <= 4 ? 'měsíce' : n === 1 ? 'měsíc' : 'měsíců'); }
   fetch(${jsonDoSkriptu(API + '/katalog/model/')} + ${jsonDoSkriptu(slug)}, { credentials: 'omit' }).then(function (r) {
-    if (r.status === 404) return { pryc: true };
+    // Stažený model = 404 s JSON odpovědí endpointu; jiná 404 (např. starší backend bez
+    // endpointu vrátí HTML) nic nemění a zůstane vygenerovaný obsah
+    if (r.status === 404) return r.json().then(function (d) { return { pryc: !!(d && d.chyba) }; }, function () { return {}; });
     if (!r.ok) throw new Error(r.status);
     return r.json();
   }).then(function (d) {
