@@ -1,0 +1,5 @@
+# Detske krucky - nezavisla kontrola zaloh (stari, desifrovani, kopie na Google Drive).
+# Bezi kazdou hodinu nezavisle na denni zaloze (3:00) a nahravani na Disk (4:00).
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+20 * * * * root /root/zaloha-detskekrucky/kontrola-zaloh.sh >> /root/zaloha-detskekrucky/kontrola.log 2>&1
