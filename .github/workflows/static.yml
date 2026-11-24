@@ -25,9 +25,12 @@ on:
   push:
     branches: ["main"]
 
-  # Každou hodinu (23. minuta): ceny, dostupnost a kategorie z adminu se do hodiny promítnou do stránek
+  # Každou hodinu (17. minuta): ceny, dostupnost a kategorie z adminu se do hodiny promítnou do stránek.
+  # Plán spouští GitHub jménem účtu, který naposledy změnil řádek cron. HYPOTÉZA (neověřená): plán
+  # z commitu bez autora přiřazeného k účtu nevzniká - 24. 11. 2026 nevznikl ani jeden běh schedule.
+  # Proto je tato změna cronu z commitu účtu Studio-Salena; ověří ji až skutečný běh schedule.
   schedule:
-    - cron: '23 * * * *'
+    - cron: '17 * * * *'
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:

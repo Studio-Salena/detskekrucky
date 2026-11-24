@@ -362,7 +362,7 @@ test('neúspěšná kontrola (prázdný export, velký pokles, nebezpečná adre
 
 test('workflow: hodinový plán, nasazení jen při změně, katalog z veřejného API bez tajných údajů', () => {
   const wf = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'static.yml'), 'utf8').replace(/\r\n/g, '\n');
-  assert.match(wf, /schedule:\n\s+- cron: '23 \* \* \* \*'/);
+  assert.match(wf, /schedule:\n\s+- cron: '17 \* \* \* \*'/);
   assert.match(wf, /--katalog https:\/\/detskekrucky1\.onrender\.com\/api\/katalog\/export/);
   assert.match(wf, /--predchozi https:\/\/www\.detskekrucky\.cz\/katalog-verze\.json/);
   assert.match(wf, /JEN_PRI_ZMENE: \$\{\{ github\.event_name == 'schedule' \}\}/);

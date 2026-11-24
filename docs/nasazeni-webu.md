@@ -93,7 +93,12 @@ Sestavení generuje `/kategorie/<slug>/` a `/produkt/<slug>/` z veřejného expo
 `scripts/web/katalog.js`). Export vrací jen veřejné údaje: žádné počty kusů, EAN ani klíče
 úložiště. Sestavení nepotřebuje žádný tajný údaj.
 
-- **Aktualizace:** workflow běží každou hodinu (`cron: '23 * * * *'`) a ručně (Run workflow).
+- **Aktualizace:** workflow běží každou hodinu (`cron: '17 * * * *'`) a ručně (Run workflow).
+  Plán GitHub spouští jménem účtu, který naposledy změnil řádek `cron`. 24. 11. 2026 nevznikl
+  ani jeden běh `schedule`; commity měly autora „Detske Krucky“ s e-mailem nepropojeným s účtem.
+  **Hypotéza (neověřená):** plán bez autora přiřazeného k účtu nevzniká. Změna cronu proto přišla
+  z commitu účtu Studio-Salena. Samotné autorství nic nedokazuje – funkčnost plánu potvrdí jen
+  skutečný běh s událostí `schedule`, ruční běh ne.
   Nepushuje do repozitáře a nerestartuje backend. Nasadí jen tehdy, když se obsah webu změnil
   (otisk v `/katalog-verze.json`). Změna ceny, skladu nebo kategorie v adminu se tak na stránky
   dostane nejpozději do hodiny.
