@@ -21,9 +21,9 @@ const VERZE_FORMATU = 1;
 const KATEGORIE_V_MESICICH = ['capacky']; // stejně jako e-shop (KATALOG_MESICE)
 const MAX_POKLES = 0.2; // modelů v nabídce smí ubýt nejvýš 20 % proti minulému nasazení
 const MAX_UBYTEK_KATEGORII = 2;
-// Zkušební provoz (docs/nasazeni-webu.md, krok 3): stránky mají noindex a nejsou v sitemap.
-// Zapnutí pro vyhledávače = změna na true spolu s odkazy z webu a canonical v e-shopu.
-const INDEXOVAT = false;
+// Indexování zapnuté (docs/nasazeni-webu.md, krok 4): stránky jsou v sitemap a web na ně odkazuje.
+// Návrat do zkušebního provozu = false (stránky zůstanou, dostanou noindex a vypadnou ze sitemap).
+const INDEXOVAT = true;
 
 // ---------------------------------------------------------------- načtení
 

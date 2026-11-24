@@ -2587,9 +2587,10 @@ document.querySelectorAll('nav a').forEach(a => {
         return;
       }
       const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-      // Dlaždice = skutečný odkaz na kategorii v e-shopu (eshop.html?kategorie=slug), ať ho najde i vyhledávač
-      grid.innerHTML = data.filter(k => k && k.slug).map(k => `
-        <a class="col-card reveal visible" href="eshop.html?kategorie=${encodeURIComponent(k.slug)}">
+      // Dlaždice = skutečný odkaz na samostatnou stránku kategorie (/kategorie/slug/, SEO krok 2),
+      // ať ho najde i vyhledávač; filtrování podle velikosti nabízí stránka odkazem do e-shopu
+      grid.innerHTML = data.filter(k => k && /^[a-z0-9-]{1,80}$/.test(k.slug || '')).map(k => `
+        <a class="col-card reveal visible" href="/kategorie/${encodeURIComponent(k.slug)}/">
           <div class="col-body">
             <h3>${esc(k.nazev)}</h3>
             ${k.popis ? `<p>${esc(k.popis)}</p>` : ''}

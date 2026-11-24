@@ -420,3 +420,27 @@ test('sleva: velikosti s různou cenou (menší levnější) - štítek, přešk
   assert.equal(zavolat('cenaSeSlevouHtml', 1205, 1339, 'product-price-old'), '1205 Kč <span class="product-price-old">1339 Kč</span>');
   assert.equal(zavolat('cenaSeSlevouHtml', 1205, null, 'product-price-old'), '1205 Kč');
 });
+
+// SEO krok 2: canonical podle adresy a karta odkazuje na samostatnou stránku boty
+test('canonical: detail boty -> /produkt/, samotná kategorie (i s řazením) -> /kategorie/, filtry a hledání -> /eshop.html', () => {
+  vm.runInContext([
+    vytahnoutKonstantu('WEB_ADRESA'),
+    "var vsechnySlugyModelu = new Set(['froddo-autumn', 'vyprodana-bota']); var vsechnyKategorie = [{ slug: 'papuce' }, { slug: 'celorocky' }];",
+    vytahnout('canonicalAdresa')
+  ].join('\n'), sandbox);
+  const c = adresa => run(`canonicalAdresa(stavZUrl(${JSON.stringify(adresa)}))`);
+  assert.equal(c('?produkt=froddo-autumn'), 'https://www.detskekrucky.cz/produkt/froddo-autumn/');
+  assert.equal(c('?kategorie=papuce&produkt=vyprodana-bota'), 'https://www.detskekrucky.cz/produkt/vyprodana-bota/');
+  assert.equal(c('?produkt=neexistuje'), 'https://www.detskekrucky.cz/eshop.html');
+  assert.equal(c('?kategorie=papuce'), 'https://www.detskekrucky.cz/kategorie/papuce/');
+  assert.equal(c('?kategorie=papuce&razeni=cena-vzestupne'), 'https://www.detskekrucky.cz/kategorie/papuce/');
+  assert.equal(c('?kategorie=papuce&velikost=24'), 'https://www.detskekrucky.cz/eshop.html');
+  assert.equal(c('?kategorie=neznama'), 'https://www.detskekrucky.cz/eshop.html');
+  assert.equal(c('?hledat=froddo'), 'https://www.detskekrucky.cz/eshop.html');
+  assert.equal(c(''), 'https://www.detskekrucky.cz/eshop.html');
+});
+
+test('karta produktu: odkaz na /produkt/<slug>/, běžný klik dál otevře detail v e-shopu', () => {
+  const h = run(`kartaProduktuHtml(${JSON.stringify(PRODUKTY[0])}, prazdnyStavKatalogu())`);
+  assert.match(h, /<a class="karta-odkaz" href="\/produkt\/froddo-autumn\/" onclick="return kliknutiNaKartu\(event, this\)">/);
+});

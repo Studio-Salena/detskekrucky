@@ -178,8 +178,8 @@ test('kategorie: modely v nabídce první, vyprodané na konci, prázdná katego
   } finally { uklid(vystup); }
 });
 
-test('zkušební provoz (INDEXOVAT=false): stránky mají noindex a nejsou v sitemap', () => {
-  assert.equal(katalog.INDEXOVAT, false);
+test('zkušební provoz (indexovat=false): stránky mají noindex a nejsou v sitemap', () => {
+  assert.equal(katalog.INDEXOVAT, true); // zapnuto; zkušební provoz se ověřuje parametrem
   const { vystup } = vygenerovat(exportZ(), { indexovat: false });
   try {
     assert.match(precist(vystup, 'produkt/froddo-autumn/index.html'), /<meta name="robots" content="noindex">/);

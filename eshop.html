@@ -1587,6 +1587,8 @@ body:has(.katalog-filtry.open) #back-to-top{display:none}
 <script>
 const API = 'https://detskekrucky1.onrender.com/api';
 let vsechnyProdukty = [];
+// Adresy všech modelů na e-shopu včetně vyprodaných - mají vlastní stránku /produkt/<slug>/
+let vsechnySlugyModelu = new Set();
 // Stav katalogu (filtry, řazení, otevřená bota) - vždy odpovídá adrese stránky,
 // viz stavZUrl/urlZeStavu. Kolik karet je zobrazeno, v adrese není.
 let katalogStav = null;
@@ -1595,6 +1597,28 @@ const KATALOG_STRANKA = 24;
 let nastaveniKatalogu = { vekoveSkupiny: [], pohlavi: false };
 let detailVlozenDoHistorie = false;
 let katalogHlaska = '';
+let katalogHlaskaSlug = '';
+
+// Canonical a og:url podle adresy (SEO krok 2): detail boty -> /produkt/<slug>/,
+// samotná kategorie -> /kategorie/<slug>/, ostatní filtry a hledání -> /eshop.html.
+// Staré odkazy eshop.html?produkt= / ?kategorie= fungují dál, jen se sjednotí pro vyhledávače.
+const WEB_ADRESA = 'https://www.detskekrucky.cz';
+function canonicalAdresa(stav) {
+  if (!stav) return WEB_ADRESA + '/eshop.html';
+  if (stav.produkt && /^[a-z0-9-]{1,120}$/.test(stav.produkt) && vsechnySlugyModelu.has(stav.produkt)) return `${WEB_ADRESA}/produkt/${stav.produkt}/`;
+  if (stav.kategorie && /^[a-z0-9-]{1,80}$/.test(stav.kategorie) && vsechnyKategorie.some(k => k.slug === stav.kategorie)
+      && urlZeStavu({ ...stav, produkt: '', razeni: 'doporucene' }) === '?kategorie=' + encodeURIComponent(stav.kategorie)) {
+    return `${WEB_ADRESA}/kategorie/${stav.kategorie}/`;
+  }
+  return WEB_ADRESA + '/eshop.html';
+}
+function aktualizovatCanonical() {
+  const adresa = canonicalAdresa(katalogStav);
+  const c = document.querySelector('link[rel="canonical"]');
+  if (c) c.href = adresa;
+  const og = document.querySelector('meta[property="og:url"]');
+  if (og) og.content = adresa;
+}
 let produktyNacteny = false;
 const ZAKLADNI_TITULEK = document.title;
 let kosik = JSON.parse(localStorage.getItem('kosik') || '[]');
@@ -1777,6 +1801,7 @@ async function nacistProdukty() {
       }
     });
 
+    vsechnySlugyModelu = new Set(Object.values(map).map(p => p.slug).filter(Boolean));
     vsechnyProdukty = Object.values(map).filter(p => p.velikosti.length > 0).map(p => {
       // Kategorii karty určí ta, která se mezi velikostmi vyskytuje nejčastěji
       // (drobné překlepy v kategorii jedné velikosti tak kartu nerozdělí).
@@ -2393,7 +2418,8 @@ function kartaProduktuHtml(p, stav) {
   // Celá karta je klikací přes odkaz v názvu (roztažený přes kartu v CSS, .karta-odkaz::after):
   // skutečný href na detail boty, Tab + Enter, prostřední klik / Ctrl otevře novou kartu.
   // Tlačítko „+“ je mimo odkaz (žádné vnořené ovládací prvky).
-  const odkaz = 'eshop.html' + (p.slug ? '?produkt=' + encodeURIComponent(p.slug) : '');
+  // href vede na samostatnou stránku boty (SEO krok 2); běžný klik dál otevře detail tady.
+  const odkaz = p.slug ? '/produkt/' + encodeURIComponent(p.slug) + '/' : 'eshop.html';
   return `<div class="product-card" data-klic="${escAttr(p.klic)}">
       <div class="product-img">
         ${obrazekProduktuHtml(p, "100%")}
@@ -2486,9 +2512,11 @@ function vykreslitKatalog() {
 
   const hlaska = {
     produkt: '<strong>Jejda, tady botička není &#128099;</strong><span>Tuhle botu jsme nenašli. Možná je už vyprodaná nebo se změnila adresa.</span><button type="button" onclick="zavritHlasku()">Prohlédnout boty</button>',
+    vyprodano: `<strong>Tahle botička je momentálně vyprodaná</strong><span>Na její stránce najdete podrobnosti a podobné modely.</span><a href="/produkt/${encodeURIComponent(katalogHlaskaSlug)}/">Zobrazit botičku</a>`,
     kategorie: '<strong>Tahle kategorie už neexistuje</strong><span>Ukazujeme všechny boty.</span>'
   }[katalogHlaska] || '';
   document.getElementById('katalogHlaska').innerHTML = hlaska;
+  aktualizovatCanonical();
 
   const grid = document.getElementById('productsGrid');
   if (!nalezene.length) {
@@ -2656,7 +2684,9 @@ function otevritDetailZAdresy() {
   if (!p) {
     katalogStav = { ...katalogStav, produkt: '' };
     history.replaceState(null, '', location.pathname + urlZeStavu(katalogStav));
-    katalogHlaska = 'produkt';
+    // Vyprodaná bota má dál svou stránku - odkázat na ni místo „botička není“
+    katalogHlaska = vsechnySlugyModelu.has(slug) ? 'vyprodano' : 'produkt';
+    katalogHlaskaSlug = slug;
     vykreslitKatalog();
     scrollToProducts();
     return;
@@ -2858,6 +2888,7 @@ function openDetail(klic, { zHistorie = false } = {}) {
     if (uzOtevreny) history.replaceState(null, '', url);
     else { history.pushState(null, '', url); detailVlozenDoHistorie = true; }
   }
+  aktualizovatCanonical();
   document.getElementById('detailDrobecky').innerHTML = katalogStav ? drobeckyHtml(drobeckyKatalogu(katalogStav, p)) : '';
   document.title = `${p.znacka || ''} ${p.nazev} – ${ZAKLADNI_TITULEK}`.trim();
   detailAktivniObrazekUrl = p.primaryImageUrl;
@@ -3168,6 +3199,7 @@ function closeModal(id) {
     if (detailVlozenDoHistorie) { detailVlozenDoHistorie = false; history.back(); }
     else history.replaceState(null, '', location.pathname + urlZeStavu(katalogStav));
   }
+  aktualizovatCanonical();
   if (detailZKosiku) { detailZKosiku = false; openCart(); }
 }
 

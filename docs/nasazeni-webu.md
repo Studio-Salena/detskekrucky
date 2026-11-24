@@ -149,6 +149,6 @@ Slug kategorie je po založení zamčený. Přejmenování v adminu adresu nemě
 
 ### Zkušební provoz a zapnutí
 
-Zatím `INDEXOVAT = false` (`scripts/web/katalog.js`). Stránky mají `noindex`, nejsou v sitemap
+Commit zkušebního provozu má `INDEXOVAT = false` (`scripts/web/katalog.js`), commit zapnutí `true`. Stránky mají `noindex`, nejsou v sitemap
 a web na ně neodkazuje. Zapnutí je samostatný commit: `INDEXOVAT = true`, odkazy z karet e-shopu
 a dlaždic na úvodu a canonical v e-shopu. Pak v Search Console znovu odeslat sitemap.
