@@ -2070,6 +2070,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
     <div id="upravitKategorieMsg"></div>
     <input type="hidden" id="ukId">
     <div class="form-group"><label>Název (česky) *</label><input type="text" id="ukNazev"></div>
+    <div class="form-group"><label>Adresa na webu (zamčená)</label><div id="ukAdresa" style="font-family:monospace;font-size:0.85rem;color:var(--text-light)"></div><small style="color:var(--text-light)">Přejmenování adresu nemění, staré odkazy tak dál fungují.</small></div>
     <div class="form-group"><label>Popis (zobrazí se na webu v sekci „Vyberte si")</label><textarea id="ukPopis" rows="3"></textarea></div>
     <div class="form-group"><label>Značky</label><input type="text" id="ukZnacky"></div>
     <div class="form-group"><label>Ikona (emoji, zobrazí se na dlaždici v e-shopu)</label><input type="text" id="ukIkona" placeholder="👟" maxlength="8"></div>
@@ -8377,6 +8378,7 @@ function upravitKategorii(id) {
   if (!k) return;
   document.getElementById('ukId').value = k.id;
   document.getElementById('ukNazev').value = k.nazev;
+  document.getElementById('ukAdresa').textContent = '/kategorie/' + (k.slug || '') + '/';
   document.getElementById('ukPopis').value = k.popis || '';
   document.getElementById('ukZnacky').value = k.znacky || '';
   document.getElementById('ukIkona').value = k.ikona || '';
@@ -8389,7 +8391,7 @@ function upravitKategorii(id) {
 async function ulozitUpravuKategorie() {
   const id = document.getElementById('ukId').value;
   const nazev = document.getElementById('ukNazev').value.trim();
-  const slug = vygenerovatSlug(nazev);
+  // Slug (adresa) se při úpravě neposílá - je po založení zamčený (routes/kategorie.js)
   const poradi = document.getElementById('ukPoradi').value || 0;
   const popis = document.getElementById('ukPopis').value.trim();
   const znacky = document.getElementById('ukZnacky').value.trim();
@@ -8398,7 +8400,7 @@ async function ulozitUpravuKategorie() {
   try {
     const res = await adminFetch(API+'/kategorie/'+id, {
       method:'PATCH', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({nazev, slug, poradi: parseInt(poradi), popis, znacky, ikona})
+      body: JSON.stringify({nazev, poradi: parseInt(poradi), popis, znacky, ikona})
     });
     if (res.ok) {
       document.getElementById('upravitKategorieMsg').innerHTML = '<div class="success-msg">✅ Uloženo!</div>';

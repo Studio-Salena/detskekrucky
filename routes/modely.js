@@ -299,7 +299,7 @@ router.post('/:id/sloucit', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const modely = await client.query('SELECT id, znacka, nazev, kategorie FROM modely WHERE id = ANY($1::int[]) FOR UPDATE', [[id, cil]]);
+    const modely = await client.query('SELECT id, slug, znacka, nazev, kategorie FROM modely WHERE id = ANY($1::int[]) FOR UPDATE', [[id, cil]]);
     const cilovy = modely.rows.find(m => m.id === cil);
     if (modely.rows.length !== 2) {
       await client.query('ROLLBACK');
@@ -308,6 +308,14 @@ router.post('/:id/sloucit', async (req, res) => {
     const presunuto = await client.query(
       'UPDATE produkty SET model_id = $1, znacka = $2, nazev = $3, kategorie = COALESCE($4, kategorie) WHERE model_id = $5',
       [cil, cilovy.znacka, cilovy.nazev, cilovy.kategorie, id]
+    );
+    // Stará adresa slučovaného modelu (i adresy, které už na něj přesměrovávaly) vede
+    // na cílový model - stránka /produkt/<stary-slug>/ se změní na přesměrování.
+    const slucovany = modely.rows.find(m => m.id === id);
+    await client.query('UPDATE modely_presmerovani SET model_id = $1 WHERE model_id = $2', [cil, id]);
+    await client.query(
+      'INSERT INTO modely_presmerovani (stary_slug, model_id) VALUES ($1, $2) ON CONFLICT (stary_slug) DO UPDATE SET model_id = EXCLUDED.model_id',
+      [slucovany.slug, cil]
     );
     await client.query('DELETE FROM modely WHERE id = $1', [id]);
     await client.query('UPDATE modely SET upraveno = NOW() WHERE id = $1', [cil]);

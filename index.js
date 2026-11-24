@@ -40,6 +40,7 @@ const navstevnostRoutes = require('./routes/navstevnost');
 const promoRoutes = require('./routes/promo');
 const evidencePlatebRoutes = require('./routes/evidencePlateb');
 const eetRoutes = require('./routes/eet');
+const katalogRoutes = require('./routes/katalog');
 const eetFronta = require('./lib/eetFronta');
 const vyzadovatAdmina = require('./middleware/adminAuth');
 const { jeZablokovana, zaznamenatNeuspech, resetovat } = require('./middleware/loginLimiter');
@@ -117,6 +118,7 @@ app.use('/api/navstevnost', navstevnostRoutes);
 app.use('/api/promo', promoRoutes);
 app.use('/api/evidence-plateb', evidencePlatebRoutes);
 app.use('/api/eet', eetRoutes);
+app.use('/api/katalog', katalogRoutes);
 
 // Texty webu (výchozí hodnoty, přepíšou se z DB)
 let textyWebu = {

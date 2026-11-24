@@ -64,13 +64,18 @@ router.post('/', async (req, res) => {
   }
 });
 
+// Adresa (slug) kategorie je po založení ZAMČENÁ: je v adrese /kategorie/<slug>/,
+// ve filtrech e-shopu a modely na ni odkazují. Úprava (i přejmenování) ji nikdy
+// nezmění - slug poslaný starším oknem adminu se ignoruje. Změna adresy je samostatný
+// zásah se zachováním starých odkazů (docs/nasazeni-webu.md).
 router.patch('/:id', async (req, res) => {
-  const { nazev, slug, poradi, popis, znacky, ikona } = req.body;
+  const { nazev, poradi, popis, znacky, ikona } = req.body;
   try {
     const result = await pool.query(
-      'UPDATE kategorie SET nazev=$1, slug=$2, poradi=$3, popis=$4, znacky=$5, ikona=$6 WHERE id=$7 RETURNING *',
-      [nazev, slug, poradi||0, popis||'', znacky||'', ikona || null, req.params.id]
+      'UPDATE kategorie SET nazev=$1, poradi=$2, popis=$3, znacky=$4, ikona=$5 WHERE id=$6 RETURNING *',
+      [nazev, poradi||0, popis||'', znacky||'', ikona || null, req.params.id]
     );
+    if (!result.rows.length) return res.status(404).json({ chyba: 'Kategorie nenalezena.' });
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ chyba: err.message });
