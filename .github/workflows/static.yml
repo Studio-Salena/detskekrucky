@@ -1,4 +1,13 @@
-# Simple workflow for deploying static content to GitHub Pages
+# Nasazení webu na GitHub Pages (www.detskekrucky.cz)
+#
+# Na web jde JEN čistý adresář _site/ s výslovně povolenými soubory
+# (seznam: scripts/web/verejne-soubory.js). Serverový kód, testy, dokumentace,
+# zálohovací skripty ani pracovní soubory se nepublikují - backend běží na Renderu
+# přímo z repozitáře a web je nepotřebuje.
+#
+# Sestavení balíček před nahráním zkontroluje (chybějící soubor, zakázaný obsah,
+# tajný údaj, rozbitý místní odkaz). Jakákoli chyba zastaví běh před nahráním
+# a na webu zůstane poslední nasazená verze.
 name: Deploy static content to Pages
 
 on:
@@ -31,13 +40,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Test public file rules
+        # Jen vestavěné moduly Node - bez npm install
+        run: node --test test/web-verejne-soubory.test.js
+      - name: Build and check public site
+        # Čistý _site/ jen s povolenými soubory + kontroly; chyba = konec, nic se nenahraje
+        run: node scripts/web/sestavit-web.js _site
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload entire repository
-          path: '.'
+          # Jen sestavený a zkontrolovaný balíček, ne celý repozitář
+          path: _site
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
