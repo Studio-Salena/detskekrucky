@@ -8,6 +8,11 @@
 # Sestavení balíček před nahráním zkontroluje (chybějící soubor, zakázaný obsah,
 # tajný údaj, rozbitý místní odkaz). Jakákoli chyba zastaví běh před nahráním
 # a na webu zůstane poslední nasazená verze.
+#
+# NÁVRAT webu na starší obsah (docs/nasazeni-webu.md): Actions → tento workflow →
+# Run workflow → do "obsah_z" zadat commit nebo tag. Obsah se vezme z něj, ale sestaví
+# se s DNEŠNÍM seznamem povolených souborů a dnešními kontrolami. Nikdy nespouštět
+# znovu běh z doby před omezením (commit cd5e75e) - ten by publikoval celý repozitář.
 name: Deploy static content to Pages
 
 on:
@@ -17,6 +22,12 @@ on:
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
+    inputs:
+      obsah_z:
+        description: 'Návrat: commit (SHA) nebo tag, ze kterého vzít veřejný obsah. Prázdné = aktuální main.'
+        required: false
+        default: ''
+        type: string
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
@@ -40,6 +51,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Checkout public content for rollback
+        # Jen při ručním návratu. Hodnota jde jen do "ref" (ne do shellu).
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.obsah_z != '' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.obsah_z }}
+          path: _obsah
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -48,8 +66,11 @@ jobs:
         # Jen vestavěné moduly Node - bez npm install
         run: node --test test/web-verejne-soubory.test.js
       - name: Build and check public site
-        # Čistý _site/ jen s povolenými soubory + kontroly; chyba = konec, nic se nenahraje
-        run: node scripts/web/sestavit-web.js _site
+        # Čistý _site/ jen s povolenými soubory + kontroly; chyba = konec, nic se nenahraje.
+        # Při návratu je zdrojem obsahu _obsah/ (starší commit), seznam a kontroly zůstávají dnešní.
+        env:
+          ZDROJ: ${{ github.event_name == 'workflow_dispatch' && inputs.obsah_z != '' && '_obsah' || '.' }}
+        run: node scripts/web/sestavit-web.js _site --zdroj "$ZDROJ"
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact

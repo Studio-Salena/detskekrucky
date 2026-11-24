@@ -2,10 +2,13 @@
 // Sestaví balíček pro GitHub Pages: čistý adresář jen s výslovně povolenými soubory
 // (scripts/web/verejne-soubory.js) a před publikováním ho zkontroluje.
 //
-//   node scripts/web/sestavit-web.js [vystup] [--prepsat]
+//   node scripts/web/sestavit-web.js [vystup] [--zdroj <adresar>] [--prepsat]
 //
 // vystup   výchozí _site (v kořeni repozitáře); existující adresář se smaže jen když
 //          se jmenuje _site, nebo s --prepsat
+// --zdroj  odkud vzít veřejný obsah (výchozí tento repozitář). Pro NÁVRAT webu na starší
+//          obsah: workflow si starší commit stáhne do _obsah/ a sestaví ho s DNEŠNÍM seznamem
+//          povolených souborů a dnešními kontrolami - celý repozitář se nikdy nepublikuje.
 //
 // Kontroly (jakákoli chyba = nenulový kód, workflow nic nepublikuje):
 //   1. každý povolený soubor v repozitáři existuje a je v gitu (v CI se publikuje jen to, co je v gitu),
@@ -59,12 +62,14 @@ function povoleneSoubory(koren) {
   return [...new Set([...SOUBORY, ...overovaciSoubory(koren)])].sort();
 }
 
-function pripravitVystup(vystup, { prepsat }) {
+function pripravitVystup(vystup, { prepsat, zdroj = KOREN }) {
   const cil = path.resolve(vystup);
-  const rel = path.relative(cil, KOREN);
-  // Výstup nesmí být repozitář ani adresář nad ním (smazání by vzalo i zdroje)
-  if (cil === KOREN || !rel.startsWith('..') && !path.isAbsolute(rel)) {
-    throw new Error(`Výstup ${cil} je repozitář nebo adresář nad ním - odmítnuto.`);
+  // Výstup nesmí být repozitář, zdroj obsahu ani adresář nad nimi (smazání by vzalo i zdroje)
+  for (const chraneny of new Set([KOREN, path.resolve(zdroj)])) {
+    const rel = path.relative(cil, chraneny);
+    if (cil === chraneny || !rel.startsWith('..') && !path.isAbsolute(rel)) {
+      throw new Error(`Výstup ${cil} je repozitář, zdroj obsahu nebo adresář nad nimi - odmítnuto.`);
+    }
   }
   if (fs.existsSync(cil)) {
     if (path.basename(cil) !== '_site' && !prepsat) {
@@ -229,21 +234,42 @@ function souhrn(vystup, soubory) {
   return { radky, celkem };
 }
 
+function parametry(argv) {
+  const vysledek = { prepsat: false, zdroj: KOREN, vystup: path.join(KOREN, '_site') };
+  const volne = [];
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--prepsat') vysledek.prepsat = true;
+    else if (argv[i] === '--zdroj') {
+      const hodnota = argv[++i];
+      if (!hodnota || hodnota.startsWith('--')) throw new Error('--zdroj potřebuje adresář.');
+      vysledek.zdroj = path.resolve(hodnota);
+    } else if (argv[i].startsWith('--')) throw new Error(`Neznámý parametr ${argv[i]}.`);
+    else volne.push(argv[i]);
+  }
+  if (volne.length > 1) throw new Error('Zadejte nejvýš jeden výstupní adresář.');
+  if (volne.length) vysledek.vystup = volne[0];
+  if (!fs.existsSync(vysledek.zdroj) || !fs.statSync(vysledek.zdroj).isDirectory()) {
+    throw new Error(`Zdroj obsahu ${vysledek.zdroj} neexistuje.`);
+  }
+  return vysledek;
+}
+
 function main(argv) {
-  const prepsat = argv.includes('--prepsat');
-  const vystupArg = argv.find(a => !a.startsWith('--')) || path.join(KOREN, '_site');
-  let vystup;
+  let vystup, zdroj;
   try {
-    vystup = pripravitVystup(vystupArg, { prepsat });
+    const p = parametry(argv);
+    zdroj = p.zdroj;
+    vystup = pripravitVystup(p.vystup, { prepsat: p.prepsat, zdroj });
   } catch (e) {
     console.error(`✖ ${e.message}`);
     return 1;
   }
-  const chybySestaveni = sestavit({ vystup });
-  const { chyby, soubory, pocetOdkazu } = zkontrolovat(vystup);
+  const chybySestaveni = sestavit({ koren: zdroj, vystup });
+  const { chyby, soubory, pocetOdkazu } = zkontrolovat(vystup, { koren: zdroj });
   const vse = [...chybySestaveni, ...chyby];
   const { radky, celkem } = souhrn(vystup, soubory);
   console.log(`Balíček pro GitHub Pages: ${vystup}`);
+  if (zdroj !== KOREN) console.log(`Obsah ze zdroje: ${zdroj} (seznam a kontroly z ${KOREN})`);
   console.log(radky.join('\n'));
   console.log(`Souborů: ${soubory.length}, celkem ${(celkem / 1024 / 1024).toFixed(2)} MB, zkontrolovaných místních odkazů: ${pocetOdkazu}`);
   if (vse.length) {
@@ -257,4 +283,4 @@ function main(argv) {
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
 
-module.exports = { sestavit, zkontrolovat, povoleneSoubory, odkazyVTextu, prevestOdkaz, pripravitVystup, main };
+module.exports = { sestavit, zkontrolovat, povoleneSoubory, odkazyVTextu, prevestOdkaz, pripravitVystup, parametry, main };

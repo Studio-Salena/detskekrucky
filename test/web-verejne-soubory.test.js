@@ -146,11 +146,56 @@ test('výstup nesmí být repozitář ani adresář nad ním; cizí existující
 
 test('workflow Pages publikuje jen sestavený _site, ne celý repozitář, a nejdřív kontroluje', () => {
   const wf = fs.readFileSync(path.join(KOREN, '.github', 'workflows', 'static.yml'), 'utf8').replace(/\r\n/g, '\n');
-  assert.match(wf, /node scripts\/web\/sestavit-web\.js _site/);
+  assert.match(wf, /node scripts\/web\/sestavit-web\.js _site --zdroj "\$ZDROJ"/);
   assert.match(wf, /path: _site/);
   assert.doesNotMatch(wf, /path:\s*['"]?\.['"]?\s*$/m, 'nesmí nahrávat celý repozitář');
   // sestavení a kontrola musí běžet před nahráním balíčku
   assert.ok(wf.indexOf('sestavit-web.js') < wf.indexOf('upload-pages-artifact'));
   // workflow nesmí dostat tajné údaje
   assert.doesNotMatch(wf, /secrets\./);
+});
+
+test('návrat: vstup obsah_z jde jen do checkout ref, nikdy do shellu; běžné nasazení staví z repozitáře', () => {
+  const wf = fs.readFileSync(path.join(KOREN, '.github', 'workflows', 'static.yml'), 'utf8').replace(/\r\n/g, '\n');
+  assert.match(wf, /workflow_dispatch:\n\s+inputs:\n\s+obsah_z:/);
+  assert.match(wf, /ref: \$\{\{ inputs\.obsah_z \}\}\n\s+path: _obsah/);
+  // v run: řádcích nesmí být výraz ${{ }} (vložení příkazů do shellu)
+  for (const radek of wf.split('\n').filter(r => /^\s*run:/.test(r))) assert.doesNotMatch(radek, /\$\{\{/, radek);
+  // zdroj je pevná hodnota: _obsah jen při ručním návratu, jinak repozitář
+  assert.match(wf, /ZDROJ: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.obsah_z != '' && '_obsah' \|\| '\.' \}\}/);
+  assert.match(wf, /if: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.obsah_z != '' \}\}/);
+});
+
+test('návrat: obsah ze staršího zdroje projde dnešním seznamem a kontrolami, nic navíc se nepublikuje', () => {
+  const { main } = require('../scripts/web/sestavit-web');
+  const zdroj = fs.mkdtempSync(path.join(os.tmpdir(), 'dk-obsah-'));
+  const obal = fs.mkdtempSync(path.join(os.tmpdir(), 'dk-web-'));
+  const vystup = path.join(obal, '_site');
+  const log = console.log, err = console.error;
+  const potichu = fn => { console.log = () => {}; console.error = () => {}; try { return fn(); } finally { console.log = log; console.error = err; } };
+  try {
+    for (const s of SOUBORY) {
+      fs.mkdirSync(path.dirname(path.join(zdroj, s)), { recursive: true });
+      fs.copyFileSync(path.join(KOREN, s), path.join(zdroj, s));
+    }
+    // "starší" obsah: jiná verze stránky + serverové soubory a dokumentace, které na web nesmí
+    fs.appendFileSync(path.join(zdroj, '404.html'), '\n<!-- STARSI-OBSAH -->\n');
+    zapsat(zdroj, 'lib/tajne.js', '// server');
+    zapsat(zdroj, 'CLAUDE.md', '# poznámky');
+    assert.equal(potichu(() => main([vystup, '--zdroj', zdroj])), 0);
+    assert.match(fs.readFileSync(path.join(vystup, '404.html'), 'utf8'), /STARSI-OBSAH/);
+    assert.ok(!fs.existsSync(path.join(vystup, 'lib')));
+    assert.ok(!fs.existsSync(path.join(vystup, 'CLAUDE.md')));
+    // starší obsah s rozbitým odkazem se nenasadí
+    fs.appendFileSync(path.join(zdroj, '404.html'), '<img src="/smazany-obrazek.png">');
+    assert.equal(potichu(() => main([vystup, '--zdroj', zdroj])), 1);
+  } finally { uklid(zdroj); uklid(obal); }
+});
+
+test('výstup nesmí být zdroj obsahu ani adresář nad ním', () => {
+  const zdroj = fs.mkdtempSync(path.join(os.tmpdir(), 'dk-obsah-'));
+  try {
+    assert.throws(() => pripravitVystup(zdroj, { prepsat: true, zdroj }), /zdroj obsahu/);
+    assert.throws(() => pripravitVystup(path.dirname(zdroj), { prepsat: true, zdroj }), /zdroj obsahu/);
+  } finally { uklid(zdroj); }
 });
