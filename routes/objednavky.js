@@ -399,7 +399,9 @@ router.post('/', async (req, res) => {
       // Nic se nezaložilo ani neodečetlo - zákazník musí potvrdit novou cenu / dodací lhůtu
       await client.query('ROLLBACK');
       return res.status(409).json({
-        chyba: 'U některého zboží se mezitím změnila cena nebo dostupnost. Košík jsme aktualizovali – zkontrolujte ho prosím a objednávku odešlete znovu.',
+        // Neutrální text: starší otevřená stránka e-shopu košík sama neaktualizuje (nový e-shop
+        // si zobrazí vlastní text se seznamem změn)
+        chyba: 'U některého zboží se mezitím změnila cena nebo dostupnost. Objednávka nebyla odeslána. Obnovte prosím stránku, zkontrolujte košík a objednávku odešlete znovu.',
         zmeny
       });
     }

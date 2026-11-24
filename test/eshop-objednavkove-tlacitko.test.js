@@ -41,3 +41,9 @@ test('objednávka se dál odesílá stejným endpointem POST /objednavky', () =>
   const funkce = vytahnoutFunkci('odeslatObjednavku');
   assert.match(funkce, /fetch\(API \+ '\/objednavky', \{\s*method: 'POST'/);
 });
+
+test('změna ceny/dostupnosti (409): nový e-shop ukáže vlastní text - košík opravdu aktualizoval', () => {
+  const funkce = vytahnoutFunkci('odeslatObjednavku');
+  assert.match(funkce, /res\.status === 409 && Array\.isArray\(data\.zmeny\)/);
+  assert.match(funkce, /Objednávka nebyla odeslána – košík jsme aktualizovali/);
+});

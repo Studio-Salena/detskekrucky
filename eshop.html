@@ -4101,7 +4101,7 @@ async function odeslatObjednavku() {
         if (item) hlasky.push(...dorovnatPolozkuKosiku(item, { cena: z.cena, dostupnost: z.dostupnost }));
       });
       ulozitKosik();
-      zobrazitChybuCheckoutu(`<div class="msg msg-error">${escHtml(data.chyba)}${hlasky.length ? '<br>' + hlasky.map(escHtml).join('<br>') : ''}</div>`);
+      zobrazitChybuCheckoutu(`<div class="msg msg-error">U některého zboží se mezitím změnila cena nebo dostupnost. Objednávka nebyla odeslána – košík jsme aktualizovali, zkontrolujte ho prosím a objednávku odešlete znovu.${hlasky.length ? '<br>' + hlasky.map(escHtml).join('<br>') : ''}</div>`);
       btn.disabled = false;
       btn.textContent = 'Objednávka zavazující k platbě';
     } else {

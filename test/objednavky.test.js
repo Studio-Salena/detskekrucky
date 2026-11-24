@@ -57,6 +57,9 @@ test('podvržená cena z requestu (1 Kč) neprojde - 409, nic se nezaloží ani 
   assert.equal(stav.objednavkyPolozky.length, 0);
   assert.equal(stav.sklad.find(r => r.produkt_id === 1).pocet_kusu, 3); // sklad nedotčen
   assert.deepEqual(res.body.zmeny.map(z => [z.produkt_id, z.velikost, z.cena, z.videna_cena]), [[1, 24, 500, 1]]);
+  // text platí i pro starší otevřenou stránku e-shopu, která košík sama neaktualizuje
+  assert.match(res.body.chyba, /Objednávka nebyla odeslána. Obnovte prosím stránku/);
+  assert.doesNotMatch(res.body.chyba, /Košík jsme aktualizovali/);
 });
 
 test('cena, kterou zákaznice viděla, sedí s DB - objednávka projde za cenu z DB', async () => {
