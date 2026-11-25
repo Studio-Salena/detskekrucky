@@ -1,0 +1,8 @@
+/root/zaloha-detskekrucky/cron.log /root/zaloha-detskekrucky/kontrola.log {
+    monthly
+    rotate 12
+    compress
+    missingok
+    notifempty
+    copytruncate
+}

@@ -7,6 +7,8 @@ Nasazují se dvě věci, **každá zvlášť a na samostatný pokyn**:
 - **B – zapnutí produkční evidence.** Pozdější krok jen přes proměnné na serveru, nové nasazení
   kódu není potřeba. Od zapnutí platí zákonná povinnost evidovat, takže návrat je omezený (níže).
 
+**Aktualizace 24. 11. 2026: fáze A je NASAZENÁ** (18. 11. 2026 21:50 UTC, `98593ee` → `abae13c`, migrace OK, EET tabulky prázdné, Kontrola plateb 0 rozdílů). Text níže popisuje stav před nasazením a zůstává jako záznam.
+
 Stav k 18. 11. 2026: nic z toho neproběhlo. **Ověření migrace na skutečné kopii produkce
 PROŠLO** (záloha 18. 11. 2026 12:44 UTC, výsledek níže a v `docs/postup-overeni-migrace.md`).
 
