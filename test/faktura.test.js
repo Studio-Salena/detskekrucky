@@ -367,3 +367,31 @@ test('N6: rekonstrukce historické faktury nevypustí položku smazaného produk
   assert.match(t, /CELKEM 2 369 Kč/);
   assert.equal(stav.faktury.length, 0, 'rekonstrukce se neukládá');
 });
+
+// QR platba na faktuře: vždy, když je co platit - i u osobního odběru s platbou na prodejně
+const { sestavitSnimek, sestavitStorno, vykreslitObsah } = require('../lib/faktura');
+const qrData = h => { const m = /create-qr-code\/\?size=180x180&amp;data=([^"]+)"/.exec(h); return m && decodeURIComponent(m[1]); };
+const OSOBNE = { ...OBJ, doprava: 'osobni_odber', platba: 'na_prodejne', doprava_cena: 0, platba_priplatek: 0, sleva: 0, poukaz_kod: null, celkem: 1290, vydejni_misto_id: null };
+
+test('QR platba: osobní odběr s platbou na prodejně má QR, účet a VS', () => {
+  const h = fakturaObsahHtml(OSOBNE, FAKTURA);
+  assert.equal(qrData(h), 'SPD*1.0*ACC:CZ4620100000002003533776*AM:1290.00*CC:CZK*X-VS:261012*MSG:Faktura 2026007');
+  const t = text(h);
+  for (const s of ['Číslo účtu: 2003533776/2010', 'Variabilní symbol: 261012', 'QR platba', 'předem převodem, nebo na prodejně']) assert.ok(t.includes(s), `chybí: ${s}`);
+});
+
+test('QR platba: převod má QR, dobírka / uhrazená / nulová částka ne', () => {
+  assert.match(qrData(fakturaObsahHtml({ ...OSOBNE, platba: 'prevod', doprava: 'zasilkovna' }, FAKTURA)), /AM:1290\.00/);
+  assert.equal(qrData(fakturaObsahHtml(OBJ, FAKTURA)), null, 'dobírka se platí dopravci');
+  assert.equal(qrData(fakturaObsahHtml({ ...OSOBNE, zaplaceno_at: new Date('2026-10-27T09:00:00Z') }, FAKTURA)), null, 'už zaplaceno');
+  assert.equal(qrData(fakturaObsahHtml({ ...OSOBNE, sleva: 1290, celkem: 0 }, FAKTURA)), null, 'celé poukazem');
+});
+
+test('QR platba: je ve snímku, opravný doklad ani rekonstrukce ji nemají', () => {
+  const snimek = sestavitSnimek(OSOBNE, FAKTURA);
+  assert.ok(snimek.qr_platba && snimek.qr_platba.spd.startsWith('SPD*1.0*'));
+  const storno = sestavitStorno(snimek, { cislo: 'OD2026001', datum_vystaveni: new Date(), duvod: 'Zrušení objednávky' });
+  assert.equal('qr_platba' in storno, false);
+  assert.equal(qrData(vykreslitObsah(storno)), null);
+  assert.equal(qrData(vykreslitObsah(snimek, { rekonstrukce: 'Test' })), null);
+});
