@@ -112,11 +112,11 @@ body{background:var(--app-bg)}
 .pozornost-ikona{font-size:1.15rem;width:24px;text-align:center}
 .pozornost-text{flex:1}
 .pozornost-sipka{color:var(--text-light);font-size:1.3rem}
-.prehled-mrizka{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr) minmax(0,1fr);gap:20px}
+.prehled-mrizka{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:20px}
 .prehled-mrizka .badge,.prehled-mrizka .btn,.prehled-mrizka td:nth-child(3){white-space:nowrap}
 .radek-odkaz{cursor:pointer}
 .objednavka-info{display:block;font-size:0.75rem;color:var(--text-light);margin-top:2px}
-@media(max-width:1199px){.prehled-mrizka{grid-template-columns:1fr 1fr}.prehled-mrizka > :last-child{grid-column:1/-1}}
+@media(max-width:1199px){.prehled-mrizka{grid-template-columns:1fr 1fr}}
 @media(max-width:768px){.prehled-mrizka{grid-template-columns:1fr}.pohledy{width:100%}.pohledy button{flex:1}}
 
 /* REZERVACE A REPORTY (etapa 3) */
@@ -260,6 +260,7 @@ body{background:var(--app-bg)}
 
 /* STATS */
 .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.prehled-karty{grid-template-columns:repeat(3,1fr)}
 .stat-card{background:#fff;border-radius:16px;padding:18px;border:1px solid var(--tan-light);transition:all 0.2s;cursor:default}
 .stat-card:hover{box-shadow:0 4px 20px rgba(139,69,19,0.1);transform:translateY(-2px)}
 .stat-label{font-size:0.7rem;color:var(--text-light);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
@@ -467,6 +468,7 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
 /* MOBILE */
 @media(max-width:768px){
   .stats-grid{grid-template-columns:repeat(2,1fr)}
+  .prehled-karty > :last-child{grid-column:1/-1}
   .form-grid-2,.form-grid-3{grid-template-columns:1fr}
   .table-header{flex-direction:column;align-items:flex-start}
   .page-header{flex-direction:column;align-items:flex-start}
@@ -624,9 +626,6 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <button type="button" class="stat-card stat-odkaz karta-rezervace" onclick="showPage('rezervace')">
           <span class="stat-label">Dnešní rezervace</span><span class="stat-value" id="prehledDnesRez">...</span><span class="stat-sub" id="prehledDnesRezSub"></span>
         </button>
-        <button type="button" class="stat-card stat-odkaz karta-sklad" onclick="otevritSkladFiltr('nizky')">
-          <span class="stat-label">Nízký sklad</span><span class="stat-value" id="statNizkyStav">...</span><span class="stat-sub" id="statNizkyStavSub">položek</span>
-        </button>
       </div>
 
       <div class="table-wrap">
@@ -642,10 +641,6 @@ select.stav-select{padding:4px 8px;border:1px solid var(--tan);border-radius:6px
         <div class="table-wrap">
           <div class="table-header"><h3>📅 Dnešní rezervace</h3><button class="btn btn-outline btn-sm" onclick="showPage('rezervace')">Všechny</button></div>
           <div id="prehledRezervaceTable"><div class="loading">Načítám...</div></div>
-        </div>
-        <div class="table-wrap">
-          <div class="table-header"><h3>⚠️ Nízký sklad</h3><button class="btn btn-outline btn-sm" onclick="otevritSkladFiltr('vse')">Sklad</button></div>
-          <div id="prehledSkladTable"><div class="loading">Načítám...</div></div>
         </div>
       </div>
 
@@ -2609,7 +2604,8 @@ document.addEventListener('click', e => {
 
 // PŘEHLED - co je dnes potřeba udělat. Jen ze stávajících API a se stejnými
 // pravidly jako dosud (tržby bez zrušených objednávek, poukaz započtený při
-// prodeji se v tržbách nepočítá podruhé, nízký sklad = kusů <= minimum).
+// prodeji se v tržbách nepočítá podruhé). Nízký sklad tu záměrně není - od
+// velikosti je skladem nejvýš 1 kus, upozornění by svítilo pořád.
 function dnesniDatumIso() {
   const d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -2625,10 +2621,9 @@ const pole = x => Array.isArray(x) ? x : [];
 
 async function loadPrehled() {
   try {
-    const [obj, prodejna, celySklad, poukazyPouziti, rezervace, sloty, zadostiVratky, zadostiPoukazy] = await Promise.all([
+    const [obj, prodejna, poukazyPouziti, rezervace, sloty, zadostiVratky, zadostiPoukazy] = await Promise.all([
       adminFetch(API+'/objednavky').then(r=>r.json()).catch(()=>[]),
       adminFetch(API+'/prodejna').then(r=>r.json()).catch(()=>[]),
-      adminFetch(API+'/sklad/admin').then(r=>r.json()).catch(()=>[]),
       adminFetch(API+'/poukazy/pouziti/vse').then(r=>r.json()).catch(()=>[]),
       adminFetch(API+'/rezervace').then(r=>r.json()).catch(()=>[]),
       adminFetch(API+'/rezervace/sloty').then(r=>r.json()).catch(()=>[]),
@@ -2666,20 +2661,12 @@ async function loadPrehled() {
       ? (dnesCekajici ? `${dnesCekajici} čeká na potvrzení` : 'vše potvrzeno')
       : 'dnes žádné';
 
-    // Nízký sklad: stejné pravidlo jako /sklad/nizky-stav (kusů <= minimum), ale s ID
-    // produktu - z něj jde rovnou naskladnit
-    const nizke = pole(celySklad).filter(s=>s.nizky_stav && s.velikost != null).sort((a,b)=>a.pocet_kusu-b.pocet_kusu);
-    const vyprodane = nizke.filter(s=>Number(s.pocet_kusu)===0).length;
-    document.getElementById('statNizkyStav').textContent = nizke.length;
-    document.getElementById('statNizkyStavSub').textContent = nizke.length ? `z toho ${vyprodane} vyprodáno` : 'vše v pořádku';
-
     // --- Co vyžaduje pozornost ---
     const radky = [
       [nove.length, '📦', ['nová objednávka', 'nové objednávky', 'nových objednávek'], "otevritObjednavkyFiltr('nova')", 'karta-objednavky'],
       [pole(zadostiVratky).filter(z=>z.stav==='nova').length, '↩️', ['žádost o vrácení čeká', 'žádosti o vrácení čekají', 'žádostí o vrácení čeká'], "showPage('vratkyzadosti')", 'karta-vratky'],
       [pole(rezervace).filter(r=>r.stav==='cekajici').length, '📅', ['rezervace čeká na potvrzení', 'rezervace čekají na potvrzení', 'rezervací čeká na potvrzení'], "showPage('rezervace')", 'karta-rezervace'],
-      [pole(zadostiPoukazy).filter(z=>z.stav==='nova').length, '🎁', ['žádost o dárkový poukaz', 'žádosti o dárkový poukaz', 'žádostí o dárkový poukaz'], "showPage('poukazy')", 'karta-poukazy'],
-      [nizke.length, '⚠️', ['položka s nízkým stavem skladu', 'položky s nízkým stavem skladu', 'položek s nízkým stavem skladu'], "otevritSkladFiltr('nizky')", 'karta-sklad']
+      [pole(zadostiPoukazy).filter(z=>z.stav==='nova').length, '🎁', ['žádost o dárkový poukaz', 'žádosti o dárkový poukaz', 'žádostí o dárkový poukaz'], "showPage('poukazy')", 'karta-poukazy']
     ].filter(([n]) => n > 0);
     document.getElementById('prehledPozornost').innerHTML = radky.length === 0
       ? '<div class="empty">Vše je vyřízené ✅</div>'
@@ -2708,15 +2695,6 @@ async function loadPrehled() {
           <td>${escH(r.jmeno)}<br><small style="color:var(--text-light)">${escH(r.telefon)}</small></td>
           <td>${r.stav==='cekajici' ? '<span class="badge badge-vyrizuje">⏳ Čeká</span>' : '<span class="badge badge-doruceno">✅ Potvrzena</span>'}</td></tr>`).join('')}
         </tbody></table>`;
-
-    // --- Nízký sklad ---
-    document.getElementById('prehledSkladTable').innerHTML = nizke.length === 0
-      ? '<div class="empty">Vše v pořádku ✅</div>'
-      : `<table><thead><tr><th>Produkt</th><th>Vel.</th><th>Ks</th><th></th></tr></thead><tbody>
-        ${nizke.slice(0,6).map(s=>`<tr><td><strong>${escH(s.nazev)}</strong></td><td>${escH(s.velikost)}</td>
-        <td><strong style="color:${Number(s.pocet_kusu)===0?'var(--red)':'var(--orange)'}">${Number(s.pocet_kusu)}</strong></td>
-        <td><button class="btn btn-green btn-sm" onclick="rychleNaskladnit(${s.id},${s.velikost},'${escAttr(escJs(s.nazev))}')">+ Naskladnit</button></td></tr>`).join('')}
-        </tbody></table>${nizke.length > 6 ? `<div style="padding:10px 14px"><button class="btn btn-outline btn-sm" onclick="otevritSkladFiltr('nizky')">Všech ${nizke.length} položek</button></div>` : ''}`;
 
     checkNoveObjednavky();
   } catch(e) { console.error(e); }
